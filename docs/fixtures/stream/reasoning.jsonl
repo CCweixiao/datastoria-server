@@ -1,0 +1,10 @@
+{"type":"start","messageId":"msg_01H"}
+{"type":"start-step"}
+{"type":"reasoning-start","id":"rsn_01H"}
+{"type":"reasoning-delta","id":"rsn_01H","delta":"Thinking about schema"}
+{"type":"reasoning-end","id":"rsn_01H"}
+{"type":"text-start","id":"txt_01H"}
+{"type":"text-delta","id":"txt_01H","delta":"Use get_tables"}
+{"type":"text-end","id":"txt_01H"}
+{"type":"finish-step"}
+{"type":"finish","finishReason":"stop","messageMetadata":{"usage":{"promptTokens":20,"completionTokens":8,"totalTokens":28}}}

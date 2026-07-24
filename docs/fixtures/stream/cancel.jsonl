@@ -1,0 +1,5 @@
+{"type":"start","messageId":"msg_01H"}
+{"type":"start-step"}
+{"type":"text-start","id":"txt_01H"}
+{"type":"text-delta","id":"txt_01H","delta":"Generat"}
+{"type":"abort","reason":"client_disconnect"}

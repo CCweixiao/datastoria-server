@@ -1,0 +1,1166 @@
+openapi: 3.1.0
+info:
+  title: DataStoria Node API Baseline
+  version: 0.1.0
+  description: |
+    Frozen snapshot of the existing DataStoria Next.js Node.js API surface,
+    captured from `/Users/jielongping/OpenProjects/datastoria` during phase P1
+    (contract freeze). This is the source of truth that the Java
+    `datastoria-server` must reproduce, one API at a time.
+
+    Each operation carries these extensions:
+      x-datastoria-id       Inventory ID (A01..A29).
+      x-datastoria-status   active | alias | deprecated | frontend-only | stub
+      x-datastoria-target   Java migration target phase (P2..P11).
+      x-datastoria-auth     Auth model currently observed.
+
+    Auth model (all routes): a proxy middleware (`src/proxy.ts`) resolves the
+    NextAuth session and injects `x-datastoria-user-email` on every proxied API
+    request. Server routes read it via `getAuthenticatedUserEmail(request)`.
+    When `ALLOW_ANONYMOUS_USER=false` the proxy rejects unauthenticated
+    requests before they reach the route handler.
+
+    Streaming routes (A01/A02) use AI SDK v6 UI Message Stream protocol emitted
+    over `text/event-stream`. See `docs/api/stream-protocol.md` and the fixture
+    set under `docs/fixtures/stream/`.
+
+  contact:
+    name: DataStoria Server migration
+    url: https://github.com/anthropics/datastoria-server
+servers:
+  - url: /
+    description: Same-origin (Next.js default). Reverse proxy maps /api to Java later.
+tags:
+  - name: agent
+    description: Streaming chat and agent run endpoints
+  - name: sessions
+    description: Chat session lifecycle and message replay
+  - name: feedback
+    description: Chat feedback collection and reporting
+  - name: models
+    description: Model catalog and OAuth token proxy
+  - name: skills
+    description: Skill catalog, detail, resource and review
+  - name: rca
+    description: RCA templates
+  - name: connections
+    description: Connection templates
+  - name: auth
+    description: NextAuth session endpoints
+
+paths:
+  # ---------------------------------------------------------------- A01 / A02
+  /api/ai/agent:
+    post:
+      tags: [agent]
+      operationId: agentStream
+      summary: Main agent streaming chat (A01)
+      description: |
+        AI SDK UI Message Stream. Emits `start`, `text-start/delta/end`,
+        `reasoning-*`, `tool-input-*`, `tool-output-*`, `start-step`,
+        `finish-step`, `message-metadata`, `finish`, `error`, `abort` over
+        SSE. Terminated by `data: [DONE]`. Title and usage are carried in the
+        `messageMetadata` of the `finish` chunk.
+
+        The chat/v2 route is a pure re-export of this handler (see A01b).
+      x-datastoria-id: A01
+      x-datastoria-status: active
+      x-datastoria-target: P4/P6/P7/P8
+      x-datastoria-auth: |
+        `x-datastoria-user-email` resolves the user. Remote persistence path
+        requires it (401 otherwise). `X-Session-Share-Code` enables shared
+        read-only session access.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+        - $ref: '#/components/parameters/SessionShareCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/RemoteInitialTurnRequest'
+                - $ref: '#/components/schemas/RemoteContinuationRequest'
+      responses:
+        '200':
+          description: UI Message Stream (SSE)
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: ['text/event-stream; charset=utf-8']
+            Cache-Control:
+              schema:
+                type: string
+                enum: ['no-cache']
+            Connection:
+              schema:
+                type: string
+                enum: ['keep-alive']
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/UIMessageStream'
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+        '409': { $ref: '#/components/responses/PlainTextError' }
+        '413':
+          description: Request body exceeds 10 MiB.
+        '500': { $ref: '#/components/responses/JsonError' }
+
+  /api/ai/chat/v2:
+    post:
+      tags: [agent]
+      operationId: agentStreamAliasV2
+      summary: Alias of /api/ai/agent (A01b)
+      description: |
+        Thin re-export: `import { POST as agentPOST } from '@/app/api/ai/agent/route'`.
+        Identical HTTP contract to A01. Must not receive a separate Java
+        implementation; map to the same handler.
+      x-datastoria-id: A01b
+      x-datastoria-status: alias
+      x-datastoria-target: P4
+      responses:
+        '200':
+          description: Same UI Message Stream as A01.
+
+  /api/ai/chat:
+    post:
+      tags: [agent]
+      operationId: legacyPlannerStream
+      summary: Legacy two-phase planner/sub-agent stream (A02)
+      description: |
+        Custom SSE wrapping via `SseStreamer`, not AI SDK
+        `createUIMessageStreamResponse`. Will be deprecated once HarnessAgent
+        reaches parity (P7); returns a deprecation header during compat window,
+        then front-end call is removed (P11).
+      x-datastoria-id: A02
+      x-datastoria-status: deprecated
+      x-datastoria-target: P7/P11
+      x-datastoria-auth: "x-datastoria-user-email injected into context."
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messages:
+                  type: array
+                  items: { $ref: '#/components/schemas/UIMessage' }
+                context: { $ref: '#/components/schemas/DatabaseContext' }
+                model: { $ref: '#/components/schemas/InlineModelConfig' }
+      responses:
+        '200':
+          description: Custom SSE stream (text/event-stream).
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SseStreamer-formatted events.
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '413': { description: Request body exceeds 10 MiB. }
+        '500': { $ref: '#/components/responses/JsonError' }
+
+  # -------------------------------------------------------- A03 / A04 sessions
+  /api/ai/chat/sessions:
+    get:
+      tags: [sessions]
+      operationId: listSessions
+      summary: List chat sessions (A03)
+      x-datastoria-id: A03
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Authenticated (401 if absent).
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+        - name: connectionId
+          in: query
+          schema: { type: string }
+        - name: cursor
+          in: query
+          description: Opaque pagination cursor returned as nextCursor.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Paginated session list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions, nextCursor]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChatSessionDTO' }
+                  nextCursor:
+                    type: string
+                    nullable: true
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+    post:
+      tags: [sessions]
+      operationId: createSession
+      summary: Create session with initial messages (A04)
+      x-datastoria-id: A04
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Authenticated (401 if absent).
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connectionId: { type: string, maxLength: 255 }
+                sessionId: { type: string, maxLength: 64 }
+                title: { type: string }
+                messages:
+                  type: array
+                  items: { $ref: '#/components/schemas/AppUIMessage' }
+      responses:
+        '200':
+          description: Created (or idempotent existing) session.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '409': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/PlainTextError' }
+
+  # -------------------------------------------------- A05 / A06 / A07 / A08
+  /api/ai/chat/sessions/{sessionId}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+      - $ref: '#/components/parameters/SessionShareCode'
+    get:
+      tags: [sessions]
+      operationId: getSession
+      summary: Get session (owner or share code) (A05)
+      x-datastoria-id: A05
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      responses:
+        '200':
+          description: Session detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+    patch:
+      tags: [sessions]
+      operationId: renameSession
+      summary: Rename session (A06)
+      x-datastoria-id: A06
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Renamed session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+    delete:
+      tags: [sessions]
+      operationId: deleteSession
+      summary: Delete session (A07)
+      x-datastoria-id: A07
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      responses:
+        '204': { description: Deleted. No body. }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/chat/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+      - $ref: '#/components/parameters/SessionShareCode'
+    get:
+      tags: [sessions]
+      operationId: getSessionMessages
+      summary: Replay session messages ordered by sequence (A08)
+      x-datastoria-id: A08
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      responses:
+        '200':
+          description: Messages in ascending sequence order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChatMessageDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  # ---------------------------------------------------------------- A09 share
+  /api/ai/sessions/{sessionId}/share:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+    post:
+      tags: [sessions]
+      operationId: shareSession
+      summary: Generate a share code and URL (A09)
+      x-datastoria-id: A09
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Owner only (resolved by userId, not share code).
+      responses:
+        '200':
+          description: Share link details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, code, expiresAt]
+                properties:
+                  url: { type: string }
+                  code: { type: string, description: JWT share code. }
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: Currently far-future (year 2100).
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  # -------------------------------------------------------------- A10 / A11
+  /api/ai/chat/feedback/auto-explain:
+    post:
+      tags: [feedback]
+      operationId: recordAutoExplainFeedback
+      summary: Idempotent feedback upsert (A10)
+      x-datastoria-id: A10
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Optional; returns 202 when no remote store.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackUpsertRequest' }
+      responses:
+        '200':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recorded: { type: boolean, example: true }
+                  updatedAt: { type: string, format: date-time }
+                  solved: { type: boolean }
+        '202':
+          description: Accepted but not stored (anonymous / no remote repository).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recorded: { type: boolean, example: false }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/chat/feedback/report:
+    get:
+      tags: [feedback]
+      operationId: getFeedbackReport
+      summary: Aggregated feedback report (A11)
+      x-datastoria-id: A11
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      x-datastoria-auth: Authenticated + AI_FEEDBACK_REPORT_ALLOWED_USERS allowlist.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+        - name: source
+          in: query
+          schema: { type: string, enum: [auto_explain_error] }
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Report.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackReportResponse' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+
+  # -------------------------------------------------------------- A12 models
+  /api/ai/models/available:
+    post:
+      tags: [models]
+      operationId: getAvailableModels
+      summary: System models + optional GitHub Copilot models (A12)
+      description: |
+        Currently accepts an optional `github.token` in the body to proxy
+        Copilot models. Java target must move token handling server-side and
+        reject/ignore `apiKey` on chat bodies.
+      x-datastoria-id: A12
+      x-datastoria-status: active
+      x-datastoria-target: P2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                github:
+                  type: object
+                  properties:
+                    token: { type: string }
+      responses:
+        '200':
+          description: Available models.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailableModelsResponse' }
+
+  # ---------------------------------------------------- A13 - A18 OAuth/models
+  /api/ai/codex/auth/token:
+    post:
+      tags: [models]
+      operationId: codexAuthToken
+      summary: Codex OAuth code exchange proxy (A13)
+      x-datastoria-id: A13
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      x-datastoria-security: Token flows through browser today; target server-side.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, code_verifier, redirect_uri]
+              properties:
+                code: { type: string }
+                code_verifier: { type: string }
+                redirect_uri: { type: string }
+      responses:
+        '200': { description: Upstream token JSON pass-through. }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/codex/auth/refresh:
+    post:
+      tags: [models]
+      operationId: codexAuthRefresh
+      summary: Codex token refresh (A14)
+      x-datastoria-id: A14
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: Upstream token JSON pass-through. }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/github/auth/device/code:
+    post:
+      tags: [models]
+      operationId: githubDeviceCode
+      summary: GitHub device flow start (A15)
+      x-datastoria-id: A15
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      responses:
+        '200': { description: GitHub device code JSON. }
+        '503': { description: GITHUB_COPILOT_CLIENT_ID not configured. }
+
+  /api/ai/github/auth/device/token:
+    post:
+      tags: [models]
+      operationId: githubDeviceToken
+      summary: GitHub device token poll (A16)
+      x-datastoria-id: A16
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_code]
+              properties:
+                device_code: { type: string }
+      responses:
+        '200': { description: GitHub access token JSON. }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '503': { description: Client id not configured. }
+
+  /api/ai/github/auth/refresh:
+    post:
+      tags: [models]
+      operationId: githubAuthRefresh
+      summary: GitHub token refresh (A17)
+      x-datastoria-id: A17
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: Refreshed token JSON. }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '503': { description: Client id not configured. }
+
+  /api/ai/github/models:
+    get:
+      tags: [models]
+      operationId: getGithubModels
+      summary: Proxy GitHub Copilot model catalog (A18)
+      x-datastoria-id: A18
+      x-datastoria-status: active
+      x-datastoria-target: P10
+      x-datastoria-security: Authorization header forwarded verbatim (browser token).
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Copilot models JSON. }
+        '401': { description: Missing Authorization header. }
+
+  # ---------------------------------------------------- A19 - A26 skills
+  /api/ai/commands:
+    get:
+      tags: [skills]
+      operationId: listCommands
+      summary: Slash commands from available skills (A19)
+      x-datastoria-id: A19
+      x-datastoria-status: active
+      x-datastoria-target: P5
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      responses:
+        '200':
+          description: Command list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SkillCommand' }
+
+  /api/ai/skills:
+    get:
+      tags: [skills]
+      operationId: listSkills
+      summary: Effective skill catalog (A20)
+      x-datastoria-id: A20
+      x-datastoria-status: active
+      x-datastoria-target: P5/P9
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+        - name: includeDraft
+          in: query
+          description: Effective only for editors.
+          schema: { type: string, enum: ['true', '1'] }
+      responses:
+        '200':
+          description: Skill catalog (System-authored excluded).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SkillCatalogItem' }
+        '500': { $ref: '#/components/responses/JsonError' }
+    post:
+      tags: [skills]
+      operationId: createSkill
+      summary: Create skill bundle (A21)
+      x-datastoria-id: A21
+      x-datastoria-status: active
+      x-datastoria-target: P9
+      x-datastoria-auth: Authenticated + edit permission.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpsertSkillBundleInput' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/JsonError' }
+
+  /api/ai/skills/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SkillId'
+      - $ref: '#/components/parameters/UserEmail'
+    get:
+      tags: [skills]
+      operationId: getSkill
+      summary: Skill detail (A22)
+      x-datastoria-id: A22
+      x-datastoria-status: active
+      x-datastoria-target: P5
+      parameters:
+        - name: includeDraft
+          in: query
+          schema: { type: string, enum: ['true', '1'] }
+      responses:
+        '200':
+          description: Skill detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillDetail' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+    patch:
+      tags: [skills]
+      operationId: updateSkill
+      summary: Save/publish skill or resources (A23)
+      x-datastoria-id: A23
+      x-datastoria-status: active
+      x-datastoria-target: P9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpsertSkillBundleInput' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/JsonError' }
+    delete:
+      tags: [skills]
+      operationId: deleteSkill
+      summary: Delete DB skill (A24)
+      x-datastoria-id: A24
+      x-datastoria-status: active
+      x-datastoria-target: P9
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400':
+          description: Disk-backed skills cannot be deleted.
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/skills/{id}/resource:
+    parameters:
+      - $ref: '#/components/parameters/SkillId'
+      - $ref: '#/components/parameters/UserEmail'
+    get:
+      tags: [skills]
+      operationId: getSkillResource
+      summary: Read a skill resource (A25)
+      x-datastoria-id: A25
+      x-datastoria-status: active
+      x-datastoria-target: P5
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string }
+          description: Canonical relative POSIX path; path traversal rejected.
+        - name: includeDraft
+          in: query
+          schema: { type: string, enum: ['true', '1'] }
+      responses:
+        '200':
+          description: Resource detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillResourceDetail' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  /api/ai/skills/actions/review:
+    post:
+      tags: [skills]
+      operationId: reviewSkill
+      summary: LLM review of a skill file (A26)
+      x-datastoria-id: A26
+      x-datastoria-status: active
+      x-datastoria-target: P9
+      x-datastoria-auth: Authenticated + edit permission.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillReviewRequest' }
+      responses:
+        '200':
+          description: Review findings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillReviewResponse' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+
+  # -------------------------------------------------------------- A27 rca
+  /api/ai/rca/templates:
+    get:
+      tags: [rca]
+      operationId: getRcaTemplates
+      summary: YAML RCA templates (A27)
+      x-datastoria-id: A27
+      x-datastoria-status: active
+      x-datastoria-target: P7/P10
+      responses:
+        '200':
+          description: Templates keyed by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: object
+                    additionalProperties: { type: string }
+
+  # -------------------------------------------------------------- A28 auth
+  /api/auth/{nextauth}:
+    parameters:
+      - name: nextauth
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [auth]
+      operationId: nextauthGet
+      summary: NextAuth GET handler (A28)
+      x-datastoria-id: A28
+      x-datastoria-status: active
+      x-datastoria-target: P2/P10
+      responses:
+        '200':
+          description: Session JSON, page, or disabled-auth message.
+    post:
+      tags: [auth]
+      operationId: nextauthPost
+      summary: NextAuth POST handler (A28)
+      x-datastoria-id: A28
+      x-datastoria-status: active
+      x-datastoria-target: P2/P10
+      responses:
+        '200': { description: NextAuth response. }
+
+  # -------------------------------------------------------------- A29 conn
+  /api/connections/templates:
+    get:
+      tags: [connections]
+      operationId: getConnectionTemplates
+      summary: Connection templates stub (A29)
+      description: Currently returns a hardcoded empty array.
+      x-datastoria-id: A29
+      x-datastoria-status: stub
+      x-datastoria-target: P2/P10
+      responses:
+        '200':
+          description: Empty list today.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+                maxItems: 0
+
+components:
+  parameters:
+    UserEmail:
+      name: x-datastoria-user-email
+      in: header
+      required: false
+      description: |
+        Injected by proxy middleware after NextAuth session resolution. When
+        ALLOW_ANONYMOUS_USER=false the proxy rejects unauthenticated requests.
+      schema: { type: string, format: email }
+    SessionShareCode:
+      name: X-Session-Share-Code
+      in: header
+      required: false
+      description: JWT share code enabling shared session access.
+      schema: { type: string }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 64 }
+    SkillId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    PlainTextError:
+      description: Plain-text error message (legacy compat).
+      content:
+        text/plain:
+          schema: { type: string }
+    JsonError:
+      description: JSON error envelope.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/JsonError' }
+
+  schemas:
+    JsonError:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+        location: { type: string }
+
+    ChatSessionDTO:
+      type: object
+      required: [chatId, databaseId, title, createdAt, updatedAt]
+      properties:
+        chatId: { type: string }
+        databaseId: { type: string, description: connectionId }
+        title: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DatabaseContext:
+      type: object
+      properties:
+        database: { type: string }
+        clusterName: { type: string }
+        serverVersion: { type: string }
+        clickHouseUser: { type: string }
+
+    InlineModelConfig:
+      type: object
+      description: |
+        Browser-side model selection. Target: replace with server-resolved
+        modelConfigId; apiKey must be rejected by Java.
+      properties:
+        provider: { type: string }
+        modelId: { type: string }
+        apiKey: { type: string, description: REJECTED by Java target. }
+
+    UIMessage:
+      type: object
+      description: AI SDK UIMessage; parts is an open JSON array.
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant, system, data] }
+        parts:
+          type: array
+          items: { type: object }
+
+    AppUIMessage:
+      allOf:
+        - $ref: '#/components/schemas/UIMessage'
+        - type: object
+          properties:
+            role: { enum: [user, assistant] }
+
+    ChatMessageDTO:
+      type: object
+      required: [id, role, parts, sequence, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant, system, data, tool] }
+        parts:
+          type: array
+          items: { type: object }
+        metadata: { type: object, nullable: true }
+        sequence: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AgentContext:
+      type: object
+      properties:
+        pruneValidateSql: { type: boolean }
+        outputReasoning: { type: boolean }
+        reasoningLevel: { type: string }
+        responseLanguage: { type: string }
+
+    RemoteInitialTurnRequest:
+      type: object
+      required: [sessionId, connectionId, message]
+      properties:
+        sessionId: { type: string, maxLength: 64 }
+        connectionId: { type: string, maxLength: 255 }
+        message: { $ref: '#/components/schemas/AppUIMessage' }
+        continuation: { type: boolean, enum: [false] }
+        generateTitle: { type: boolean }
+        ephemeral: { type: boolean }
+        model: { $ref: '#/components/schemas/InlineModelConfig' }
+        agentContext: { $ref: '#/components/schemas/AgentContext' }
+        connection:
+          type: object
+          description: ClickHouse connection; target rejects password.
+        context: { $ref: '#/components/schemas/DatabaseContext' }
+
+    RemoteContinuationRequest:
+      type: object
+      required: [sessionId, connectionId, message, continuation]
+      properties:
+        sessionId: { type: string, maxLength: 64 }
+        connectionId: { type: string, maxLength: 255 }
+        message:
+          allOf:
+            - $ref: '#/components/schemas/AppUIMessage'
+          properties:
+            role: { enum: [assistant] }
+        continuation: { type: boolean, enum: [true] }
+        model: { $ref: '#/components/schemas/InlineModelConfig' }
+        agentContext: { $ref: '#/components/schemas/AgentContext' }
+
+    UIMessageStream:
+      type: string
+      description: |
+        SSE stream of UI Message Stream chunks (AI SDK v6). Each line is
+        `data: {json}\n\n` ending with `data: [DONE]\n\n`. Event `type` values
+        documented in docs/api/stream-protocol.md. Captured fixtures live in
+        docs/fixtures/stream/.
+
+    FeedbackUpsertRequest:
+      type: object
+      required: [source, sessionId, messageId, solved, payload]
+      properties:
+        source: { type: string, enum: [auto_explain_error] }
+        sessionId: { type: string, maxLength: 64 }
+        messageId: { type: string, maxLength: 255 }
+        solved: { type: boolean }
+        reasonCode:
+          type: string
+          enum: [wrong_diagnosis, too_vague, unsafe_fix, missing_context, other]
+          nullable: true
+        freeText: { type: string, maxLength: 2000, nullable: true }
+        payload:
+          type: object
+          required: [queryId]
+          properties:
+            queryId: { type: string, maxLength: 255 }
+            errorCode: { type: string, maxLength: 64, nullable: true }
+            sql: { type: string, maxLength: 100000, nullable: true }
+        recoveryActionTaken: { type: boolean }
+
+    FeedbackReportResponse:
+      type: object
+      properties:
+        filters:
+          type: object
+          properties:
+            source: { type: string }
+            days: { type: integer }
+        report:
+          type: object
+          properties:
+            totalFeedback: { type: integer }
+            solvedCount: { type: integer }
+            solvedRate: { type: integer }
+            topErrorCodes:
+              type: array
+              items:
+                type: object
+                properties:
+                  label: { type: string }
+                  count: { type: integer }
+            negativeReasons:
+              type: array
+              items:
+                type: object
+                properties:
+                  label: { type: string }
+                  count: { type: integer }
+
+    ModelProps:
+      type: object
+      properties:
+        provider: { type: string }
+        modelId: { type: string }
+        description: { type: string }
+        free: { type: boolean }
+        autoSelectable: { type: boolean }
+        disabled: { type: boolean }
+        supportedEndpoints: { type: array, items: { type: string } }
+        supportsImageInput: { type: boolean }
+        supportsTemperature: { type: boolean }
+        supportsReasoning: { type: boolean }
+        reasoningLevels: { type: array, items: { type: string } }
+        source: { type: string }
+
+    AvailableModelsResponse:
+      type: object
+      required: [systemModels, githubModels]
+      properties:
+        systemModels:
+          type: array
+          items: { $ref: '#/components/schemas/ModelProps' }
+        githubModels:
+          type: array
+          items: { $ref: '#/components/schemas/ModelProps' }
+
+    SkillCatalogItem:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        source: { type: string, enum: [disk, db] }
+        status: { type: string, enum: [draft, published] }
+        state: { type: string }
+        scope: { type: string, enum: [global, self] }
+        version: { type: string, nullable: true }
+        author: { type: string, nullable: true }
+        url: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        hasResources: { type: boolean }
+        slashCommand: { type: boolean }
+        quickAction: { type: boolean }
+        requiredTools: { type: array, items: { type: string } }
+
+    SkillDetail:
+      type: object
+      description: Full SKILL.md content plus catalog metadata and resource paths.
+      additionalProperties: true
+
+    SkillResourceDetail:
+      type: object
+      additionalProperties: true
+
+    SkillCommand:
+      type: object
+      additionalProperties: true
+
+    UpsertSkillBundleInput:
+      type: object
+      required: [id, content]
+      properties:
+        id: { type: string }
+        content: { type: string }
+        scope: { type: string, enum: [global, self] }
+        version: { type: string, nullable: true }
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              content: { type: string }
+        deletedResourcePaths: { type: array, items: { type: string } }
+        state: { type: string, enum: [draft, published] }
+        action: { type: string, enum: [publish] }
+
+    SkillReviewRequest:
+      type: object
+      required: [scope, skillId, target]
+      properties:
+        scope: { type: string, enum: [file, bundle] }
+        skillId: { type: string, minLength: 1 }
+        model:
+          type: object
+          properties:
+            provider: { type: string }
+            modelId: { type: string }
+            apiKey: { type: string, description: REJECTED by Java target. }
+        target:
+          type: object
+          required: [primaryPath, files]
+          properties:
+            primaryPath: { type: string }
+            files:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                properties:
+                  path: { type: string }
+                  content: { type: string }
+
+    SkillReviewResponse:
+      type: object
+      required: [findings, proposals]
+      properties:
+        findings: { type: string, minLength: 1 }
+        proposals:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              reason: { type: string }
+              updatedContent: { type: string }

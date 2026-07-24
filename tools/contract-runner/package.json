@@ -1,0 +1,19 @@
+{
+  "name": "@datastoria/contract-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node contract runner and semantic diff for the DataStoria migration baseline.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "validate-fixtures": "node src/validate-fixtures.js",
+    "diff:captures": "node src/semantic-diff.js",
+    "capture": "node src/capture.js"
+  },
+  "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}

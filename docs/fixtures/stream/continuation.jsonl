@@ -1,0 +1,10 @@
+{"type":"start","messageId":"msg_01H"}
+{"type":"start-step"}
+{"type":"tool-input-start","toolCallId":"call_01H","toolName":"get_tables"}
+{"type":"tool-input-available","toolCallId":"call_01H","toolName":"get_tables","input":{}}
+{"type":"tool-output-available","toolCallId":"call_01H","output":{"tables":["events"]}}
+{"type":"text-start","id":"txt_01H"}
+{"type":"text-delta","id":"txt_01H","delta":"Continuing the analysis"}
+{"type":"text-end","id":"txt_01H"}
+{"type":"finish-step"}
+{"type":"finish","finishReason":"stop","messageMetadata":{"usage":{"promptTokens":25,"completionTokens":6,"totalTokens":31}}}

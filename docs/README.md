@@ -19,6 +19,19 @@ AgentScope Java 的实施依据。文档以现有代码为基线，目标读者�
 8. [AI 实施手册](delivery/ai-implementation-playbook.md)：代码约束、执行顺序、交付模板。
 9. [需求追踪与完成审计](delivery/acceptance-traceability.md)：逐项证明迁移完成的证据。
 
+## P1 契约冻结产出
+
+阶段 1 冻结的契约与测试脚手架（位于 `api/` 与 `fixtures/`）：
+
+- [OpenAPI baseline](api/openapi-baseline.yaml)：A01-A29 的 HTTP 契约快照。
+- [流式协议契约](api/stream-protocol.md)：AI SDK UI Message Stream 事件冻结。
+- [API 迁移处置矩阵](api/migration-disposition.md)：每项 API 的 disposition 与目标阶段。
+- [前端调用点与 Playwright 场景](api/frontend-call-sites.md)：调用点清单与等价性场景。
+- [流式 fixture](fixtures/stream/)：8 个场景的 chunk 样本 + JSON Schema。
+- [业务 fixture](fixtures/business/)：方言无关的会话/消息/Skill/ClickHouse 测试数据。
+- 契约 runner：`tools/contract-runner/`，负责 fixture 校验、响应捕获与 semantic diff。
+
+
 ## 文档状态
 
 | 文档 | 状态 | 用途 |

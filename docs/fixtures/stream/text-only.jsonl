@@ -1,0 +1,8 @@
+{"type":"start","messageId":"msg_01H"}
+{"type":"start-step"}
+{"type":"text-start","id":"txt_01H"}
+{"type":"text-delta","id":"txt_01H","delta":"Hello"}
+{"type":"text-delta","id":"txt_01H","delta":" world"}
+{"type":"text-end","id":"txt_01H"}
+{"type":"finish-step"}
+{"type":"finish","finishReason":"stop","messageMetadata":{"usage":{"promptTokens":12,"completionTokens":3,"totalTokens":15}}}

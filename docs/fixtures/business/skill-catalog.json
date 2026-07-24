@@ -1,0 +1,101 @@
+{
+  "$comment": "Frozen catalog of the 9 built-in skills (disk seed). The full SKILL.md bundles are imported in P5; this fixture only freezes the catalog metadata used by A19/A20 to drive semantic diff.",
+  "skills": [
+    {
+      "id": "clickhouse",
+      "name": "ClickHouse",
+      "description": "ClickHouse general guidance",
+      "source": "disk",
+      "status": "published",
+      "state": "published",
+      "scope": "global",
+      "version": null,
+      "author": null,
+      "summary": "General ClickHouse best practices.",
+      "hasResources": false,
+      "slashCommand": false,
+      "quickAction": false,
+      "requiredTools": []
+    },
+    {
+      "id": "clickhouse-system-queries",
+      "name": "ClickHouse System Queries",
+      "description": "System table queries",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["execute_sql"]
+    },
+    {
+      "id": "diagnose-clickhouse-clusters",
+      "name": "Diagnose ClickHouse Clusters",
+      "description": "Cluster diagnostics",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["collect_cluster_status"]
+    },
+    {
+      "id": "diagnose-clickhouse-errors",
+      "name": "Diagnose ClickHouse Errors",
+      "description": "Error diagnosis",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["search_query_log"]
+    },
+    {
+      "id": "optimize-clickhouse-sql",
+      "name": "Optimize ClickHouse SQL",
+      "description": "SQL optimization",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["collect_sql_optimization_evidence"]
+    },
+    {
+      "id": "source-code-inspection",
+      "name": "Source Code Inspection",
+      "description": "Read source files",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["search_file", "read_file"]
+    },
+    {
+      "id": "sql-expert",
+      "name": "SQL Expert",
+      "description": "SQL generation",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["explore_schema", "validate_sql"]
+    },
+    {
+      "id": "visualization",
+      "name": "Visualization",
+      "description": "Declarative visualization",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["generate_visualization"]
+    },
+    {
+      "id": "vizlayer",
+      "name": "VizLayer",
+      "description": "Layered visualization",
+      "source": "disk",
+      "status": "published",
+      "scope": "global",
+      "hasResources": false,
+      "requiredTools": ["generate_visualization"]
+    }
+  ]
+}

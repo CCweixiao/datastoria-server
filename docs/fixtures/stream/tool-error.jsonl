@@ -1,0 +1,7 @@
+{"type":"start","messageId":"msg_01H"}
+{"type":"start-step"}
+{"type":"tool-input-start","toolCallId":"call_01H","toolName":"execute_sql"}
+{"type":"tool-input-available","toolCallId":"call_01H","toolName":"execute_sql","input":{"sql":"SELECT 1"}}
+{"type":"tool-output-error","toolCallId":"call_01H","errorText":"Connection timeout"}
+{"type":"finish-step"}
+{"type":"finish","finishReason":"error","messageMetadata":{"usage":{"promptTokens":10,"completionTokens":2,"totalTokens":12}}}

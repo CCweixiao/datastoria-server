@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datastoria.io/schemas/ui-message-chunk.json",
+  "title": "AI SDK v6 UI Message Stream chunk",
+  "description": "One data-line payload from the UI Message Stream SSE. The wire form is `data: {json}\\n\\n`; this schema validates the {json} object. Terminated by the literal `data: [DONE]\\n\\n`.",
+  "type": "object",
+  "required": ["type"],
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "start" },
+        "messageId": { "type": "string" },
+        "messageMetadata": { "type": "object" }
+      },
+      "required": ["type", "messageId"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "start-step" }
+      },
+      "required": ["type"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "finish-step" }
+      },
+      "required": ["type"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "text-start" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "text-delta" },
+        "id": { "type": "string" },
+        "delta": { "type": "string" }
+      },
+      "required": ["type", "id", "delta"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "text-end" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "reasoning-start" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "reasoning-delta" },
+        "id": { "type": "string" },
+        "delta": { "type": "string" }
+      },
+      "required": ["type", "id", "delta"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "reasoning-end" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-input-start" },
+        "toolCallId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "dynamic": { "type": "boolean" },
+        "title": { "type": "string" }
+      },
+      "required": ["type", "toolCallId", "toolName"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-input-delta" },
+        "toolCallId": { "type": "string" },
+        "inputTextDelta": { "type": "string" }
+      },
+      "required": ["type", "toolCallId", "inputTextDelta"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-input-available" },
+        "toolCallId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "input": {}
+      },
+      "required": ["type", "toolCallId", "toolName", "input"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-input-error" },
+        "toolCallId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "input": {},
+        "errorText": { "type": "string" }
+      },
+      "required": ["type", "toolCallId", "toolName", "errorText"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-output-available" },
+        "toolCallId": { "type": "string" },
+        "output": {},
+        "preliminary": { "type": "boolean" }
+      },
+      "required": ["type", "toolCallId", "output"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tool-output-error" },
+        "toolCallId": { "type": "string" },
+        "errorText": { "type": "string" }
+      },
+      "required": ["type", "toolCallId", "errorText"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "message-metadata" },
+        "messageMetadata": { "type": "object" }
+      },
+      "required": ["type", "messageMetadata"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "finish" },
+        "finishReason": { "type": "string" },
+        "messageMetadata": { "type": "object" }
+      },
+      "required": ["type", "finishReason"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "error" },
+        "errorText": { "type": "string" }
+      },
+      "required": ["type", "errorText"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": { "const": "abort" },
+        "reason": { "type": "string" }
+      },
+      "required": ["type"]
+    }
+  ]
+}
