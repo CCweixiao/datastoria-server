@@ -22,3 +22,9 @@ info:
   application:
     name: DataStoria Server
     description: Spring Boot backend for DataStoria
+
+# A Spring profile must always be active to wire the datasource:
+#   local  -> SQLite file (./data/datastoria.db)
+#   test   -> SQLite in-memory
+#   prod   -> MySQL (fail-fast on missing env vars)
+# Running without a profile intentionally has no datasource.

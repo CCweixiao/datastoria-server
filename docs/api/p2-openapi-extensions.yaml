@@ -1,0 +1,696 @@
+openapi: 3.0.3
+info:
+  title: DataStoria P2 API Extensions
+  version: 0.2.0
+  description: |
+    New endpoints introduced in P2 for server-managed model providers, model catalog,
+    agent definitions/revisions, user preferences, and the A12 compat layer.
+    These augment the endpoints defined in `openapi-baseline.yaml`.
+
+servers:
+  - url: /
+
+security:
+  - headerIdentity: []
+
+paths:
+  # ===== Provider Admin =====
+  /api/admin/ai/providers:
+    get:
+      tags: [admin-providers]
+      operationId: listProviders
+      summary: List all model providers for the current tenant
+      security: [{headerIdentity: []}]
+      responses:
+        '200':
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ProviderResponse'}
+    post:
+      tags: [admin-providers]
+      operationId: createProvider
+      summary: Create a new model provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateProviderRequest'}
+      responses:
+        '200':
+          description: Created provider
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderResponse'}
+
+  /api/admin/ai/providers/{id}:
+    get:
+      summary: Get a model provider
+      tags: [admin-providers]
+      operationId: getProvider
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '200':
+          description: Provider detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderResponse'}
+        '404': {$ref: '#/components/responses/ProblemDetail'}
+    put:
+      summary: Update a model provider
+      tags: [admin-providers]
+      operationId: updateProvider
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateProviderRequest'}
+      responses:
+        '200':
+          description: Updated provider
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderResponse'}
+        '404': {$ref: '#/components/responses/ProblemDetail'}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+    delete:
+      tags: [admin-providers]
+      operationId: deleteProvider
+      summary: Soft-delete a provider that has no active models
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Provider deleted}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+
+  /api/admin/ai/providers/{id}/credential:
+    put:
+      tags: [admin-providers]
+      operationId: putCredential
+      summary: Rotate provider API key (encrypts server-side, never returns plaintext)
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CredentialRequest'}
+      responses:
+        '200':
+          description: Credential stored — returns masked hint only
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CredentialResponse'}
+    delete:
+      summary: Clear a provider credential
+      tags: [admin-providers]
+      operationId: deleteCredential
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '204': {description: Credential cleared}
+
+  /api/admin/ai/providers/{id}:test:
+    post:
+      tags: [admin-providers]
+      operationId: testProviderConnection
+      summary: Test the configured provider credential and endpoint
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '200':
+          description: Successful connection test
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderTestResponse'}
+        '502': {$ref: '#/components/responses/ProblemDetail'}
+        '504': {$ref: '#/components/responses/ProblemDetail'}
+
+  /api/admin/ai/providers/{id}/models:discover:
+    post:
+      tags: [admin-providers]
+      operationId: discoverProviderModels
+      summary: Discover models without modifying the model catalog
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '200':
+          description: Discovered model candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/DiscoveredModelResponse'}
+        '502': {$ref: '#/components/responses/ProblemDetail'}
+
+  # ===== Model Admin =====
+  /api/admin/ai/models:
+    get:
+      summary: List models
+      tags: [admin-models]
+      operationId: listModels
+      responses:
+        '200':
+          description: Model list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ModelResponse'}
+    post:
+      summary: Create a model
+      tags: [admin-models]
+      operationId: createModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateModelRequest'}
+      responses:
+        '200':
+          description: Created model
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelResponse'}
+
+  /api/admin/ai/models/{id}:
+    get:
+      tags: [admin-models]
+      operationId: getModel
+      summary: Get a model
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '200':
+          description: Model detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelResponse'}
+        '404': {$ref: '#/components/responses/ProblemDetail'}
+    put:
+      summary: Update a model
+      tags: [admin-models]
+      operationId: updateModel
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateModelRequest'}
+      responses:
+        '200':
+          description: Updated model
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModelResponse'}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+    delete:
+      summary: Soft-delete a model
+      tags: [admin-models]
+      operationId: deleteModel
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Soft-deleted}
+
+  # ===== Agent Admin =====
+  /api/admin/ai/agents:
+    get:
+      summary: List agent definitions
+      tags: [admin-agents]
+      operationId: listAgents
+      responses:
+        '200':
+          description: Agent definition list (with embedded revisions)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+    post:
+      summary: Create an agent definition
+      tags: [admin-agents]
+      operationId: createAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateAgentRequest'}
+      responses:
+        '200':
+          description: Created draft agent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+
+  /api/admin/ai/agents/{id}:
+    get:
+      summary: Get an agent definition
+      tags: [admin-agents]
+      operationId: getAgent
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      responses:
+        '200':
+          description: Agent detail with revisions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+        '404': {$ref: '#/components/responses/ProblemDetail'}
+    put:
+      tags: [admin-agents]
+      operationId: updateAgent
+      summary: Update an agent definition
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateAgentRequest'}
+      responses:
+        '200':
+          description: Updated agent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+    delete:
+      tags: [admin-agents]
+      operationId: deleteAgent
+      summary: Soft-delete an agent definition
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Agent deleted}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+
+  /api/admin/ai/agents/{id}/revisions:
+    post:
+      tags: [admin-agents]
+      operationId: createAgentRevision
+      summary: Create an immutable revision (prompt checksum computed server-side)
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateAgentRevisionRequest'}
+      responses:
+        '200':
+          description: Created revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRevisionResponse'}
+
+  /api/admin/ai/agents/{id}/revisions/{revisionId}:publish:
+    post:
+      tags: [admin-agents]
+      operationId: publishAgentRevision
+      summary: Atomically set the published revision
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {name: revisionId, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '200':
+          description: Published agent definition
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+        '404': {$ref: '#/components/responses/ProblemDetail'}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+
+  /api/admin/ai/agents/{id}:disable:
+    post:
+      summary: Disable an agent definition
+      tags: [admin-agents]
+      operationId: disableAgent
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '200':
+          description: Disabled agent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentDefinitionResponse'}
+
+  # ===== User Preferences =====
+  /api/me/ai/preferences:
+    get:
+      tags: [user-prefs]
+      operationId: getEffectiveConfig
+      summary: Merged config (system < tenant < user)
+      responses:
+        '200':
+          description: Effective configuration
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserPreferenceResponse'}
+    put:
+      summary: Update a user preference
+      tags: [user-prefs]
+      operationId: upsertUserPreference
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateUserPreferenceRequest'}
+      responses:
+        '200':
+          description: Updated effective config
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserPreferenceResponse'}
+        '409': {$ref: '#/components/responses/ProblemDetail'}
+
+  /api/me/ai/model-preference:
+    get:
+      summary: Get the current model preference
+      tags: [user-prefs]
+      operationId: getUserModelPreference
+      responses:
+        '200':
+          description: Current model selection (may have null selectedModelId)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserModelPreferenceResponse'}
+    put:
+      tags: [user-prefs]
+      operationId: setUserModelPreference
+      summary: Set the current model preference
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserModelPreferenceRequest'}
+      responses:
+        '200':
+          description: Updated selection
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserModelPreferenceResponse'}
+
+  # ===== A12 Compatibility =====
+  /api/ai/models/available:
+    post:
+      tags: [compat]
+      operationId: getAvailableModels
+      summary: Return enabled server-managed models using the legacy A12 response shape
+      description: Requests containing a top-level apiKey are rejected.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Available model lists
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AvailableModelsResponse'}
+        '400': {$ref: '#/components/responses/ProblemDetail'}
+components:
+  securitySchemes:
+    headerIdentity:
+      type: apiKey
+      in: header
+      name: x-datastoria-user-email
+      description: Dev-only identity header. P10 replaces with OAuth.
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema: {type: string, pattern: '^(W/)?\"?[0-9]+\"?$'}
+      description: Current revision as an entity-tag (for example `"3"`).
+
+  responses:
+    ProblemDetail:
+      description: RFC 9457 problem detail
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/ProblemDetail'}
+
+  schemas:
+    ProblemDetail:
+      type: object
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        code: {type: string, description: 'Machine-readable error code e.g. NOT_FOUND, REVISION_CONFLICT, CLIENT_SECRET_NOT_ALLOWED'}
+        requestId: {type: string}
+
+    CreateProviderRequest:
+      type: object
+      required: [providerKey, displayName, authType, enabled]
+      properties:
+        providerKey: {type: string}
+        displayName: {type: string}
+        baseUrl: {type: string, nullable: true}
+        authType: {type: string, enum: [api_key, oauth, none]}
+        enabled: {type: boolean}
+        configJson: {type: string}
+
+    UpdateProviderRequest:
+      allOf:
+        - {$ref: '#/components/schemas/CreateProviderRequest'}
+
+    ProviderResponse:
+      type: object
+      properties:
+        id: {type: string}
+        providerKey: {type: string}
+        displayName: {type: string}
+        baseUrl: {type: string, nullable: true}
+        authType: {type: string}
+        enabled: {type: boolean}
+        configJson: {type: string}
+        credentialConfigured: {type: boolean}
+        maskedHint: {type: string, nullable: true}
+        revision: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    CredentialRequest:
+      type: object
+      required: [secretKind, value]
+      properties:
+        secretKind: {type: string, enum: [api_key, access_token, refresh_token]}
+        value: {type: string, description: 'Plaintext secret — encrypted at rest, never returned.'}
+        expiresAt: {type: string, format: date-time, nullable: true}
+
+    CredentialResponse:
+      type: object
+      properties:
+        configured: {type: boolean}
+        maskedHint: {type: string, description: 'Format sk-…DEF — prefix + last 3 chars.'}
+        updatedAt: {type: string, format: date-time}
+
+    ProviderTestResponse:
+      type: object
+      required: [success, latencyMs, message]
+      properties:
+        success: {type: boolean}
+        latencyMs: {type: integer, format: int64}
+        message: {type: string}
+
+    DiscoveredModelResponse:
+      type: object
+      required: [modelKey, displayName, providerKey]
+      properties:
+        modelKey: {type: string}
+        displayName: {type: string}
+        providerKey: {type: string}
+
+    CreateModelRequest:
+      type: object
+      required: [providerId, modelKey, displayName, source, enabled]
+      properties:
+        providerId: {type: string}
+        modelKey: {type: string}
+        displayName: {type: string}
+        description: {type: string, nullable: true}
+        source: {type: string, enum: [system, discovered, custom]}
+        enabled: {type: boolean}
+        isFree: {type: boolean, default: false}
+        capabilitiesJson: {type: string, nullable: true}
+        generationDefaultsJson: {type: string, nullable: true}
+
+    UpdateModelRequest:
+      allOf:
+        - {$ref: '#/components/schemas/CreateModelRequest'}
+
+    ModelResponse:
+      type: object
+      properties:
+        id: {type: string}
+        providerId: {type: string}
+        modelKey: {type: string}
+        displayName: {type: string}
+        description: {type: string, nullable: true}
+        source: {type: string}
+        enabled: {type: boolean}
+        isFree: {type: boolean}
+        capabilitiesJson: {type: string, nullable: true}
+        generationDefaultsJson: {type: string, nullable: true}
+        revision: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    CreateAgentRequest:
+      type: object
+      required: [agentKey, name]
+      properties:
+        agentKey: {type: string}
+        name: {type: string}
+        description: {type: string, nullable: true}
+
+    UpdateAgentRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        description: {type: string, nullable: true}
+
+    AgentDefinitionResponse:
+      type: object
+      properties:
+        id: {type: string}
+        agentKey: {type: string}
+        name: {type: string}
+        description: {type: string, nullable: true}
+        status: {type: string, enum: [draft, published, disabled]}
+        publishedRevisionId: {type: string, nullable: true}
+        revision: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        revisions:
+          type: array
+          items: {$ref: '#/components/schemas/AgentRevisionResponse'}
+
+    CreateAgentRevisionRequest:
+      type: object
+      required: [systemPrompt]
+      properties:
+        modelId: {type: string, nullable: true}
+        systemPrompt: {type: string}
+        runtimeConfigJson: {type: string, nullable: true}
+        toolPolicyJson: {type: string, nullable: true}
+        skillPolicyJson: {type: string, nullable: true}
+
+    AgentRevisionResponse:
+      type: object
+      properties:
+        id: {type: string}
+        agentId: {type: string}
+        version: {type: integer}
+        modelId: {type: string, nullable: true}
+        systemPrompt: {type: string}
+        promptChecksum: {type: string, description: SHA-256 hex of systemPrompt}
+        runtimeConfigJson: {type: string, nullable: true}
+        toolPolicyJson: {type: string, nullable: true}
+        skillPolicyJson: {type: string, nullable: true}
+        createdBy: {type: string}
+        createdAt: {type: string, format: date-time}
+
+    UpdateUserPreferenceRequest:
+      type: object
+      required: [configKey, valueJson]
+      properties:
+        configKey: {type: string}
+        valueJson: {type: string, description: JSON-encoded value}
+
+    UserPreferenceResponse:
+      type: object
+      properties:
+        entries:
+          type: object
+          additionalProperties: {type: string}
+          description: Map of configKey → valueJson (merged system+tenant+user)
+        revision: {type: integer}
+
+    UserModelPreferenceRequest:
+      type: object
+      required: [modelConfigId]
+      properties:
+        modelConfigId: {type: string}
+        preferenceJson: {type: string, nullable: true}
+
+    UserModelPreferenceResponse:
+      type: object
+      properties:
+        selectedModelId: {type: string, nullable: true}
+        preferenceJson: {type: string, nullable: true}
+        revision: {type: integer}
+
+    AvailableModelsResponse:
+      type: object
+      required: [systemModels, githubModels]
+      properties:
+        systemModels:
+          type: array
+          items: {$ref: '#/components/schemas/ModelProps'}
+        githubModels:
+          type: array
+          items: {$ref: '#/components/schemas/ModelProps'}
+
+    ModelProps:
+      type: object
+      required: [provider, modelId, free, autoSelectable, disabled, configId]
+      properties:
+        provider: {type: string}
+        modelId: {type: string}
+        description: {type: string, nullable: true}
+        free: {type: boolean}
+        autoSelectable: {type: boolean}
+        disabled: {type: boolean}
+        supportedEndpoints:
+          type: array
+          items: {type: string}
+        supportsImageInput: {type: boolean}
+        supportsTemperature: {type: boolean}
+        supportsReasoning: {type: boolean}
+        reasoningLevels:
+          type: array
+          items: {type: string}
+        source: {type: string}
+        configId: {type: string}

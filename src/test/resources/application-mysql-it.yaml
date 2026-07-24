@@ -1,0 +1,26 @@
+# MySQL integration-test profile. Used by ./mvnw verify -Pmysql-it.
+#
+# The JDBC URL, username and password are injected programmatically by the
+# Testcontainers test base class (MysqlRepositoryTestBase) before the Spring
+# context initialises, so they appear as placeholders here.
+
+spring:
+  main:
+    banner-mode: off
+    web-application-type: reactive
+
+  datasource:
+    url: "jdbc:mysql://placeholder/test"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/mysql
+    baseline-on-migrate: true
+
+datastoria:
+  master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  identity:
+    default-tenant: tenant-mysql-it
+    default-user: it@example.com
+    default-roles: ROLE_ADMIN,ROLE_USER

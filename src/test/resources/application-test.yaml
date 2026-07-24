@@ -1,12 +1,33 @@
 # Test profile. Used by ./mvnw test and CI.
 #
-# Keeps startup minimal: no external services, no database wiring (until P2),
-# and reduced actuator exposure.
+# Uses an in-memory SQLite database with a single pooled connection so the
+# schema survives across Flyway migration and repository/API tests within the
+# same Spring context.
 
 spring:
   main:
     banner-mode: off
     web-application-type: reactive
+
+  datasource:
+    url: "jdbc:sqlite::memory:"
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/sqlite
+    baseline-on-migrate: true
+
+datastoria:
+  master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  identity:
+    default-tenant: tenant-test
+    default-user: dev@example.com
+    default-roles: ROLE_ADMIN,ROLE_USER
+    admin-users: dev@example.com,tenant-b@example.com
 
 management:
   endpoints:
