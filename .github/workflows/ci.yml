@@ -62,3 +62,29 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  contract-runner:
+    name: contract runner (node20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/contract-runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: tools/contract-runner/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run contract runner tests
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

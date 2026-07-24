@@ -62,7 +62,7 @@
 ### S2 普通多轮聊天流（A01）
 
 1. 发送 "分析慢查询" → 断言 `POST /api/ai/agent` 返回 `text/event-stream` 且
-   `X-Vercel-AI-Data-Stream: v1`。
+   `X-Vercel-AI-UI-Message-Stream: v1`。
 2. 断言页面出现 assistant 文本（start/text-delta/text-end/finish 事件序列）。
 3. 刷新后 `GET messages` 回放与流结果语义一致。
 4. 取消 → 断言 abort 事件与 UI 取消态。

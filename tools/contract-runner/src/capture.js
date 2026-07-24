@@ -12,7 +12,8 @@
 //   DS_USER_EMAIL   optional x-datastoria-user-email header value
 //   DS_SHARE_CODE   optional X-Session-Share-Code header value
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { exit } from "node:process";
 import { parseSseChunks } from "./sse.js";
 
@@ -35,7 +36,8 @@ async function main() {
   const res = await fetch(url, { method, headers, body });
   const contentType = res.headers.get("content-type") || "";
   const responseHeaders = Object.fromEntries(res.headers.entries());
-  const text = await res.text();
+  const responseBytes = Buffer.from(await res.arrayBuffer());
+  const text = responseBytes.toString("utf8");
 
   const capture = {
     url,
@@ -44,6 +46,7 @@ async function main() {
     headers: responseHeaders,
     contentType,
     capturedAt: new Date().toISOString(),
+    rawBase64: responseBytes.toString("base64"),
   };
 
   if (contentType.includes("text/event-stream")) {
@@ -61,7 +64,8 @@ async function main() {
     }
   }
 
-  const out = outFile || `capture-${Date.now()}.json`;
+  const out = outFile || resolve(".cache", "captures", `capture-${Date.now()}.json`);
+  mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(capture, null, 2));
   console.log(`captured ${res.status} ${contentType} -> ${out}`);
 }

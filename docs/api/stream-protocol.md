@@ -24,10 +24,11 @@ UI Message Stream 协议。它是 Java `AiSdkDataStreamEncoder` 必须复刻的�
 
 | 头 | 值 |
 |---|---|
-| `Content-Type` | `text/event-stream; charset=utf-8` |
+| `Content-Type` | `text/event-stream` |
 | `Cache-Control` | `no-cache` |
 | `Connection` | `keep-alive` |
-| `X-Vercel-AI-Data-Stream` | `v1`（SDK 默认注入） |
+| `X-Vercel-AI-UI-Message-Stream` | `v1`（SDK 默认注入） |
+| `X-Accel-Buffering` | `no`（SDK 默认注入，关闭 Nginx buffering） |
 
 ## 3. SSE 帧格式
 
@@ -108,7 +109,7 @@ DataStoria 当前实际会产生的类型（基于 `route.ts` 的 `streamText` +
 - 事件相对顺序：`start` 必须先于 `text-start`；`text-start` 先于 `text-delta` 先于
   `text-end`；`tool-input-available` 先于 `tool-output-available`；`finish` 必须存在。
 - `[DONE]` 终止符的存在。
-- 响应头 `Content-Type`、`X-Vercel-AI-Data-Stream`。
+- 响应头 `Content-Type`、`X-Vercel-AI-UI-Message-Stream`。
 - `toolName`、`errorText` 的存在性。
 
 ## 7. 捕获流程

@@ -54,3 +54,4 @@ data/
 ### Contract runner / fixtures runtime ###
 tools/contract-runner/node_modules/
 tools/contract-runner/.cache/
+tools/contract-runner/captures/

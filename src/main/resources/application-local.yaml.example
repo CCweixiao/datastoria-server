@@ -5,6 +5,7 @@
 #
 #   cp src/main/resources/application-local.yaml.example \
 #      src/main/resources/application-local.yaml
+#   SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
 #
 # Never commit real API keys, refresh tokens, database passwords, or ClickHouse
 # credentials. The Java service is the only place secrets may live at runtime,

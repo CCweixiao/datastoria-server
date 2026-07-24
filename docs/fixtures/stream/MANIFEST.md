@@ -28,7 +28,7 @@ JSON 对象，对应 SSE 帧 `data: {json}` 的 payload 部分（不含 `data: `
 
 - **当前状态**：基于 AI SDK v6 `uiMessageChunkSchema`（`ai@6.0.103`）手工构造的规范
   样本，用于冻结协议结构。
-- **真实捕获**：待具备受控 provider 环境后，由 `tools/contract-runner`（见下）
+- **真实捕获**：待具备受控 provider/mock 路由环境后，由 `tools/contract-runner`（见下）
   对运行中的 Node 服务抓取原始 SSE 字节，脱敏后覆盖本目录。捕获时必须记录：
   - AI SDK 版本（`node_modules/ai/package.json` version）
   - 模型 provider 与 modelId
@@ -53,4 +53,4 @@ npm ci
 npm run validate-fixtures   # 用 ajv 校验每个 .jsonl 行符合 schema.json
 ```
 
-该命令随 contract runner（下一个任务）一起交付。
+CI 执行 `npm test`，同时校验 fixture 和 contract runner 的 parser/diff 行为。

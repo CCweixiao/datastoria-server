@@ -1,11 +1,6 @@
 spring:
   application:
     name: datastoria-server
-  profiles:
-    # Default to local profile for development. Copy
-    # application-local.yaml.example to application-local.yaml and adjust as
-    # needed. CI and tests use the `test` profile.
-    active: local
 
 server:
   port: 8080

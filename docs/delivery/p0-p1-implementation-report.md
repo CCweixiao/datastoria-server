@@ -1,5 +1,9 @@
 # P0 + P1 实施报告
 
+> Review 状态：已修订并通过。2026-07-24 的 review 修正了 AI SDK v6 响应头、OpenAPI
+> 3.1 nullable 结构、stream semantic diff、精确字节捕获、默认 profile、CI 和依赖漏洞。
+> 真实 Node 路由流捕获仍按本文退出条件保留为 P4/P7 前置硬门，不被规范 fixture 替代。
+
 ## 范围
 
 ### 完成
@@ -12,11 +16,11 @@
   22 schema）；AI SDK UI Message Stream 流式协议契约与事件目录；API 迁移处置
   矩阵；前端调用点清单 + 10 个 Playwright 场景；8 个流式 fixture + JSON Schema；
   方言无关业务 fixture + 脱敏 ClickHouse 测试数据；Node contract runner（fixture
-  校验、响应捕获、JSON + stream semantic diff）。
+  校验、精确字节响应捕获、JSON + stream semantic diff）及 CI 自动测试。
 
 ### 未完成（明确）
 
-- 真实字节流 fixture 捕获：当前 fixture 为基于 AI SDK v6 `uiMessageChunkSchema`
+- 真实 Node 路由字节流 fixture 捕获：当前 fixture 为基于 AI SDK v6 `uiMessageChunkSchema`
   手工构造的规范样本；真实脱敏字节需在具备受控 provider 环境后由 contract runner
   对运行中的 Node 服务抓取并覆盖。协议结构与 schema 已冻结。
 - MySQL 方言、Flyway、数据库 repository：属 P2 范围，本阶段不实现。
@@ -43,7 +47,7 @@
 | `src/test/.../DatastoriaServerApplicationTests.java` | 加 `@ActiveProfiles("test")` |
 | `.editorconfig` | 新增 |
 | `.gitignore` | 扩充：secrets、local DB、contract-runner node_modules |
-| `.github/workflows/ci.yml` | 新增：CI pipeline |
+| `.github/workflows/ci.yml` | 新增：Java、contract runner 和密钥扫描 CI pipeline |
 
 ### 契约 / 文档
 
@@ -72,9 +76,10 @@
 | 文件 | 职责 |
 |---|---|
 | `src/validate-fixtures.js` | 用 ajv 2020-12 校验 stream fixture |
-| `src/semantic-diff.js` | JSON + stream 语义 diff（CLI + 库） |
-| `src/capture.js` | 捕获服务响应（JSON + SSE） |
+| `src/semantic-diff.js` | JSON + stream 语义 diff（CLI + 库），校验状态、必需头和 DONE |
+| `src/capture.js` | 捕获服务响应（JSON + SSE），保留 Base64 精确响应字节 |
 | `src/sse.js` | SSE 解析为 chunk 数组 |
+| `test/*.test.js` | SSE parser 与 semantic diff 回归测试 |
 
 ## 验证证据
 
@@ -86,7 +91,9 @@
 | P0 格式化门禁 | `./mvnw spotless:check` | PASS | — |
 | P0 package | `./mvnw package -DskipTests` | BUILD SUCCESS, jar 产出 | `target/datastoria-server-0.0.1-SNAPSHOT.jar` |
 | P1 fixture schema | `npm run validate-fixtures` | 8 fixtures, 65 chunks, 0 errors | `tools/contract-runner` |
+| P1 runner tests | `npm run test:unit` | parser/diff regression PASS | `tools/contract-runner/test` |
 | P1 OpenAPI 可解析 | `npx js-yaml openapi-baseline.yaml` | 24 path / 31 op / 22 schema | `/tmp/openapi-parsed.json` |
+| P1 OpenAPI 3.1 lint | `npm run validate-openapi` | PASS | `redocly.yaml` |
 | P1 semantic diff 负例（JSON 缺字段） | `semantic-diff.js cap-a cap-b(missing title)` | SEMANTIC DIFF, exit 1 | — |
 | P1 semantic diff 正例（stream，随机 ID/token 忽略） | `semantic-diff.js node java-ok` | SEMANTIC MATCH, exit 0 | — |
 | P1 stream diff 负例（缺 text-start） | `semantic-diff.js node java-bad` | SEMANTIC DIFF(5), exit 1 | — |
@@ -133,12 +140,14 @@
 
 - [x] A01-A29 建 OpenAPI baseline，标注 alias/deprecated/stub/active。
 - [x] Node contract runner，采集 status/header/JSON/SSE。
-- [x] 流式 fixture 覆盖 text、reasoning、tool（success/error）、usage/title、error、
+- [x] 规范流 fixture 覆盖 text、reasoning、tool（success/error）、usage/title、error、
   cancel、continuation。
 - [x] semantic diff 定义：忽略随机 ID/时间/token 数值，禁止忽略字段缺失与顺序错误。
 - [x] 每个前端调用点记录 + Playwright 场景。
 - [x] 方言无关业务 fixture + 脱敏 ClickHouse 测试数据。
 - [x] 故意删除字段时 diff 必须失败（已演示验证）。
+- [ ] 从运行中的 Node A01/A02 路由捕获并脱敏真实字节 fixture；当前只能证明
+  Schema/wire 规范和 runner 行为，不能证明 provider/route 的所有运行时变体。
 
 ## 已知风险与后续
 
@@ -149,8 +158,8 @@
 3. **A06/A07 分享者可写行为**：当前兼容 Node 行为，安全评审后可能需要 ADR 收紧。
 4. **OpenAPI 错误码为 plain text**：legacy 兼容要求；新管理 API 将使用 Problem Details，
    双协议在 P2 起通过显式 adapter 处理。
-5. **contract-runner 依赖未纳入 CI**：P1 的 CI 只跑 Java 侧；contract runner 的
-   `validate-fixtures` 可在后续加入 CI matrix（需 Node job）。
+5. **真实路由捕获仍是后续硬门**：P4 开始实现 Java stream encoder 前必须至少捕获 A01；
+   P7 退役 legacy A02 前必须捕获 A02。未完成时不得宣布流协议等价。
 
 ## 交付文件清单
 

@@ -29,12 +29,16 @@ const IGNORED_VALUES = new Set([
 const IGNORED_FIELDS = new Set(["createdAt", "updatedAt", "occurredAt"]);
 
 /** Path fragments (dotted) treated as opaque values. */
-const OPAQUE_PATHS = new Set([
-  "messageMetadata.usage.promptTokens",
-  "messageMetadata.usage.completionTokens",
-  "messageMetadata.usage.totalTokens",
-  "messageMetadata.title",
+const OPAQUE_PATH_SUFFIXES = new Set([
+  ".messageMetadata.usage.promptTokens",
+  ".messageMetadata.usage.completionTokens",
+  ".messageMetadata.usage.totalTokens",
+  ".messageMetadata.title",
 ]);
+
+function isOpaquePath(path) {
+  return [...OPAQUE_PATH_SUFFIXES].some((suffix) => path.endsWith(suffix));
+}
 
 /**
  * @param {unknown} a
@@ -83,7 +87,7 @@ export function jsonDiff(a, b, path = "$") {
       diffs.push(`${p}: present=${hasA} vs present=${hasB}`);
       continue;
     }
-    if (IGNORED_VALUES.has(key) || OPAQUE_PATHS.has(p)) {
+    if (IGNORED_VALUES.has(key) || isOpaquePath(p)) {
       // Value ignored; only require both present (already checked).
       continue;
     }
@@ -123,9 +127,11 @@ export function streamDiff(node, java) {
   const nodeTypes = node.map((c) => c.type);
   const javaTypes = java.map((c) => c.type);
 
-  // 1. Event type multiset equality (presence).
-  const nodeCount = countBy(nodeTypes);
-  const javaCount = countBy(javaTypes);
+  // 1. Event type multiset equality. Delta frame counts are intentionally
+  // excluded because transports may split the same logical delta differently.
+  const variableDeltaTypes = new Set(["text-delta", "reasoning-delta", "tool-input-delta"]);
+  const nodeCount = countBy(nodeTypes.filter((type) => !variableDeltaTypes.has(type)));
+  const javaCount = countBy(javaTypes.filter((type) => !variableDeltaTypes.has(type)));
   const allTypes = new Set([...nodeCount.keys(), ...javaCount.keys()]);
   for (const t of allTypes) {
     const n = nodeCount.get(t) ?? 0;
@@ -195,6 +201,32 @@ export function streamDiff(node, java) {
     diffs.push(`toolName sequence: node=${JSON.stringify(nodeTools)} java=${JSON.stringify(javaTools)}`);
   }
 
+  // 6. Completed tool inputs and outputs must remain semantically equivalent.
+  const nodeToolInputs = node
+    .filter((c) => c.type === "tool-input-available")
+    .map((c) => ({ toolName: c.toolName, input: c.input }));
+  const javaToolInputs = java
+    .filter((c) => c.type === "tool-input-available")
+    .map((c) => ({ toolName: c.toolName, input: c.input }));
+  diffs.push(...jsonDiff(nodeToolInputs, javaToolInputs, "$.toolInputs"));
+
+  const nodeToolOutputs = node
+    .filter((c) => c.type === "tool-output-available")
+    .map((c) => c.output);
+  const javaToolOutputs = java
+    .filter((c) => c.type === "tool-output-available")
+    .map((c) => c.output);
+  diffs.push(...jsonDiff(nodeToolOutputs, javaToolOutputs, "$.toolOutputs"));
+
+  // 7. Error events must carry the same field shape. Provider wording may
+  // differ, so the compatibility contract checks presence, not exact text.
+  const errorTypes = new Set(["error", "tool-input-error", "tool-output-error"]);
+  const errorShape = (chunks) =>
+    chunks
+      .filter((c) => errorTypes.has(c.type))
+      .map((c) => ({ type: c.type, hasErrorText: typeof c.errorText === "string" }));
+  diffs.push(...jsonDiff(errorShape(node), errorShape(java), "$.errorShape"));
+
   return {
     diffs,
     summary: {
@@ -204,6 +236,53 @@ export function streamDiff(node, java) {
       javaDone: java.some((c) => c.__done),
     },
   };
+}
+
+const REQUIRED_STREAM_HEADERS = [
+  "content-type",
+  "cache-control",
+  "x-vercel-ai-ui-message-stream",
+];
+
+function normalizedHeaders(headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value).toLowerCase()]),
+  );
+}
+
+export function captureDiff(a, b) {
+  const diffs = [];
+  let summary;
+
+  if (a.status !== b.status) {
+    diffs.push(`status: ${a.status} !== ${b.status}`);
+  }
+
+  if (a.stream !== b.stream) {
+    diffs.push(`stream: ${a.stream} !== ${b.stream}`);
+  } else if (a.stream) {
+    const result = streamDiff(a.chunks ?? [], b.chunks ?? []);
+    diffs.push(...result.diffs);
+    summary = result.summary;
+
+    if (a.done !== b.done) {
+      diffs.push(`[DONE] presence: ${a.done} !== ${b.done}`);
+    }
+
+    const headersA = normalizedHeaders(a.headers);
+    const headersB = normalizedHeaders(b.headers);
+    for (const header of REQUIRED_STREAM_HEADERS) {
+      if (headersA[header] !== headersB[header]) {
+        diffs.push(
+          `header ${header}: ${JSON.stringify(headersA[header])} !== ${JSON.stringify(headersB[header])}`,
+        );
+      }
+    }
+  } else {
+    diffs.push(...jsonDiff(a.body ?? a, b.body ?? b));
+  }
+
+  return { diffs, summary };
 }
 
 function countBy(arr) {
@@ -240,18 +319,9 @@ function runCli() {
   const a = JSON.parse(readFileSync(aPath, "utf8"));
   const b = JSON.parse(readFileSync(bPath, "utf8"));
 
-  let diffs = [];
-  if (a.stream && b.stream) {
-    const result = streamDiff(a.chunks ?? [], b.chunks ?? []);
-    diffs = result.diffs;
-    console.log(JSON.stringify(result.summary, null, 2));
-  } else {
-    diffs = jsonDiff(a.body ?? a, b.body ?? b);
-  }
-
-  if (a.status && b.status && a.status !== b.status) {
-    diffs.unshift(`status: ${a.status} !== ${b.status}`);
-  }
+  const result = captureDiff(a, b);
+  const { diffs } = result;
+  if (result.summary) console.log(JSON.stringify(result.summary, null, 2));
 
   if (diffs.length === 0) {
     console.log("SEMANTIC MATCH");

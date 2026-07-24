@@ -88,7 +88,7 @@ paths:
             Content-Type:
               schema:
                 type: string
-                enum: ['text/event-stream; charset=utf-8']
+                enum: ['text/event-stream']
             Cache-Control:
               schema:
                 type: string
@@ -97,6 +97,14 @@ paths:
               schema:
                 type: string
                 enum: ['keep-alive']
+            X-Vercel-AI-UI-Message-Stream:
+              schema:
+                type: string
+                enum: ['v1']
+            X-Accel-Buffering:
+              schema:
+                type: string
+                enum: ['no']
           content:
             text/event-stream:
               schema:
@@ -201,8 +209,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/ChatSessionDTO' }
                   nextCursor:
-                    type: string
-                    nullable: true
+                    type: [string, 'null']
         '400': { $ref: '#/components/responses/PlainTextError' }
         '401': { $ref: '#/components/responses/PlainTextError' }
     post:
@@ -895,7 +902,7 @@ components:
       properties:
         chatId: { type: string }
         databaseId: { type: string, description: connectionId }
-        title: { type: string, nullable: true }
+        title: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -943,7 +950,7 @@ components:
         parts:
           type: array
           items: { type: object }
-        metadata: { type: object, nullable: true }
+        metadata: { type: [object, 'null'] }
         sequence: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -1005,17 +1012,16 @@ components:
         messageId: { type: string, maxLength: 255 }
         solved: { type: boolean }
         reasonCode:
-          type: string
-          enum: [wrong_diagnosis, too_vague, unsafe_fix, missing_context, other]
-          nullable: true
-        freeText: { type: string, maxLength: 2000, nullable: true }
+          type: [string, 'null']
+          enum: [wrong_diagnosis, too_vague, unsafe_fix, missing_context, other, null]
+        freeText: { type: [string, 'null'], maxLength: 2000 }
         payload:
           type: object
           required: [queryId]
           properties:
             queryId: { type: string, maxLength: 255 }
-            errorCode: { type: string, maxLength: 64, nullable: true }
-            sql: { type: string, maxLength: 100000, nullable: true }
+            errorCode: { type: [string, 'null'], maxLength: 64 }
+            sql: { type: [string, 'null'], maxLength: 100000 }
         recoveryActionTaken: { type: boolean }
 
     FeedbackReportResponse:
@@ -1084,10 +1090,10 @@ components:
         status: { type: string, enum: [draft, published] }
         state: { type: string }
         scope: { type: string, enum: [global, self] }
-        version: { type: string, nullable: true }
-        author: { type: string, nullable: true }
-        url: { type: string, nullable: true }
-        summary: { type: string, nullable: true }
+        version: { type: [string, 'null'] }
+        author: { type: [string, 'null'] }
+        url: { type: [string, 'null'] }
+        summary: { type: [string, 'null'] }
         hasResources: { type: boolean }
         slashCommand: { type: boolean }
         quickAction: { type: boolean }
@@ -1113,7 +1119,7 @@ components:
         id: { type: string }
         content: { type: string }
         scope: { type: string, enum: [global, self] }
-        version: { type: string, nullable: true }
+        version: { type: [string, 'null'] }
         resources:
           type: array
           items:
