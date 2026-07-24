@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: datastoria-server
+  profiles:
+    # Default to local profile for development. Copy
+    # application-local.yaml.example to application-local.yaml and adjust as
+    # needed. CI and tests use the `test` profile.
+    active: local
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: DataStoria Server
+    description: Spring Boot backend for DataStoria

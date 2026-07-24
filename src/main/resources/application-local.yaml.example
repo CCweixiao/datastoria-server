@@ -1,0 +1,32 @@
+# Local development profile template.
+#
+# Copy this file to application-local.yaml and adjust values. The local
+# application.yaml is gitignored to prevent committing secrets.
+#
+#   cp src/main/resources/application-local.yaml.example \
+#      src/main/resources/application-local.yaml
+#
+# Never commit real API keys, refresh tokens, database passwords, or ClickHouse
+# credentials. The Java service is the only place secrets may live at runtime,
+# and they must come from the environment or a secrets manager.
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# Database wiring is introduced in P2. Until then, the service runs without a
+# datasource. The local example below documents the intended SQLite shape so
+# future phases can fill it in without restructuring profiles.
+#
+# spring:
+#   datasource:
+#     url: jdbc:sqlite:./data/datastoria.db
+#     driver-class-name: org.sqlite.JDBC
+#   flyway:
+#     locations: classpath:db/migration/sqlite
+#     enabled: true

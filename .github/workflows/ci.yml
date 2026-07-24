@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (jdk17)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Validate Maven Wrapper
+        # Confirms the committed wrapper script/properties are functional and
+        # resolve the expected Maven distribution.
+        run: |
+          test -f mvnw
+          test -f .mvn/wrapper/maven-wrapper.properties
+          ./mvnw -v -ntp
+
+      - name: Run formatter check
+        run: ./mvnw -B -ntp spotless:check
+
+      - name: Run tests
+        run: ./mvnw -B -ntp test
+
+      - name: Package (without tests)
+        run: ./mvnw -B -ntp package -DskipTests
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: datastoria-server-jar
+          path: target/*.jar
+          if-no-files-found: error
+          retention-days: 7
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets in tracked files
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

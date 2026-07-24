@@ -1,0 +1,18 @@
+# Test profile. Used by ./mvnw test and CI.
+#
+# Keeps startup minimal: no external services, no database wiring (until P2),
+# and reduced actuator exposure.
+
+spring:
+  main:
+    banner-mode: off
+    web-application-type: reactive
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
