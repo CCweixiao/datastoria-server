@@ -1,0 +1,28 @@
+{
+  "id": "A10-feedback-invalid-format",
+  "xDatastoriaId": "A10",
+  "operationId": "recordAutoExplainFeedback",
+  "description": "Zod schema violation: solved=false but no reasonCode supplied. HTTP 400 'Invalid request format'.",
+  "nodeBaselineNotes": "Plain-text error body matches Node verbatim.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/feedback/auto-explain",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": {
+      "source": "auto_explain_error",
+      "sessionId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "messageId": "msg_019523a101",
+      "solved": false,
+      "payload": { "queryId": "q_43" }
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": { "content-type": "text/plain" },
+    "body": "Invalid request format"
+  },
+  "semanticDiffIgnores": []
+}

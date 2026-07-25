@@ -1,0 +1,32 @@
+{
+  "id": "A06-rename-share-denied",
+  "xDatastoriaId": "A06",
+  "operationId": "renameSession",
+  "description": "Share visitor attempts to rename the session. Java target returns HTTP 403 with code SHARE_PERMISSION_DENIED (ProblemDetail). This is a deliberate divergence from Node, which currently permits the rename.",
+  "nodeBaselineNotes": "Divergence authorised by ADR-0001. Node returns HTTP 200 here; the Java target hard-denies share visitors. Operator may set datastoria.session-share.allow-write=true to temporarily restore Node behaviour during the P3 cutover window.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "visitor@example.com",
+      "X-Session-Share-Code": "synthetic-share-code",
+      "content-type": "application/json"
+    },
+    "body": { "title": "Hostile rename" }
+  },
+  "response": {
+    "status": 403,
+    "headers": { "content-type": "application/problem+json" },
+    "body": {
+      "type": "https://datastoria.io/problems/share-permission-denied",
+      "title": "Share visitor may not mutate this session",
+      "status": 403,
+      "code": "SHARE_PERMISSION_DENIED",
+      "detail": "Share codes are read-only by default; see ADR-0001.",
+      "requestId": "00000000-0000-4000-8000-000000000000"
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.requestId"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "A05-get-via-share",
+  "xDatastoriaId": "A05",
+  "operationId": "getSession",
+  "description": "Share visitor with a valid X-Session-Share-Code reads the session. HTTP 200 with the same ChatSessionDTO shape as the owner GET.",
+  "nodeBaselineNotes": "Share code is opaque in fixtures (synthetic-share-code). The Java target additionally requires a matching, non-revoked row in ds_session_share (ADR-0001).",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "visitor@example.com",
+      "X-Session-Share-Code": "synthetic-share-code"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "databaseId": "ch-test",
+      "title": "Slow query analysis",
+      "createdAt": "2026-07-25T09:00:00.000Z",
+      "updatedAt": "2026-07-25T09:00:00.000Z"
+    }
+  },
+  "semanticDiffIgnores": []
+}

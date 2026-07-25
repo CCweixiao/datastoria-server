@@ -1,0 +1,28 @@
+{
+  "id": "A06-rename-happy",
+  "xDatastoriaId": "A06",
+  "operationId": "renameSession",
+  "description": "Owner renames a session; HTTP 200 with the updated ChatSessionDTO.",
+  "nodeBaselineNotes": "Title must be non-empty after trim.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": { "title": "Renamed session" }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "databaseId": "ch-test",
+      "title": "Renamed session",
+      "createdAt": "2026-07-25T09:00:00.000Z",
+      "updatedAt": "2026-07-25T09:30:00.000Z"
+    }
+  },
+  "semanticDiffIgnores": []
+}

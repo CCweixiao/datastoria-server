@@ -1,0 +1,22 @@
+{
+  "id": "A06-rename-missing-title",
+  "xDatastoriaId": "A06",
+  "operationId": "renameSession",
+  "description": "PATCH with missing/empty title returns HTTP 400 'Missing title'.",
+  "nodeBaselineNotes": "Plain-text error body matches Node verbatim.",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": { "title": "   " }
+  },
+  "response": {
+    "status": 400,
+    "headers": { "content-type": "text/plain" },
+    "body": "Missing title"
+  },
+  "semanticDiffIgnores": []
+}

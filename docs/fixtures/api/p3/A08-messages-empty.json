@@ -1,0 +1,19 @@
+{
+  "id": "A08-messages-empty",
+  "xDatastoriaId": "A08",
+  "operationId": "getSessionMessages",
+  "description": "Owner replays messages for a session that has no messages (e.g. freshly created via A04-create-minimal). HTTP 200 with an empty array (NOT 404).",
+  "nodeBaselineNotes": "Node returns [] when the session exists but has no messages. 404 is returned only when the session itself is missing.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e10/messages",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": []
+  },
+  "semanticDiffIgnores": []
+}

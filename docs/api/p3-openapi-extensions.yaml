@@ -1,0 +1,723 @@
+openapi: 3.0.3
+info:
+  title: DataStoria P3 API Extensions
+  version: 0.3.0
+  description: |
+    Frozen contract for inventory items A03–A10 implemented in P3. These endpoints
+    own the chat product data (sessions, messages, feedback, share) on the Java
+    backend, replacing the equivalent Node.js routes under
+    `/Users/jielongping/OpenProjects/datastoria/src/app/api`.
+
+    Each operation carries these extensions:
+      x-datastoria-id            Inventory ID (A03..A10).
+      x-datastoria-status        active | deprecated.
+      x-datastoria-target        Java migration target phase (= P3 here).
+      x-datastoria-auth          Auth model.
+      x-datastoria-node-baseline Notes on Node.js current behaviour that the
+                                 Java implementation must reproduce or
+                                 intentionally diverge from. Anything tagged
+                                 `divergence` is justified in the cited ADR.
+
+    Auth model: in `local`/`test`, the `IdentityWebFilter` reads
+    `x-datastoria-user-email` (mirroring the Next.js proxy behaviour in
+    `src/proxy.ts`); production will switch to OAuth in P10. Session share
+    visitors authenticate with the `X-Session-Share-Code` header.
+
+    This file MUST be kept in lock-step with
+    `docs/fixtures/api/p3/*.json` (wire-format fixtures) and the share
+    permissions ADR `docs/adr/0001-session-share-permissions.md`.
+
+servers:
+  - url: /
+    description: Same-origin. Next.js reverse proxy maps /api to Java.
+
+security:
+  - headerIdentity: []
+
+tags:
+  - name: user-sessions
+    description: Chat session lifecycle (A03–A07)
+  - name: user-messages
+    description: Chat message replay (A08)
+  - name: user-share
+    description: Session share issuance and revocation (A09)
+  - name: user-feedback
+    description: Auto-explain feedback upsert (A10)
+
+paths:
+  # ============================================================ A03 list + A04 create
+  /api/ai/chat/sessions:
+    get:
+      tags: [user-sessions]
+      operationId: listSessions
+      summary: List chat sessions for the authenticated user (A03)
+      x-datastoria-id: A03
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: |
+        Authenticated. `x-datastoria-user-email` resolved by IdentityWebFilter.
+        Anonymous requests return 401 before reaching the handler in production;
+        in `local`/`test` an absent header resolves to the configured default
+        user so the route still receives a non-null identity.
+      x-datastoria-node-baseline: |
+        - Sessions are scoped to the authenticated user_id; share codes are NOT
+          honoured on this endpoint.
+        - limit default 100, valid range 1..500 inclusive; out-of-range yields
+          HTTP 400 `Invalid limit`.
+        - `cursor` is opaque; see CursorEncoding. A malformed cursor is silently
+          ignored (Node returns the first page); Java reproduces this for
+          compatibility but also emits a warn-level log line.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+        - name: connectionId
+          in: query
+          required: false
+          schema: { type: string }
+          description: Optional filter; passed through as a strict equality.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/CursorEncoding'
+          description: |
+            Opaque pagination cursor returned as `nextCursor`. Must be passed
+            back verbatim by clients. See `CursorEncoding` for the wire format.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Paginated session list, newest `updatedAt` first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionPage' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/ProblemDetail' }
+
+    post:
+      tags: [user-sessions]
+      operationId: createSession
+      summary: Create a session with optional initial messages (A04)
+      x-datastoria-id: A04
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Authenticated.
+      x-datastoria-node-baseline: |
+        - Returns HTTP 200 (NOT 201) on both create-new and reuse-existing
+          flows. The response body is identical in both cases.
+        - Idempotent on `(userId, sessionId)`: if `sessionId` is supplied and a
+          session already exists with the same id and matching `connectionId`,
+          no session row is mutated; the existing session is returned and the
+          supplied `messages[]` are upserted by `(sessionId, messageId)`.
+        - If `sessionId` is supplied and an existing session is found with a
+          DIFFERENT `connectionId`, returns HTTP 409 `Session connectionId
+          mismatch`.
+        - `sessionId` defaults to `uuidv7().replace(/-/g, "")` when absent or
+          empty (32-char hex, time-ordered).
+        - `title` defaults to the literal string `Inline error diagnosis`
+          (Node locale-independent constant) when omitted or whitespace-only.
+        - **divergence** (see ADR-0002): Node creates the session row then
+          upserts each message in independent transactions; a mid-loop failure
+          leaves a partial state. Java persists the session and ALL initial
+          messages in a single JDBC transaction and rolls back on any failure.
+          Observable difference: a failed POST leaves no session row on Java.
+        - **divergence** (see ADR-0001): Node allows the caller to seed
+          `messages[]` containing assistant messages that reference tool calls
+          without persisting the corresponding tool results. Java preserves
+          this lenient behaviour (no cross-message integrity check) for
+          compatibility.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSessionRequest' }
+            examples:
+              minimal:
+                value: { connectionId: ch-prod }
+              withMessages:
+                value:
+                  connectionId: ch-prod
+                  sessionId: 019523a0f0a64d6c8a3e2b9c1f0d7e4a
+                  title: Slow query analysis
+                  messages:
+                    - id: 019523a1f0a64d6c8a3e2b9c1f0d7e4b
+                      role: user
+                      parts:
+                        - { type: text, text: Find slow queries }
+      responses:
+        '200':
+          description: Created or reused session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '409': { $ref: '#/components/responses/PlainTextError' }
+        '500': { $ref: '#/components/responses/ProblemDetail' }
+
+  # ============================================================ A05 / A06 / A07
+  /api/ai/chat/sessions/{sessionId}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+      - $ref: '#/components/parameters/SessionShareCode'
+    get:
+      tags: [user-sessions]
+      operationId: getSession
+      summary: Get a session (owner or share visitor) (A05)
+      x-datastoria-id: A05
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Owner or holder of a valid `X-Session-Share-Code`.
+      x-datastoria-node-baseline: |
+        - 404 `Not found` when neither owner nor a valid share code matches.
+        - 403 `Invalid session share code` when the header is present but
+          signature, audience, `sub` claim, or `scope` claim fails verification.
+        - 401 when no authenticated user AND no share header is supplied.
+      responses:
+        '200':
+          description: Session detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+    patch:
+      tags: [user-sessions]
+      operationId: renameSession
+      summary: Rename a session (A06)
+      x-datastoria-id: A06
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: |
+        Owner. Share visitors are denied by default; see ADR-0001.
+      x-datastoria-node-baseline: |
+        - **divergence** (see ADR-0001): Node currently permits a share-code
+          visitor to rename the session because `resolveSessionAccess` returns
+          `access.kind = "share"` and the PATCH handler does not gate on it.
+          The Java target denies share visitors with HTTP 403
+          `SHARE_PERMISSION_DENIED` unless the configuration flag
+          `datastoria.session-share.allow-write=true` is explicitly set.
+          Rationale: no frontend user flow exercises this path (rename is only
+          reachable from the owner-authenticated session-list UI), and bearer
+          share URLs granting destructive mutations is an unacceptable
+          security regression for production.
+        - 400 `Missing title` when `title` is missing, not a string, or empty
+          after trim.
+        - 400 `Invalid JSON in request body` when the body fails to parse.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenameSessionRequest' }
+      responses:
+        '200':
+          description: Renamed session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatSessionDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/ProblemDetail' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+    delete:
+      tags: [user-sessions]
+      operationId: deleteSession
+      summary: Delete a session and its messages (A07)
+      x-datastoria-id: A07
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: |
+        Owner. Share visitors are denied by default; see ADR-0001.
+      x-datastoria-node-baseline: |
+        - 204 with no body on success.
+        - **divergence** (see ADR-0001): same share-visitor rule as PATCH.
+        - Cascades to `ds_chat_message`, `ds_feedback_event`, and
+          `ds_session_share` in a single transaction (soft delete for shares
+          keeps the audit trail; messages are hard-deleted to match Node).
+      responses:
+        '204':
+          description: Deleted. No body.
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/ProblemDetail' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  # ============================================================ A08 messages
+  /api/ai/chat/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+      - $ref: '#/components/parameters/SessionShareCode'
+    get:
+      tags: [user-messages]
+      operationId: getSessionMessages
+      summary: Replay session messages ordered by sequence (A08)
+      x-datastoria-id: A08
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Owner or holder of a valid `X-Session-Share-Code`.
+      x-datastoria-node-baseline: |
+        - 200 returns an array (possibly empty) of `ChatMessageDTO` ordered by
+          `sequence` ASC, stable on `(sequence, id)`.
+        - Unknown message part types MUST round-trip byte-for-byte (Java uses
+          Jackson `JsonNode` to preserve arbitrary fields).
+        - 404 when the session does not exist or the caller has no access.
+      responses:
+        '200':
+          description: Messages in ascending sequence order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChatMessageDTO' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '403': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  # ============================================================ A09 share issue
+  /api/ai/sessions/{sessionId}/share:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+    post:
+      tags: [user-share]
+      operationId: shareSession
+      summary: Issue a session share code (A09)
+      x-datastoria-id: A09
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Owner only. Share codes cannot be re-issued through this endpoint.
+      x-datastoria-node-baseline: |
+        - Body is ignored (empty body expected). Authenticated user lookup
+          controls ownership; a missing session returns 404 `Not found`.
+        - Response body shape preserved verbatim:
+            `{ url, code, expiresAt }`
+          where `url` is path-relative (`/session/<id>?code=<jwt>`),
+          `code` is the JWT, and `expiresAt` defaults to
+          `2100-01-01T00:00:00.000Z` (Node hard-coded constant).
+        - **divergence** (see ADR-0001): Node signs a stateless HS256 JWT and
+          does NOT persist any share state, making revocation impossible. Java
+          still returns a JWT-compatible `code` for compatibility, but ALSO
+          persists a row in `ds_session_share` keyed by `token_hash`. Token
+          verification additionally requires a non-revoked, non-expired row to
+          exist. This enables revocation via `DELETE /api/ai/sessions/{id}/share`.
+        - JWT claims (preserved from Node): `alg=HS256`, `typ=JWT`,
+          `iss=<owner_user_id>`, `sub=<sessionId>`,
+          `aud=https://datastoria.app/session/share`, `iat=nbf=now`,
+          `exp=expiresAt`, `scope=chat_session:full`.
+        - Signing secret: `datastoria.session-share.secret` falling back to
+          `datastoria.master-key` when the dedicated secret is unset. The
+          prod profile fails fast when neither is configured.
+      responses:
+        '200':
+          description: Share link details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShareResponse' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/PlainTextError' }
+
+  # ============================================================ A09b share revoke (Java extension)
+  /api/ai/sessions/{sessionId}/share:revoke:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/UserEmail'
+    post:
+      tags: [user-share]
+      operationId: revokeSessionShare
+      summary: Revoke the active session share (A09 extension)
+      x-datastoria-id: A09b
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: Owner only.
+      x-datastoria-node-baseline: |
+        New endpoint introduced by the Java backend to support the revocation
+        requirement of ADR-0001. Node has no equivalent; the frontend will
+        adopt it progressively (no breaking change — share buttons continue to
+        work without it). Sets `revoked_at = now` on the active row. Returns
+        404 `SHARE_NOT_FOUND` when no active share exists for the session.
+      responses:
+        '204':
+          description: Share revoked. No body.
+        '401': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/ProblemDetail' }
+
+  # ============================================================ A10 feedback
+  /api/ai/chat/feedback/auto-explain:
+    post:
+      tags: [user-feedback]
+      operationId: recordAutoExplainFeedback
+      summary: Idempotent feedback upsert (A10)
+      x-datastoria-id: A10
+      x-datastoria-status: active
+      x-datastoria-target: P3
+      x-datastoria-auth: |
+        Optional. Anonymous callers receive HTTP 202 `{recorded:false}`.
+      x-datastoria-node-baseline: |
+        - Natural upsert key: `(tenant_id, user_id, source, session_id,
+          message_id)`. Re-submitting the same key overwrites every field.
+        - When `solved=true`, `reasonCode` and `freeText` are normalised to
+          `null` regardless of input. When `solved=false`, `reasonCode` is
+          required (Zod `superRefine`).
+        - **divergence** (see ADR-0003): Node returns HTTP 500
+          `Failed to record feedback` when the referenced `messageId` does not
+          exist (treated as a generic repository failure). Java returns HTTP
+          404 `FEEDBACK_TARGET_NOT_FOUND` for this case to make the error
+          actionable. The `recorded:true` happy path body shape is preserved
+          verbatim.
+        - 202 `{recorded:false}` is returned when: (a) anonymous in a
+          permissive auth profile, or (b) no remote repository is configured.
+          In Java the latter condition is `prod` profile without a master key
+          or DB; in those cases feedback is dropped.
+      parameters:
+        - $ref: '#/components/parameters/UserEmail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackUpsertRequest' }
+      responses:
+        '200':
+          description: Recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackRecordedResponse' }
+        '202':
+          description: Accepted but not stored (anonymous or no remote store).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackAcceptedResponse' }
+        '400': { $ref: '#/components/responses/PlainTextError' }
+        '404': { $ref: '#/components/responses/ProblemDetail' }
+        '500': { $ref: '#/components/responses/ProblemDetail' }
+
+components:
+  parameters:
+    UserEmail:
+      name: x-datastoria-user-email
+      in: header
+      required: false
+      description: |
+        Resolved by the `IdentityWebFilter` after authentication. In
+        `local`/`test` an absent header resolves to the configured default
+        user. In `prod` (post-P10) the header is ignored and identity comes
+        from the authenticated session.
+      schema: { type: string, format: email }
+    SessionShareCode:
+      name: X-Session-Share-Code
+      in: header
+      required: false
+      description: |
+        JWT share code (`HS256`, `aud=https://datastoria.app/session/share`).
+        Verified by the SessionShareService; an invalid or revoked token
+        yields HTTP 403 `SHARE_TOKEN_INVALID` (see ADR-0001).
+      schema: { type: string }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+      description: |
+        Opaque session identifier. Validation matches Node: length 1..64 after
+        trim; no character-set restriction. Java additionally normalises by
+        trimming leading/trailing whitespace before lookup.
+
+  responses:
+    PlainTextError:
+      description: |
+        Plain-text error body, preserving Node compatibility. Content-Type is
+        `text/plain; charset=utf-8`. The Java `GlobalExceptionHandler` only
+        emits plain text on endpoints flagged `x-datastoria-compat =
+        text-plain-errors`; all other endpoints emit RFC 9457 ProblemDetail.
+      content:
+        text/plain:
+          schema: { type: string }
+          examples:
+            invalidLimit: { value: Invalid limit }
+            missingTitle: { value: Missing title }
+            invalidSessionId: { value: Invalid sessionId }
+            invalidConnectionId: { value: Invalid connectionId }
+            invalidMessages: { value: Invalid messages }
+            invalidJson: { value: Invalid JSON in request body }
+            authRequired: { value: Authentication required }
+            invalidShareCode: { value: Invalid session share code }
+            notFound: { value: Not found }
+            sessionMismatch: { value: Session connectionId mismatch }
+            feedbackFormat: { value: Invalid request format }
+    ProblemDetail:
+      description: RFC 9457 Problem Detail used for Java-introduced error codes.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  securitySchemes:
+    headerIdentity:
+      type: apiKey
+      in: header
+      name: x-datastoria-user-email
+      description: Dev/test identity header. Replaced by OAuth in P10.
+
+  schemas:
+    ProblemDetail:
+      type: object
+      required: [type, title, status, code, requestId]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        code:
+          type: string
+          enum:
+            - NOT_FOUND
+            - SHARE_PERMISSION_DENIED
+            - SHARE_TOKEN_INVALID
+            - SHARE_NOT_FOUND
+            - FEEDBACK_TARGET_NOT_FOUND
+            - INVALID_REQUEST
+            - INTERNAL_ERROR
+        detail: { type: string }
+        requestId: { type: string, format: uuid }
+
+    ChatSessionDTO:
+      type: object
+      required: [chatId, databaseId, title, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        chatId:
+          type: string
+          description: Session id (== row id of `ds_chat_session`).
+        databaseId:
+          type: string
+          description: Connection id.
+        title:
+          type: string
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SessionPage:
+      type: object
+      required: [sessions, nextCursor]
+      additionalProperties: false
+      properties:
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/ChatSessionDTO' }
+        nextCursor:
+          type: string
+          nullable: true
+          description: |
+            Opaque cursor to pass back as `?cursor=`. `null` indicates the end
+            of the result set. See `CursorEncoding`.
+
+    CursorEncoding:
+      type: string
+      description: |
+        Cursor wire format, frozen for parity with Node:
+            `YYYY-MM-DD HH:MM:SS.mmm|<session_id>`
+        - Timestamp is UTC, zero-padded, 3-digit milliseconds.
+        - Encodes the `(updated_at, session_id)` of the last row returned.
+        - Ordering: `updated_at DESC, session_id DESC` (keyset pagination).
+        - Clients MUST URL-encode the value before placing it in the query
+          string; the raw value contains a space and a pipe.
+        - A cursor whose format is unparseable is silently ignored (page 1 is
+          returned) and a warn-level log line is emitted on the Java side.
+
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        connectionId:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Required non-empty after trim.
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Optional client-supplied id; validated by length only.
+        title:
+          type: string
+          nullable: true
+          description: Optional. Defaults to `Inline error diagnosis`.
+        messages:
+          type: array
+          description: |
+            Optional initial messages. Each entry must have `id` (1..64 chars),
+            `role ∈ {user, assistant}`, and `parts` as an array. Unknown fields
+            on a message or part are preserved verbatim.
+          items: { $ref: '#/components/schemas/AppUIMessage' }
+
+    AppUIMessage:
+      type: object
+      required: [id, role, parts]
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        role:
+          type: string
+          enum: [user, assistant]
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/MessagePart' }
+
+    MessagePart:
+      type: object
+      additionalProperties: true
+      description: |
+        Open polymorphic message part. Known types:
+          - `text`    -> `{ type: 'text', text: string }`
+          - `file`    -> `{ type: 'file', mediaType: string, url: string, filename?: string }`
+          - `tool-call`   -> `{ type: 'tool-call', toolCallId, toolName, input }`
+          - `tool-result` -> `{ type: 'tool-result', toolCallId, toolName, output }`
+        Unknown `type` values MUST be preserved verbatim (Java uses Jackson
+        `JsonNode`). The persistence sanitizer rewrites image file parts to a
+        text placeholder exactly like Node (`serialization.ts:13-62`).
+      properties:
+        type: { type: string }
+
+    RenameSessionRequest:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Non-empty after trim.
+
+    ChatMessageDTO:
+      type: object
+      required: [id, role, parts, sequence, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        role:
+          type: string
+          enum: [user, assistant, system, data, tool]
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/MessagePart' }
+        metadata:
+          type: object
+          nullable: true
+          description: |
+            `null` when no metadata was persisted. Otherwise an open object
+            (e.g. `{ usage: {...}, title: '...' }`).
+        sequence:
+          type: integer
+          minimum: 1
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ShareResponse:
+      type: object
+      required: [url, code, expiresAt]
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          description: |
+            Path-relative URL. The frontend resolves it against the current
+            origin. Example: `/session/<id>?code=<jwt>`.
+        code:
+          type: string
+          description: HS256 JWT; the audience claim matches the constant
+            `https://datastoria.app/session/share`.
+        expiresAt:
+          type: string
+          format: date-time
+          description: |
+            Defaults to `2100-01-01T00:00:00.000Z` for compatibility with
+            existing clients. Operators may shorten this via
+            `datastoria.session-share.default-ttl-seconds`.
+
+    FeedbackUpsertRequest:
+      type: object
+      required: [source, sessionId, messageId, solved, payload]
+      additionalProperties: false
+      properties:
+        source:
+          type: string
+          enum: [auto_explain_error]
+        sessionId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        messageId:
+          type: string
+          minLength: 1
+          maxLength: 255
+        solved: { type: boolean }
+        reasonCode:
+          type: string
+          nullable: true
+          enum: [wrong_diagnosis, too_vague, unsafe_fix, missing_context, other]
+          description: Required when `solved=false`.
+        freeText:
+          type: string
+          nullable: true
+          maxLength: 2000
+        payload:
+          type: object
+          required: [queryId]
+          additionalProperties: false
+          properties:
+            queryId:
+              type: string
+              minLength: 1
+              maxLength: 255
+            errorCode:
+              type: string
+              nullable: true
+              maxLength: 64
+            sql:
+              type: string
+              nullable: true
+              maxLength: 100000
+        recoveryActionTaken:
+          type: boolean
+          default: false
+
+    FeedbackRecordedResponse:
+      type: object
+      required: [recorded, updatedAt, solved]
+      additionalProperties: false
+      properties:
+        recorded:
+          type: boolean
+          enum: [true]
+        updatedAt: { type: string, format: date-time }
+        solved: { type: boolean }
+
+    FeedbackAcceptedResponse:
+      type: object
+      required: [recorded]
+      additionalProperties: false
+      properties:
+        recorded:
+          type: boolean
+          enum: [false]

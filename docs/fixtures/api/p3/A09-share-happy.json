@@ -1,0 +1,26 @@
+{
+  "id": "A09-share-happy",
+  "xDatastoriaId": "A09",
+  "operationId": "shareSession",
+  "description": "Owner issues a share code; HTTP 200 with {url, code, expiresAt}. URL is path-relative; code is the JWT; expiresAt is the far-future default 2100-01-01T00:00:00.000Z.",
+  "nodeBaselineNotes": "Node hard-codes expiresAt to year 2100. Java preserves the default for compatibility and additionally persists a row in ds_session_share (ADR-0001).",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20/share",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "url": "/session/019523a0f0a64d6c8a3e2b9c1f0d7e20?code=synthetic-share-code",
+      "code": "synthetic-share-code",
+      "expiresAt": "2100-01-01T00:00:00.000Z"
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.url",
+    "$.response.body.code"
+  ]
+}

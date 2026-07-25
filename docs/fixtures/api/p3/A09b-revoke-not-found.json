@@ -1,0 +1,28 @@
+{
+  "id": "A09b-revoke-not-found",
+  "xDatastoriaId": "A09b",
+  "operationId": "revokeSessionShare",
+  "description": "Owner attempts to revoke a share when no active share row exists for the session; HTTP 404 SHARE_NOT_FOUND.",
+  "nodeBaselineNotes": "Java-only endpoint; see ADR-0001.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e30/share:revoke",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": { "content-type": "application/problem+json" },
+    "body": {
+      "type": "https://datastoria.io/problems/share-not-found",
+      "title": "No active share for this session",
+      "status": 404,
+      "code": "SHARE_NOT_FOUND",
+      "detail": "The session has no active share to revoke.",
+      "requestId": "00000000-0000-4000-8000-000000000000"
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.requestId"
+  ]
+}

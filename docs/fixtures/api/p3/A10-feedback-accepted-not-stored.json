@@ -1,0 +1,26 @@
+{
+  "id": "A10-feedback-accepted-not-stored",
+  "xDatastoriaId": "A10",
+  "operationId": "recordAutoExplainFeedback",
+  "description": "Anonymous caller (no x-datastoria-user-email and permissive auth profile) or a deployment with no remote repository configured. HTTP 202 with {recorded:false}; feedback is silently discarded.",
+  "nodeBaselineNotes": "Front-end code does NOT special-case recorded:false; the response is treated as success. Java preserves the 202 shape.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/feedback/auto-explain",
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "source": "auto_explain_error",
+      "sessionId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "messageId": "msg_019523a101",
+      "solved": false,
+      "reasonCode": "too_vague",
+      "payload": { "queryId": "q_43" }
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": { "content-type": "application/json" },
+    "body": { "recorded": false }
+  },
+  "semanticDiffIgnores": []
+}

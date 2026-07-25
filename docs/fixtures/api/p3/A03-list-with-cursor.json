@@ -1,0 +1,32 @@
+{
+  "id": "A03-list-with-cursor",
+  "xDatastoriaId": "A03",
+  "operationId": "listSessions",
+  "description": "Pagination: caller passes an opaque cursor previously returned as nextCursor. The cursor value is opaque to the client; the server MUST accept it verbatim.",
+  "nodeBaselineNotes": "Cursor wire format is 'YYYY-MM-DD HH:MM:SS.mmm|<session_id>' (UTC, 3-digit ms). Clients must URL-encode the value when placing it in the query string.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions?limit=1&cursor=2026-07-24%2010%3A05%3A00.000%7C019523a0f0a64d6c8a3e2b9c1f0d7e01",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "sessions": [
+        {
+          "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e02",
+          "databaseId": "ch-test",
+          "title": "Schema exploration",
+          "createdAt": "2026-07-24T11:00:00.000Z",
+          "updatedAt": "2026-07-24T11:02:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.request.path"
+  ]
+}

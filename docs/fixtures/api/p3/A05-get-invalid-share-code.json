@@ -1,0 +1,22 @@
+{
+  "id": "A05-get-invalid-share-code",
+  "xDatastoriaId": "A05",
+  "operationId": "getSession",
+  "description": "Visitor supplies a malformed/expired/revoked X-Session-Share-Code. HTTP 403 'Invalid session share code'.",
+  "nodeBaselineNotes": "Node collapses all share-code verification failures to 403 'Invalid session share code' with a plain-text body. Java preserves the status and body text; the ProblemDetail code SHARE_TOKEN_INVALID is for the Java-introduced revoke path.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "visitor@example.com",
+      "X-Session-Share-Code": "not-a-real-jwt"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": { "content-type": "text/plain" },
+    "body": "Invalid session share code"
+  },
+  "semanticDiffIgnores": []
+}

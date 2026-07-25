@@ -1,0 +1,19 @@
+{
+  "id": "A03-list-unauthenticated",
+  "xDatastoriaId": "A03",
+  "operationId": "listSessions",
+  "description": "Production auth profile: a request with no authenticated identity is rejected with HTTP 401 'Authentication required'. In local/test the default user is substituted instead, so this fixture documents the prod-only behaviour.",
+  "nodeBaselineNotes": "When ALLOW_ANONYMOUS_USER=false the proxy rejects unauthenticated requests before they reach the handler. In test/local the dev identity filter always substitutes a default user.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": { "content-type": "text/plain" },
+    "body": "Authentication required"
+  },
+  "semanticDiffIgnores": []
+}

@@ -1,0 +1,19 @@
+{
+  "id": "A09-share-not-found",
+  "xDatastoriaId": "A09",
+  "operationId": "shareSession",
+  "description": "Authenticated user requests a share for a session they do not own; HTTP 404 'Not found' (NOT 403, to avoid leaking existence).",
+  "nodeBaselineNotes": "Same 404-not-403 logic as A05.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/sessions/019523a0f0a64d6c8a3e2b9c1f0d7ede/share",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": { "content-type": "text/plain" },
+    "body": "Not found"
+  },
+  "semanticDiffIgnores": []
+}

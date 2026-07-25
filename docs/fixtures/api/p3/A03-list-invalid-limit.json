@@ -1,0 +1,19 @@
+{
+  "id": "A03-list-invalid-limit",
+  "xDatastoriaId": "A03",
+  "operationId": "listSessions",
+  "description": "limit outside the 1..500 range returns HTTP 400 with a plain-text body 'Invalid limit'.",
+  "nodeBaselineNotes": "Plain-text error body; matches Node verbatim.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions?limit=0",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": { "content-type": "text/plain" },
+    "body": "Invalid limit"
+  },
+  "semanticDiffIgnores": []
+}

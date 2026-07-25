@@ -1,0 +1,19 @@
+{
+  "id": "A07-delete-happy",
+  "xDatastoriaId": "A07",
+  "operationId": "deleteSession",
+  "description": "Owner deletes a session; HTTP 204 with no body. Cascade deletes the session's messages, feedback events, and revokes the active share row.",
+  "nodeBaselineNotes": "Node cascades to messages and feedback only (no share table). Java additionally marks the active share row revoked_at=now for audit; future share-code verifications on this session will fail with SHARE_TOKEN_INVALID.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  },
+  "semanticDiffIgnores": []
+}

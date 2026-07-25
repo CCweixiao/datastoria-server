@@ -1,0 +1,19 @@
+{
+  "id": "A09b-revoke-happy",
+  "xDatastoriaId": "A09b",
+  "operationId": "revokeSessionShare",
+  "description": "Owner revokes the active share for a session; HTTP 204 with no body. Subsequent A05/A08 calls with the old X-Session-Share-Code fail with 403 SHARE_TOKEN_INVALID.",
+  "nodeBaselineNotes": "New endpoint introduced by the Java backend per ADR-0001; Node has no equivalent. Frontend adoption is progressive and not required for P3 sign-off.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20/share:revoke",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  },
+  "semanticDiffIgnores": []
+}

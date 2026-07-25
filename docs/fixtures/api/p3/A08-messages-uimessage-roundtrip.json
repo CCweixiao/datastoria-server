@@ -1,0 +1,62 @@
+{
+  "id": "A08-messages-uimessage-roundtrip",
+  "xDatastoriaId": "A08",
+  "operationId": "getSessionMessages",
+  "description": "Round-trip of every known UIMessage part type that persists unchanged: text, non-image file (CSV attachment), tool-call, tool-result. Verifies that Java preserves the exact JSON shape (no field reordering, no coercion, no lossy type conversion).",
+  "nodeBaselineNotes": "Image file parts are rewritten by the persistence sanitizer (Node serialization.ts:13-62) to the text placeholder '[Image attachment omitted from saved history]'; image round-trip is therefore NOT tested here. Non-image file parts (CSV, JSON, etc.) DO round-trip and are covered by the second part below. Empty reasoning/step-start parts are also stripped by the sanitizer; not tested here either.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e30/messages",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": [
+      {
+        "id": "msg_019523a300",
+        "role": "user",
+        "parts": [
+          { "type": "text", "text": "Look at this CSV" },
+          {
+            "type": "file",
+            "mediaType": "text/csv",
+            "url": "data:text/csv;base64,YWJjCjEyMwo=",
+            "filename": "rows.csv"
+          },
+          {
+            "type": "tool-call",
+            "toolCallId": "call_roundtrip_1",
+            "toolName": "render_chart",
+            "input": { "kind": "bar", "data": [{ "label": "a", "value": 1 }] }
+          },
+          {
+            "type": "tool-result",
+            "toolCallId": "call_roundtrip_1",
+            "toolName": "render_chart",
+            "output": { "ok": true }
+          }
+        ],
+        "metadata": {
+          "usage": { "promptTokens": 100, "completionTokens": 0, "totalTokens": 100 }
+        },
+        "sequence": 1,
+        "createdAt": "2026-07-25T09:00:00.000Z",
+        "updatedAt": "2026-07-25T09:00:00.000Z"
+      },
+      {
+        "id": "msg_019523a301",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "text": "Here is the analysis of rows.csv." }
+        ],
+        "metadata": null,
+        "sequence": 2,
+        "createdAt": "2026-07-25T09:00:30.000Z",
+        "updatedAt": "2026-07-25T09:00:30.000Z"
+      }
+    ]
+  },
+  "semanticDiffIgnores": []
+}

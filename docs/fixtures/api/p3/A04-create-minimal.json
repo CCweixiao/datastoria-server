@@ -1,0 +1,32 @@
+{
+  "id": "A04-create-minimal",
+  "xDatastoriaId": "A04",
+  "operationId": "createSession",
+  "description": "POST with only connectionId; sessionId is server-generated; title defaults to the literal 'Inline error diagnosis'. Returns HTTP 200 (not 201).",
+  "nodeBaselineNotes": "Default title is the literal 'Inline error diagnosis' regardless of locale. Java reproduces this exactly for compatibility.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/sessions",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": { "connectionId": "ch-test" }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "session": {
+        "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e10",
+        "databaseId": "ch-test",
+        "title": "Inline error diagnosis",
+        "createdAt": "2026-07-25T09:00:00.000Z",
+        "updatedAt": "2026-07-25T09:00:00.000Z"
+      }
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.session.chatId"
+  ]
+}

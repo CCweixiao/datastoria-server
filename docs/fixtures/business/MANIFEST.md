@@ -26,6 +26,18 @@
 | `skill-catalog.json` | 9 个内置 Skill catalog 元数据 | 9 skills | `fc29b19acefecb417155937b99c7b9c383455479f313fb5ac84cc90709c0a37c` |
 | `clickhouse/schema.sql` | 脱敏 ClickHouse 测试 schema + 数据 | — | `37f7c293745131077a6d891f3e681029754c3e85ea553793f24487ef22cb8fcd` |
 
+## 与 wire-format fixture 的关系
+
+本目录冻结的是 **逻辑层**（方言无关）记录，由 P3 子阶段 4 的 JSONL 导入/对账
+流程消费。HTTP wire-format 的请求/响应契约由 `docs/fixtures/api/p3/` 冻结，二者
+互补：
+
+- 本目录回答 "Java/Node 数据库最终存的内容是否一致"。
+- `docs/fixtures/api/p3/` 回答 "Java/Node 对同一 HTTP 请求返回的响应是否一致"。
+
+修改任一目录时，必须同步审视另一目录，并按 `docs/api/p3-openapi-extensions.yaml`
+的 OpenAPI 定义保持契约一致。
+
 ## 业务覆盖
 
 ### 会话/消息

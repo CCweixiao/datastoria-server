@@ -1,0 +1,55 @@
+{
+  "id": "A08-messages-happy",
+  "xDatastoriaId": "A08",
+  "operationId": "getSessionMessages",
+  "description": "Owner replays messages for their session. HTTP 200 with an array of ChatMessageDTO ordered by sequence ASC. Includes text, tool-call and tool-result parts.",
+  "nodeBaselineNotes": "Strict sequence ASC ordering; stable on (sequence, id). tool-call and tool-result are correlated via toolCallId.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20/messages",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": [
+      {
+        "id": "msg_019523a100",
+        "role": "user",
+        "parts": [{ "type": "text", "text": "Find slow queries" }],
+        "metadata": null,
+        "sequence": 1,
+        "createdAt": "2026-07-25T09:00:10.000Z",
+        "updatedAt": "2026-07-25T09:00:10.000Z"
+      },
+      {
+        "id": "msg_019523a101",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "text": "I will search the query log." },
+          {
+            "type": "tool-call",
+            "toolCallId": "call_019523a1",
+            "toolName": "search_query_log",
+            "input": { "limit": 10 }
+          },
+          {
+            "type": "tool-result",
+            "toolCallId": "call_019523a1",
+            "toolName": "search_query_log",
+            "output": { "rows": 3 }
+          }
+        ],
+        "metadata": {
+          "usage": { "promptTokens": 40, "completionTokens": 12, "totalTokens": 52 },
+          "title": "Slow query analysis"
+        },
+        "sequence": 2,
+        "createdAt": "2026-07-25T09:00:20.000Z",
+        "updatedAt": "2026-07-25T09:00:25.000Z"
+      }
+    ]
+  },
+  "semanticDiffIgnores": []
+}

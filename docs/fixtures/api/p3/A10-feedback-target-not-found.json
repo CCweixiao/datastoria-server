@@ -1,0 +1,37 @@
+{
+  "id": "A10-feedback-target-not-found",
+  "xDatastoriaId": "A10",
+  "operationId": "recordAutoExplainFeedback",
+  "description": "Authenticated caller with a configured repository references a messageId that does not exist. Java target returns HTTP 404 FEEDBACK_TARGET_NOT_FOUND (deliberate divergence from Node, which returns HTTP 500 'Failed to record feedback').",
+  "nodeBaselineNotes": "Divergence authorised by ADR-0003.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/feedback/auto-explain",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": {
+      "source": "auto_explain_error",
+      "sessionId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "messageId": "msg_does_not_exist",
+      "solved": true,
+      "payload": { "queryId": "q_44" }
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": { "content-type": "application/problem+json" },
+    "body": {
+      "type": "https://datastoria.io/problems/feedback-target-not-found",
+      "title": "Referenced message does not exist",
+      "status": 404,
+      "code": "FEEDBACK_TARGET_NOT_FOUND",
+      "detail": "Feedback references a message that is not present in this session.",
+      "requestId": "00000000-0000-4000-8000-000000000000"
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.requestId"
+  ]
+}

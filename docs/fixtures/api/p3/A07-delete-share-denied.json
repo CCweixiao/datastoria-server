@@ -1,0 +1,31 @@
+{
+  "id": "A07-delete-share-denied",
+  "xDatastoriaId": "A07",
+  "operationId": "deleteSession",
+  "description": "Share visitor attempts to delete the session. Java target returns HTTP 403 SHARE_PERMISSION_DENIED. Same divergence as A06.",
+  "nodeBaselineNotes": "Divergence authorised by ADR-0001.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": {
+      "x-datastoria-user-email": "visitor@example.com",
+      "X-Session-Share-Code": "synthetic-share-code"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": { "content-type": "application/problem+json" },
+    "body": {
+      "type": "https://datastoria.io/problems/share-permission-denied",
+      "title": "Share visitor may not mutate this session",
+      "status": 403,
+      "code": "SHARE_PERMISSION_DENIED",
+      "detail": "Share codes are read-only by default; see ADR-0001.",
+      "requestId": "00000000-0000-4000-8000-000000000000"
+    }
+  },
+  "semanticDiffIgnores": [
+    "$.response.body.requestId"
+  ]
+}

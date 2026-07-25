@@ -1,0 +1,37 @@
+{
+  "id": "A10-feedback-recorded",
+  "xDatastoriaId": "A10",
+  "operationId": "recordAutoExplainFeedback",
+  "description": "Authenticated user with a configured remote repository submits feedback for an existing message. HTTP 200 with {recorded:true, updatedAt, solved}. solved=true normalises reasonCode and freeText to null.",
+  "nodeBaselineNotes": "Upsert key is (tenant_id, user_id, source, session_id, message_id); resubmit overwrites every field. Java preserves the upsert semantics.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/feedback/auto-explain",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": {
+      "source": "auto_explain_error",
+      "sessionId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "messageId": "msg_019523a101",
+      "solved": true,
+      "payload": {
+        "queryId": "q_42",
+        "errorCode": "119",
+        "sql": "SELECT count() FROM events"
+      },
+      "recoveryActionTaken": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "recorded": true,
+      "updatedAt": "2026-07-25T09:05:00.000Z",
+      "solved": true
+    }
+  },
+  "semanticDiffIgnores": []
+}

@@ -1,0 +1,41 @@
+{
+  "id": "A04-create-idempotent-reuse",
+  "xDatastoriaId": "A04",
+  "operationId": "createSession",
+  "description": "POST with a sessionId that already exists for the caller AND the connectionId matches. No session mutation; response is HTTP 200 with the existing session row. The supplied messages are upserted.",
+  "nodeBaselineNotes": "Idempotent on (userId, sessionId) when connectionId matches. Java preserves this behaviour; see ADR-0002 for atomicity of the message upsert.",
+  "request": {
+    "method": "POST",
+    "path": "/api/ai/chat/sessions",
+    "headers": {
+      "x-datastoria-user-email": "dev@example.com",
+      "content-type": "application/json"
+    },
+    "body": {
+      "connectionId": "ch-test",
+      "sessionId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "title": "Slow query analysis",
+      "messages": [
+        {
+          "id": "msg_019523a100",
+          "role": "user",
+          "parts": [{ "type": "text", "text": "Find slow queries" }]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "session": {
+        "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+        "databaseId": "ch-test",
+        "title": "Slow query analysis",
+        "createdAt": "2026-07-25T09:00:00.000Z",
+        "updatedAt": "2026-07-25T09:00:00.000Z"
+      }
+    }
+  },
+  "semanticDiffIgnores": []
+}

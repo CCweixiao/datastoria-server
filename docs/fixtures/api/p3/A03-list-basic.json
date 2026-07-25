@@ -1,0 +1,37 @@
+{
+  "id": "A03-list-basic",
+  "xDatastoriaId": "A03",
+  "operationId": "listSessions",
+  "description": "Authenticated owner lists sessions for their own user_id; default limit=100; no nextCursor when fewer than limit rows are returned.",
+  "nodeBaselineNotes": "Sessions are scoped to the authenticated user_id; no share-code support on this endpoint.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "sessions": [
+        {
+          "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e01",
+          "databaseId": "ch-test",
+          "title": "Slow query analysis",
+          "createdAt": "2026-07-24T10:00:00.000Z",
+          "updatedAt": "2026-07-24T10:05:00.000Z"
+        },
+        {
+          "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e02",
+          "databaseId": "ch-test",
+          "title": "Schema exploration",
+          "createdAt": "2026-07-24T11:00:00.000Z",
+          "updatedAt": "2026-07-24T11:02:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    }
+  },
+  "semanticDiffIgnores": []
+}

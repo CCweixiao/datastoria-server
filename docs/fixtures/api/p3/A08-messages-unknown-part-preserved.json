@@ -1,0 +1,46 @@
+{
+  "id": "A08-messages-unknown-part-preserved",
+  "xDatastoriaId": "A08",
+  "operationId": "getSessionMessages",
+  "description": "Lossless preservation of an unknown message part type. The fixture uses a synthetic 'datastoria-dyn-renderer' type with arbitrary nested fields; Java MUST return byte-for-byte identical JSON for this part (no field dropping, no alphabetisation, no type coercion). This protects forward compatibility with future AI SDK releases.",
+  "nodeBaselineNotes": "Java uses Jackson JsonNode for parts; serialisation preserves insertion order and field types exactly. The persistence layer must not apply any DTO mapping that loses unknown fields.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e40/messages",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": [
+      {
+        "id": "msg_019523a400",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "text": "Before custom part" },
+          {
+            "type": "datastoria-dyn-renderer",
+            "renderer": "query-plan-graph",
+            "version": 3,
+            "data": {
+              "nodes": [
+                { "id": "n1", "label": "Filter", "estimateRows": 1000 },
+                { "id": "n2", "label": "Agg", "estimateRows": 10 }
+              ],
+              "edges": [{ "from": "n1", "to": "n2" }],
+              "meta": { "producedBy": "custom-tool", "confidence": 0.92 }
+            },
+            "ui": { "collapsible": true, "defaultExpanded": false }
+          },
+          { "type": "text", "text": "After custom part" }
+        ],
+        "metadata": null,
+        "sequence": 1,
+        "createdAt": "2026-07-25T09:00:00.000Z",
+        "updatedAt": "2026-07-25T09:00:00.000Z"
+      }
+    ]
+  },
+  "semanticDiffIgnores": []
+}

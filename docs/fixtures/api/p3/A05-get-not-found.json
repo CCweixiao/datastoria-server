@@ -1,0 +1,19 @@
+{
+  "id": "A05-get-not-found",
+  "xDatastoriaId": "A05",
+  "operationId": "getSession",
+  "description": "Owner requests a session id that does not exist (or belongs to another user without a share code). HTTP 404 'Not found'.",
+  "nodeBaselineNotes": "Node returns 404 (not 403) for cross-user access to avoid leaking existence. Java reproduces this.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7ede",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": { "content-type": "text/plain" },
+    "body": "Not found"
+  },
+  "semanticDiffIgnores": []
+}

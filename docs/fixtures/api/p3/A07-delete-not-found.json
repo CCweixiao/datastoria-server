@@ -1,0 +1,19 @@
+{
+  "id": "A07-delete-not-found",
+  "xDatastoriaId": "A07",
+  "operationId": "deleteSession",
+  "description": "Owner deletes a non-existent session id; HTTP 404 'Not found'.",
+  "nodeBaselineNotes": "Note: the client-side RemoteSessionRepository.deleteSession treats 404 as success for resilience. Java reproduces the 404 server response.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7ede",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": { "content-type": "text/plain" },
+    "body": "Not found"
+  },
+  "semanticDiffIgnores": []
+}

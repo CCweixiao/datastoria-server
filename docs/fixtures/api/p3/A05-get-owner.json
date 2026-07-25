@@ -1,0 +1,25 @@
+{
+  "id": "A05-get-owner",
+  "xDatastoriaId": "A05",
+  "operationId": "getSession",
+  "description": "Owner retrieves their own session. HTTP 200 with the ChatSessionDTO body.",
+  "nodeBaselineNotes": "Owner = authenticated user_id matches the session row's user_id.",
+  "request": {
+    "method": "GET",
+    "path": "/api/ai/chat/sessions/019523a0f0a64d6c8a3e2b9c1f0d7e20",
+    "headers": { "x-datastoria-user-email": "dev@example.com" },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": {
+      "chatId": "019523a0f0a64d6c8a3e2b9c1f0d7e20",
+      "databaseId": "ch-test",
+      "title": "Slow query analysis",
+      "createdAt": "2026-07-25T09:00:00.000Z",
+      "updatedAt": "2026-07-25T09:00:00.000Z"
+    }
+  },
+  "semanticDiffIgnores": []
+}
