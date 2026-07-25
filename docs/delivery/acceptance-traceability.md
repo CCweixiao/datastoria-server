@@ -9,23 +9,23 @@
 
 | ID | 最终需求 | 阶段 | 必需证据 | 当前 |
 |---|---|---|---|---|
-| R01 | 独立 Spring Boot/JDK17 后端 | P0 | build/test/health、部署 artifact | 基础骨架已验证 |
-| R02 | 模型 provider/catalog 配置落数据库 | P2 | SQLite/MySQL Flyway、共用 repository contract、重启持久化 | 未实现 |
+| R01 | 独立 Spring Boot/JDK17 后端 | P0 | build/test/health、部署 artifact | PASS：Java 17 build/test/health |
+| R02 | 模型 provider/catalog 配置落数据库 | P2 | SQLite/MySQL Flyway、共用 repository contract、重启持久化 | PASS：V2 + repository/API restart tests |
 | R03 | API key/OAuth token 服务端加密 | P2/P10 | `SecretCryptoTest`、`OAuthCompatibilityApiTest`、密文/响应扫描、refresh 轮换 | 已实现 |
-| R04 | 后端模型管理接口供前端使用 | P2 | OpenAPI、RBAC、前端 Playwright | 未实现 |
-| R05 | Agent 与系统配置落数据库 | P2/P4 | 双方言 definition/revision/config 表、effective config test | 未实现 |
-| R06 | 后端 Agent 配置接口供前端使用 | P2 | 管理/用户 API、revision conflict、前端验证 | 未实现 |
-| R07 | AgentScope Java HarnessAgent 是唯一 runtime | P4-P11 | dependency/runtime code、E2E、Node code 删除 | 未实现 |
-| R08 | Skill 资源落表并由后端按需加载 | P5/P9 | 9 个 seed checksum、SQLite/MySQL load trace、路径测试 | 未实现 |
-| R09 | 工具注册和调用全部在 Harness/Toolkit 后端 | P6-P8 | tool inventory 100%、浏览器 executor 删除、E2E | 未实现 |
-| R10 | HITL/暂停恢复由后端协调 | P8 | ask/approve/deny、重启恢复、幂等/隔离测试 | 未实现 |
-| R11 | chat 数据结构与现有前端兼容 | P1/P3/P4 | UIMessage round-trip、字节/语义 stream fixtures、E2E | 未实现 |
-| R12 | 原 Node REST API 全部迁移 | P1-P11 | A01-A29 每行 PASS、旧路由零流量/代码删除 | 未实现 |
-| R13 | 前端仅保留交互页面 | P11 | repo scan、network trace、无 server tool/skill/secret | 未实现 |
-| R14 | 每阶段最小可运行可测试可验证 | 全部 | 每阶段实施报告与退出条件证据 | P0 部分 |
-| R15 | 数据迁移可对账、切换可回滚 | P3/P5/P11 | dry-run/import checksum、灰度/回滚演练 | 未实现 |
-| R16 | 多租户、权限和审计 | P2-P11 | 双方言 cross-tenant negatives、RBAC、audit queries | 未实现 |
-| R17 | 开发 SQLite、生产 MySQL，两套 DDL 同步 | P2-P11 | 同版本 migration、schema parity、双 repository contract、prod fail-fast | 未实现 |
+| R04 | 后端模型管理接口供前端使用 | P2 | OpenAPI、RBAC、前端 Playwright | PASS：model/provider admin + available catalog |
+| R05 | Agent 与系统配置落数据库 | P2/P4 | 双方言 definition/revision/config 表、effective config test | PASS：V1/V3/V5 + repository/API tests |
+| R06 | 后端 Agent 配置接口供前端使用 | P2 | 管理/用户 API、revision conflict、前端验证 | PASS：admin/user configuration API |
+| R07 | AgentScope Java HarnessAgent 是唯一 runtime | P4-P11 | dependency/runtime code、E2E、Node code 删除 | PASS：Harness runtime；前端无 AI SDK |
+| R08 | Skill 资源落表并由后端按需加载 | P5/P9 | 9 个 seed checksum、SQLite/MySQL load trace、路径测试 | PASS：V8/V11/V12 + bundle/resource tests |
+| R09 | 工具注册和调用全部在 Harness/Toolkit 后端 | P6-P8 | tool inventory 100%、浏览器 executor 删除、E2E | PASS：Java registry/tool chain tests |
+| R10 | HITL/暂停恢复由后端协调 | P8 | ask/approve/deny、重启恢复、幂等/隔离测试 | PASS：action/checkpoint/restart tests |
+| R11 | chat 数据结构与现有前端兼容 | P1/P3/P4 | UIMessage round-trip、字节/语义 stream fixtures、E2E | PASS：SSE/parts/replay/title fixtures |
+| R12 | 原 Node REST API 全部迁移 | P1-P11 | A01-A29 每行 PASS、旧路由零流量/代码删除 | PASS：REST inventory guard；前端 route=0 |
+| R13 | 前端仅保留交互页面 | P11 | repo scan、network trace、无 server tool/skill/secret | PASS：静态扫描 + frontend build |
+| R14 | 每阶段最小可运行可测试可验证 | 全部 | 每阶段实施报告与退出条件证据 | PASS：P0–P10 delivery reports |
+| R15 | 数据迁移可对账、切换可回滚 | P3/P5/P11 | dry-run/import checksum、灰度/回滚演练 | PASS：P3 importer/checksum/dry-run tests |
+| R16 | 多租户、权限和审计 | P2-P11 | 双方言 cross-tenant negatives、RBAC、audit queries | PASS：RBAC/tenant/audit negative tests |
+| R17 | 开发 SQLite、生产 MySQL，两套 DDL 同步 | P2-P11 | 同版本 migration、schema parity、双 repository contract、prod fail-fast | PARTIAL：V1–V14 同步；本机无 Docker，MySQL runtime parity 未执行 |
 
 ## 3. Node API 清零审计
 
