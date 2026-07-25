@@ -1,0 +1,453 @@
+import { AppLogo } from "@/components/app-logo";
+import { UserProfileImage } from "@/components/user-profile-image";
+import type { AppUIMessage, FilePart, ToolPart } from "@/lib/ai/ai-types";
+import { CLICKHOUSE_TOOL_NAMES } from "@/lib/ai/tools/clickhouse/clickhouse-tools";
+import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
+import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
+import { DateTimeExtension } from "@/lib/datetime-utils";
+import { cn } from "@/lib/utils";
+import NumberFlow from "@number-flow/react";
+import type { LanguageModelUsage } from "ai";
+import { Info, Loader2 } from "lucide-react";
+import { memo } from "react";
+import {
+  getToolGroupState,
+  getToolName,
+  groupRenderableParts,
+  type MessagePart,
+} from "./chat-message-parts";
+import { CollapsiblePart, RUNNING_TEXT_CLASS } from "./collapsible-part";
+import { ErrorMessageDisplay } from "./message-error";
+import { MessageMarkdown } from "./message-markdown";
+import { MessageReasoning } from "./message-reasoning";
+import { MessageToolAskUserQuestion } from "./message-tool-ask-user-question";
+import { MessageToolCollectSqlOptimizationEvidence } from "./message-tool-collect-sql-optimization-evidence";
+import { MessageToolExecuteSql } from "./message-tool-execute-sql";
+import { MessageToolExploreSchema } from "./message-tool-explore-schema";
+import { MessageToolGeneral } from "./message-tool-general";
+import { MessageToolGenerateSql } from "./message-tool-generate-sql";
+import { MessageToolGenerateVisualization } from "./message-tool-generate-visualization";
+import { MessageToolGetTables } from "./message-tool-get-tables";
+import { MessageToolPlan } from "./message-tool-plan";
+import { MessageToolReadFile } from "./message-tool-read-file";
+import { MessageToolSearchFile } from "./message-tool-search-file";
+import { MessageToolSkill } from "./message-tool-skill";
+import { MessageToolValidateSql } from "./message-tool-validate-sql";
+import { MessageUser } from "./message-user";
+
+const MESSAGE_MARKDOWN_STYLE = { fontSize: "0.9rem", lineHeight: "1.6" } as const;
+
+function getSafeFileUrl(url: string, allowRemote: boolean): string | null {
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
+    return url;
+  }
+
+  if (!allowRemote) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      return parsed.toString();
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+const MessageFilePart = memo(function MessageFilePart({ part }: { part: FilePart }) {
+  const isImage = typeof part.mediaType === "string" && part.mediaType.startsWith("image/");
+  const safeUrl = getSafeFileUrl(part.url, !isImage);
+
+  if (!safeUrl) {
+    return (
+      <div className="mt-2 inline-flex rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+        {part.filename ?? "Attached file unavailable"}
+      </div>
+    );
+  }
+
+  if (isImage) {
+    return (
+      <div className="mt-2 max-w-sm overflow-hidden rounded-lg border bg-background">
+        <img
+          src={safeUrl}
+          alt={part.filename ?? "Uploaded image"}
+          className="max-h-80 w-full object-cover"
+        />
+        {part.filename ? (
+          <div className="border-t px-3 py-2 text-xs text-muted-foreground">{part.filename}</div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={safeUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-2 inline-flex rounded-md border bg-background px-3 py-2 text-xs text-foreground underline-offset-2 hover:underline"
+    >
+      {part.filename ?? "Attached file"}
+    </a>
+  );
+});
+
+/**
+ * Display token usage information per message.
+ * Uses LanguageModelUsage (non-deprecated fields).
+ */
+const TokenUsageDisplay = memo(function TokenUsageDisplay({
+  id,
+  usage,
+}: {
+  id: string;
+  usage: LanguageModelUsage | null | undefined;
+}) {
+  if (usage == null) {
+    return null;
+  }
+
+  const total = usage.totalTokens ?? 0;
+  const input = usage.inputTokens ?? 0;
+  const output = usage.outputTokens ?? 0;
+  const reasoning = usage.outputTokenDetails?.reasoningTokens ?? 0;
+  const cacheRead = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+
+  const show = total > 0 || input > 0 || output > 0 || reasoning > 0 || cacheRead > 0;
+  if (!show) return null;
+  return (
+    <div
+      data-message-id={id}
+      className="flex gap-1 items-center mt-1 gap-1 bg-muted/30 rounded-md text-[10px] text-muted-foreground"
+    >
+      <div className="flex-shrink-0 h-6 w-6 flex items-center justify-center">
+        <Info className="h-3 w-3" />
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="font-medium">Tokens:</span>
+        <span className="">
+          <NumberFlow value={total} />
+        </span>
+
+        <span className="font-medium">; Input Tokens:</span>
+        <span className="">
+          <NumberFlow value={input} />
+        </span>
+        {cacheRead > 0 && (
+          <>
+            <span>(Cached:</span>
+            <span className="">
+              <NumberFlow value={cacheRead} />
+            </span>
+            <span>)</span>
+          </>
+        )}
+
+        <span className="font-medium">; Output Tokens:</span>
+        <span className="">
+          <NumberFlow value={output} />
+        </span>
+        {reasoning > 0 && (
+          <>
+            <span>(Reasoning:</span>
+            <span className="">
+              <NumberFlow value={reasoning} />
+            </span>
+            <span>)</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Render a single message part
+ */
+const ChatMessagePart = memo(
+  function ChatMessagePart({
+    part,
+    isUser,
+    isRunning = true,
+    messageId,
+  }: {
+    part: AppUIMessage["parts"][0];
+    isUser: boolean;
+    isRunning?: boolean;
+    messageId?: string;
+  }) {
+    if (part.type === "text") {
+      if (isUser) {
+        return <MessageUser text={part.text} />;
+      }
+      return (
+        <MessageMarkdown
+          text={part.text}
+          customStyle={MESSAGE_MARKDOWN_STYLE}
+          messageId={messageId}
+        />
+      );
+    }
+    if (part.type === "file") {
+      return <MessageFilePart part={part as FilePart} />;
+    }
+    if (part.type === "reasoning") {
+      return <MessageReasoning part={part} />;
+    }
+
+    // Handle tool calls and responses
+    const toolName = getToolName(part);
+
+    // SERVER TOOLS
+    if (toolName === SERVER_TOOL_NAMES.GENERATE_SQL) {
+      return <MessageToolGenerateSql part={part} isRunning={isRunning} />;
+    } else if (toolName === SERVER_TOOL_NAMES.GENERATE_VISUALIZATION) {
+      return <MessageToolGenerateVisualization part={part} isRunning={isRunning} />;
+    } else if (toolName === SERVER_TOOL_NAMES.PLAN) {
+      return <MessageToolPlan part={part} isRunning={isRunning} />;
+    } else if (toolName === SERVER_TOOL_NAMES.SKILL) {
+      return <MessageToolSkill part={part} isRunning={isRunning} />;
+    } else if (toolName === SERVER_TOOL_NAMES.SKILL_RESOURCE) {
+      return <MessageToolSkill part={part} isRunning={isRunning} label="Load Skill Resources" />;
+    } else if (toolName === SERVER_TOOL_NAMES.SEARCH_FILE) {
+      return <MessageToolSearchFile part={part} isRunning={isRunning} />;
+    } else if (toolName === SERVER_TOOL_NAMES.READ_FILE) {
+      return <MessageToolReadFile part={part} isRunning={isRunning} />;
+    }
+    // CLIENT TOOLS
+    else if (toolName === CLIENT_TOOL_NAMES.ASK_USER_QUESTION) {
+      return <MessageToolAskUserQuestion part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.EXECUTE_SQL) {
+      return <MessageToolExecuteSql part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.VALIDATE_SQL) {
+      return <MessageToolValidateSql part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.EXPLORE_SCHEMA) {
+      return <MessageToolExploreSchema part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.GET_TABLES) {
+      return <MessageToolGetTables part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.COLLECT_SQL_OPTIMIZATION_EVIDENCE) {
+      return <MessageToolCollectSqlOptimizationEvidence part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.SEARCH_QUERY_LOG) {
+      return <MessageToolGeneral toolName={"Search Query Log"} part={part} isRunning={isRunning} />;
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.COLLECT_CLUSTER_STATUS) {
+      return (
+        <MessageToolGeneral toolName={"Collect Cluster Status"} part={part} isRunning={isRunning} />
+      );
+    } else if (toolName === CLICKHOUSE_TOOL_NAMES.COLLECT_RCA_EVIDENCE) {
+      return (
+        <MessageToolGeneral toolName={"Collect RCA Evidence"} part={part} isRunning={isRunning} />
+      );
+    }
+    // GENERAL TOOLS
+    else if (toolName) {
+      return <MessageToolGeneral toolName={toolName} part={part} isRunning={isRunning} />;
+    }
+
+    return null;
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison: only re-render if the part actually changed
+    if (prevProps.messageId !== nextProps.messageId) return false;
+    if (prevProps.isUser !== nextProps.isUser) return false;
+    if (prevProps.part === nextProps.part) return true;
+
+    // Text and reasoning parts do not depend on isRunning.
+    if (prevProps.part.type === "text" && nextProps.part.type === "text") {
+      return (
+        (prevProps.part as { text: string }).text === (nextProps.part as { text: string }).text
+      );
+    }
+    if (prevProps.part.type === "file" && nextProps.part.type === "file") {
+      return (
+        (prevProps.part as FilePart).url === (nextProps.part as FilePart).url &&
+        (prevProps.part as FilePart).filename === (nextProps.part as FilePart).filename &&
+        (prevProps.part as FilePart).mediaType === (nextProps.part as FilePart).mediaType
+      );
+    }
+    if (prevProps.part.type === "reasoning" && nextProps.part.type === "reasoning") {
+      return (
+        prevProps.part.text === nextProps.part.text &&
+        (prevProps.part as { state?: string }).state ===
+          (nextProps.part as { state?: string }).state
+      );
+    }
+
+    // Tool parts can change rendering while running, so include isRunning in comparison.
+    if (prevProps.isRunning !== nextProps.isRunning) return false;
+
+    // For tool parts, compare by toolCallId and state
+    const prevPart = prevProps.part as ToolPart;
+    const nextPart = nextProps.part as ToolPart;
+    if (prevPart.toolCallId && nextPart.toolCallId) {
+      return prevPart.toolCallId === nextPart.toolCallId && prevPart.state === nextPart.state;
+    }
+    return false;
+  }
+);
+
+const CollapsedToolCallGroup = memo(function CollapsedToolCallGroup({
+  parts,
+  isUser,
+  isRunning,
+  messageId,
+}: {
+  parts: MessagePart[];
+  isUser: boolean;
+  isRunning: boolean;
+  messageId?: string;
+}) {
+  const { state, success } = getToolGroupState(parts);
+
+  return (
+    <CollapsiblePart
+      toolName={`${parts.length} tool calls`}
+      state={state}
+      success={success}
+      isRunning={isRunning}
+      showStatusIcon={false}
+      expandIncomplete={false}
+    >
+      <div className="mt-1 space-y-0.5">
+        {parts.map((part, index) => (
+          <ChatMessagePart
+            key={`${(part as ToolPart).toolCallId ?? index}-${index}`}
+            part={part}
+            isUser={isUser}
+            isRunning={isRunning}
+            messageId={messageId}
+          />
+        ))}
+      </div>
+    </CollapsiblePart>
+  );
+});
+
+interface ChatMessageProps {
+  message: AppUIMessage;
+  isLoading?: boolean;
+  isFirst?: boolean; // Whether this is a new user request (needs top spacing)
+  isLast?: boolean; // Whether this is the last message in a sequence
+  isRunning?: boolean;
+  loadingText?: string;
+}
+
+function resolveMessageTimestamp(message: AppUIMessage): number | undefined {
+  if (message.createdAt) {
+    const createdAt = new Date(message.createdAt).getTime();
+    if (!Number.isNaN(createdAt)) {
+      return createdAt;
+    }
+  }
+
+  if (typeof message.metadata?.createdAt === "number") {
+    const metadataCreatedAt = new Date(message.metadata.createdAt).getTime();
+    if (!Number.isNaN(metadataCreatedAt)) {
+      return metadataCreatedAt;
+    }
+  }
+
+  return undefined;
+}
+/**
+ * Render a single message with session styling and visualization
+ */
+export const ChatMessage = memo(function ChatMessage({
+  message,
+  isLoading = false,
+  isFirst = false,
+  isRunning = true,
+  loadingText = "Thinking",
+}: ChatMessageProps) {
+  const isUser = message.role === "user";
+  const timestamp = resolveMessageTimestamp(message);
+  const parts = message.parts || [];
+  const partGroups = groupRenderableParts(parts);
+  const error = (message as { error?: Error }).error;
+
+  const showLoading = !isUser && isLoading;
+  return (
+    <div className={cn(isUser && !isFirst ? "mt-3 border-t" : "", isUser ? "py-1" : "")}>
+      {/* Timestamp above profile for user messages - reserve space for alignment */}
+      {isUser && timestamp && (
+        <h4 className="px-3 py-2 text-sm font-semibold">
+          {DateTimeExtension.toYYYYMMddHHmmss(new Date(timestamp))}
+        </h4>
+      )}
+
+      <div className="flex gap-[1px]">
+        {/* Left color bar to distinguish user vs assistant messages */}
+        <div
+          className={cn(
+            "self-stretch w-1 flex-shrink-0",
+            isUser ? "bg-sky-400 dark:bg-sky-500" : "bg-emerald-400 dark:bg-emerald-500"
+          )}
+        />
+
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Profile and message row - aligned at top */}
+          <div className="flex gap-[1px]">
+            <div className="flex-shrink-0 w-[28px] flex justify-center">
+              {isUser ? (
+                <UserProfileImage />
+              ) : (
+                <div className="h-6 w-6 flex items-center justify-center">
+                  <AppLogo className="h-6 w-6" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-hidden min-w-0 text-sm pr-6">
+              {parts.length === 0 && isLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {/* Under the state that request is submitted, but server has not responded yet */}
+                  <span className={RUNNING_TEXT_CLASS}>{loadingText}</span>
+                </div>
+              )}
+              {parts.length === 0 && !isLoading && !error && "Nothing returned"}
+              {partGroups.map((group) =>
+                group.type === "tool-group" ? (
+                  <CollapsedToolCallGroup
+                    key={`tool-group-${group.startIndex}`}
+                    parts={group.parts}
+                    isUser={isUser}
+                    isRunning={isRunning}
+                    messageId={message.id}
+                  />
+                ) : (
+                  <ChatMessagePart
+                    key={group.index}
+                    part={group.part}
+                    isUser={isUser}
+                    isRunning={isRunning}
+                    messageId={message.id}
+                  />
+                )
+              )}
+              {error && <ErrorMessageDisplay errorText={error.message || String(error)} />}
+              {showLoading && (
+                <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Token usage row - enclosed by color bar, left-aligned with profile section */}
+          {!isUser && (
+            <div className="flex flex-1 min-w-0 pr-6">
+              <TokenUsageDisplay
+                id={message.id + "-usage"}
+                usage={message.metadata?.usage as LanguageModelUsage | undefined}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});

@@ -1,0 +1,396 @@
+import {
+  getAiConfigurationGateway,
+  isJavaConfigurationBackend,
+  type ServerModelProps,
+} from "@/lib/ai/configuration/configuration-gateway";
+import { MODELS, type ModelProps } from "@/lib/ai/llm/llm-provider-factory";
+import { PROVIDER_GITHUB_COPILOT } from "@/lib/ai/llm/provider-ids";
+import { StorageManager } from "@/lib/storage/storage-provider-manager";
+
+export interface ModelSetting {
+  modelId: string;
+  provider: string;
+  disabled: boolean;
+  free: boolean;
+}
+
+export interface ProviderSetting {
+  provider: string;
+  apiKey: string;
+  refreshToken?: string;
+  accessTokenExpiresAt?: number;
+  refreshTokenExpiresAt?: number;
+  authError?: string;
+}
+
+export const MODEL_CONFIG_UPDATED_EVENT = "MODEL_CONFIG_UPDATED";
+
+class ModelManager {
+  private static instance: ModelManager;
+
+  private static createAutoModel(): ModelProps {
+    return {
+      provider: "System",
+      modelId: "Auto",
+      description: `Use the server-side default model configuration. 
+Rate limit on request/token will apply.
+If you have your API keys, you can configure your models in the settings.`,
+    };
+  }
+
+  private get modelSettingsStorage() {
+    return StorageManager.getInstance()
+      .getStorageProvider()
+      .subStorage("settings:ai:model-settings");
+  }
+
+  private get providerSettingsStorage() {
+    return StorageManager.getInstance()
+      .getStorageProvider()
+      .subStorage("settings:ai:provider-settings");
+  }
+
+  private get selectedModelStorage() {
+    return StorageManager.getInstance()
+      .getStorageProvider()
+      .subStorage("settings:ai:selected-model-id");
+  }
+
+  /**
+   * Dynamically registered models (e.g., from Copilot API)
+   */
+  private dynamicModels: ModelProps[] = [];
+  private systemModels: ModelProps[] = [];
+  private systemModelsHydrated = false;
+  private serverSelectedModel: ModelProps | undefined;
+
+  public static getInstance(): ModelManager {
+    if (!ModelManager.instance) {
+      ModelManager.instance = new ModelManager();
+    }
+    return ModelManager.instance;
+  }
+
+  /**
+   * Set dynamic models and notify listeners
+   */
+  public setDynamicModels(models: ModelProps[]): void {
+    this.dynamicModels = models;
+    this.notify();
+  }
+
+  public setDynamicModelsForProvider(
+    provider: string,
+    models: ModelProps[],
+    notifyWhenUnchanged = false
+  ): void {
+    const nextModels = [
+      ...this.dynamicModels.filter((model) => model.provider !== provider),
+      ...models,
+    ];
+    if (JSON.stringify(this.dynamicModels) === JSON.stringify(nextModels)) {
+      if (notifyWhenUnchanged) {
+        this.notify();
+      }
+      return;
+    }
+
+    this.dynamicModels = nextModels;
+    this.notify();
+  }
+
+  public setSystemModels(models: ModelProps[], notify = true): void {
+    const normalized = models.map((model) => ({
+      ...model,
+      source: "system" as const,
+    }));
+    const previous = JSON.stringify(this.systemModels);
+    const next = JSON.stringify(normalized);
+    if (previous === next) {
+      return;
+    }
+
+    this.systemModels = normalized;
+    this.systemModelsHydrated = true;
+    if (notify) {
+      this.notify();
+    }
+  }
+
+  public hasSystemModelsHydrated(): boolean {
+    return this.systemModelsHydrated;
+  }
+
+  /**
+   * Get all registered models (static + dynamic)
+   */
+  public getAllModels(): ModelProps[] {
+    const merged = new Map<string, { model: ModelProps; index: number }>();
+    [...MODELS, ...this.systemModels, ...this.dynamicModels].forEach((model, index) => {
+      merged.set(`${model.provider}:${model.modelId}`, { model, index });
+    });
+    const indexed = [...merged.values()];
+    indexed.sort((a, b) => {
+      const aIsCopilot = a.model.provider === PROVIDER_GITHUB_COPILOT;
+      const bIsCopilot = b.model.provider === PROVIDER_GITHUB_COPILOT;
+      if (aIsCopilot && bIsCopilot) {
+        return a.model.modelId.localeCompare(b.model.modelId);
+      }
+      if (aIsCopilot !== bIsCopilot) {
+        return aIsCopilot ? -1 : 1;
+      }
+      return a.index - b.index;
+    });
+    return indexed.map((entry) => entry.model);
+  }
+
+  /**
+   * Notify listeners that the model configuration has changed
+   */
+  private notify() {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(MODEL_CONFIG_UPDATED_EVENT));
+    }
+  }
+
+  /**
+   * Get the currently selected model configuration from localStorage
+   * @returns The selected model configuration or undefined
+   */
+  public getSelectedModel(): ModelProps | undefined {
+    if (isJavaConfigurationBackend()) {
+      return this.serverSelectedModel;
+    }
+    const stored = this.selectedModelStorage.getString();
+    if (!stored) return undefined;
+
+    let selection: { provider: string; modelId: string } | undefined;
+
+    try {
+      // Try to parse as JSON (new format)
+      const parsed = JSON.parse(stored);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "provider" in parsed &&
+        "modelId" in parsed
+      ) {
+        selection = parsed as { provider: string; modelId: string };
+      }
+    } catch {
+      // Ignore parsing error, treat as legacy string format
+    }
+
+    if (!selection) {
+      // Legacy format: stored value is just modelId string
+      // Try to find the provider for this modelId
+      const legacyMatch = this.getAllModels().find((model) => model.modelId === stored);
+      if (!legacyMatch) {
+        return undefined;
+      }
+
+      selection = {
+        provider: legacyMatch.provider,
+        modelId: legacyMatch.modelId,
+      };
+    }
+
+    if (selection.provider === "System" && selection.modelId === "Auto") {
+      return ModelManager.createAutoModel();
+    }
+
+    return this.getAllModels().find(
+      (model) => model.provider === selection.provider && model.modelId === selection.modelId
+    );
+  }
+
+  /**
+   * Save the selected model configuration to localStorage
+   * @param model - The model configuration to select
+   */
+  public setSelectedModel(model: { provider: string; modelId: string }): void {
+    if (isJavaConfigurationBackend()) {
+      const selected = this.getAllModels().find(
+        (candidate) => candidate.provider === model.provider && candidate.modelId === model.modelId
+      ) as ServerModelProps | undefined;
+      if (!selected) return;
+      this.serverSelectedModel = selected;
+      void getAiConfigurationGateway()
+        .setModelPreference(selected)
+        .catch((error) => console.error("Failed to persist server model preference:", error));
+      this.notify();
+      return;
+    }
+    this.selectedModelStorage.setString(JSON.stringify(model));
+    this.notify();
+  }
+
+  public setServerSelectedModel(configId: string | undefined): void {
+    if (!isJavaConfigurationBackend()) return;
+    this.serverSelectedModel = configId
+      ? this.getAllModels().find((model) => (model as ServerModelProps).configId === configId)
+      : undefined;
+    this.notify();
+  }
+
+  public purgeBrowserModelSecrets(): void {
+    if (!isJavaConfigurationBackend()) return;
+    this.providerSettingsStorage.remove();
+    this.selectedModelStorage.remove();
+  }
+
+  /**
+   * Get all model settings from localStorage
+   * @returns Array of model settings
+   */
+  public getModelSettings(): ModelSetting[] {
+    return this.modelSettingsStorage.getAsJSON<ModelSetting[]>(() => []);
+  }
+
+  /**
+   * Save model settings to localStorage
+   * @param settings - Array of model settings to save
+   */
+  public setModelSettings(settings: ModelSetting[]): void {
+    this.modelSettingsStorage.setJSON(settings);
+    this.notify();
+  }
+
+  /**
+   * Get all provider settings from localStorage
+   * @returns Array of provider settings
+   */
+  public getProviderSettings(): ProviderSetting[] {
+    return this.providerSettingsStorage.getAsJSON<ProviderSetting[]>(() => []);
+  }
+
+  /**
+   * Save provider settings to localStorage
+   * @param settings - Array of provider settings to save
+   */
+  public setProviderSettings(settings: ProviderSetting[]): void {
+    this.providerSettingsStorage.setJSON(settings);
+    this.notify();
+  }
+
+  /**
+   * Get a specific model setting by modelId
+   * @param modelId - The model ID to look up
+   * @returns The model setting or undefined if not found
+   */
+  public getModelSetting(modelId: string): ModelSetting | undefined {
+    const settings = this.getModelSettings();
+    return settings.find((s) => s.modelId === modelId);
+  }
+
+  /**
+   * Update a specific model setting
+   * @param provider - The provider name for the model
+   * @param modelId - The model ID to update
+   * @param updates - Partial updates to apply
+   */
+  public updateModelSetting(
+    provider: string,
+    modelId: string,
+    updates: Partial<Omit<ModelSetting, "modelId" | "provider">>
+  ): void {
+    const settings = this.getModelSettings();
+    const index = settings.findIndex((s) => s.modelId === modelId && s.provider === provider);
+
+    if (index >= 0) {
+      settings[index] = { ...settings[index], ...updates };
+    } else {
+      // If model doesn't exist, create a new one
+      settings.push({
+        modelId,
+        provider,
+        disabled: false,
+        free: false,
+        ...updates,
+      });
+    }
+
+    this.setModelSettings(settings);
+  }
+
+  /**
+   * Update a specific provider setting
+   * @param provider - The provider name to update
+   * @param updates - Partial updates to apply
+   */
+  public updateProviderSetting(
+    provider: string,
+    updates: Partial<Omit<ProviderSetting, "provider">>
+  ): void {
+    const settings = this.getProviderSettings();
+    const index = settings.findIndex((s) => s.provider === provider);
+
+    if (index >= 0) {
+      settings[index] = { ...settings[index], ...updates };
+    } else {
+      // If provider doesn't exist, create a new one
+      settings.push({
+        provider,
+        apiKey: "",
+        ...updates,
+      });
+    }
+
+    this.setProviderSettings(settings);
+  }
+
+  /**
+   * Delete a provider setting
+   * @param provider - The provider name to delete
+   */
+  public deleteProviderSetting(provider: string): void {
+    const settings = this.getProviderSettings();
+    const filtered = settings.filter((s) => s.provider !== provider);
+    this.setProviderSettings(filtered);
+  }
+
+  /**
+   * Get all available models that are enabled and have an API key configured.
+   * Includes a special 'Auto' model representing the server-side default if available.
+   * @param autoSelectAvailable - Whether server-side auto-select is available. If false or undefined, the "System (Auto)" model will not be included.
+   * @returns Array of available models
+   */
+  public getAvailableModels(autoSelectAvailable?: boolean): ModelProps[] {
+    const modelSettings = this.getModelSettings();
+    const providerSettings = this.getProviderSettings();
+
+    const userModels = this.getAllModels().flatMap((model) => {
+      // Filter out models that are disabled in settings
+      const setting = modelSettings.find(
+        (s) => s.modelId === model.modelId && s.provider === model.provider
+      );
+      if (setting ? setting.disabled : model.disabled) return [];
+
+      const providerSetting = providerSettings.find((p) => p.provider === model.provider);
+
+      if (model.source === "system") {
+        const effectiveSource: ModelProps["source"] = providerSetting?.apiKey ? "user" : "system";
+        return [
+          {
+            ...model,
+            source: effectiveSource,
+          },
+        ];
+      }
+
+      // Filter out models whose provider doesn't have an API key
+      if (!providerSetting?.apiKey) return [];
+
+      return [model];
+    });
+
+    // Add the special 'Auto' model at the beginning only if auto-select is available
+    if (autoSelectAvailable) {
+      return [ModelManager.createAutoModel(), ...userModels];
+    }
+
+    return userModels;
+  }
+}
+
+export { ModelManager };

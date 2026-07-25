@@ -1,0 +1,88 @@
+<template>
+  <video
+    v-bind="$attrs"
+    :src="webm"
+    :autoplay="autoplay"
+    :loop="loop"
+    :muted="muted"
+    :playsinline="playsinline"
+    :controls="controls"
+    :class="videoClass"
+    :style="videoStyle"
+  >
+    <p>{{ alt }}</p>
+  </video>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useData } from 'vitepress'
+
+interface Props {
+  src: string
+  alt?: string
+  autoplay?: boolean
+  loop?: boolean
+  muted?: boolean
+  playsinline?: boolean
+  controls?: boolean
+  width?: string | number
+  height?: string | number
+  rounded?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  alt: 'Video demonstration',
+  autoplay: true,
+  loop: true,
+  muted: true,
+  playsinline: true,
+  controls: false,
+  rounded: true,
+})
+
+const { page, site } = useData()
+
+// Resolve path: relative paths (./...) against current page dir; prepend base for subpath deployment
+const webm = computed(() => {
+  let path = props.src
+  path = path.replace(/^\.\/public\//, '/').replace(/^\/public\//, '/')
+  if (path.startsWith('./')) {
+    const dir = page.value.relativePath.replace(/\/[^/]+$/, '/')
+    path = `/${dir}${path.slice(2)}`
+  } else if (path.startsWith('/') === false) {
+    path = `/${path}`
+  }
+  path = path.replace(/\.(gif|mp4|webm)$/i, '.webm')
+  const base = site.value.base.replace(/\/$/, '')
+  return base ? `${base}${path}` : path
+})
+
+const videoClass = computed(() => ({
+  'video-rounded': props.rounded,
+}))
+
+const videoStyle = computed(() => ({
+  width: typeof props.width === 'number' ? `${props.width}px` : props.width,
+  height: typeof props.height === 'number' ? `${props.height}px` : props.height,
+}))
+</script>
+
+<style scoped>
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+}
+
+.video-rounded {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+/* Dark mode adjustments */
+.dark video {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+}
+</style>
