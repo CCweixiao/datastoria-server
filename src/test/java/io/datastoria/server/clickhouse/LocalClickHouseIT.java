@@ -164,6 +164,27 @@ class LocalClickHouseIT {
                     "SELECT service, count() FROM datastoria_test.query_events GROUP BY service")
                 .block())
         .isEqualTo("{\"success\":true}");
+    JsonNode executeOutput;
+    try {
+      executeOutput =
+          mapper.readTree(
+              tools
+                  .executeSql(
+                      "SELECT service, duration_ms FROM datastoria_test.query_events"
+                          + " ORDER BY duration_ms DESC")
+                  .block());
+    } catch (java.io.IOException error) {
+      throw new AssertionError(error);
+    }
+    assertThat(executeOutput.path("columns").size()).isEqualTo(2);
+    assertThat(executeOutput.path("rows").size()).isEqualTo(3);
+    assertThat(executeOutput.path("rowCount").asInt()).isEqualTo(3);
+    assertThatThrownBy(() -> tools.executeSql("DROP TABLE datastoria_test.query_events").block())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("read-only");
+    assertThatThrownBy(() -> tools.executeSql("SELECT 1; SELECT 2").block())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Multiple");
     assertThat(tools.collectClusterStatus().block()).contains("active_parts");
     assertThatThrownBy(
             () ->

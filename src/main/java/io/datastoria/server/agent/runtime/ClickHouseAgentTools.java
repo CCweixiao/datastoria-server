@@ -24,6 +24,14 @@ public final class ClickHouseAgentTools {
   private static final int DEFAULT_TABLE_LIMIT = 100;
   private static final int MAX_TABLE_LIMIT = 500;
   private static final int MAX_COLUMNS_PER_TABLE = 100;
+  private static final Map<String, Object> EXECUTE_SQL_SETTINGS =
+      Map.of(
+          "default_format", "JSON",
+          "readonly", 2,
+          "max_execution_time", 30,
+          "max_result_rows", 1_000,
+          "max_result_bytes", 1_000_000,
+          "result_overflow_mode", "break");
   private static final Map<String, Object> READ_ONLY_SETTINGS =
       Map.of(
           "default_format", "JSON",
@@ -37,6 +45,7 @@ public final class ClickHouseAgentTools {
   private final Identity identity;
   private final ObjectMapper mapper;
   private final AgentToolExecutionPolicy executionPolicy;
+  private final ClickHouseReadOnlySqlClassifier sqlClassifier;
 
   public ClickHouseAgentTools(
       ClickHouseConnectionService service, String connectionId, Identity identity) {
@@ -62,18 +71,29 @@ public final class ClickHouseAgentTools {
     this.identity = identity;
     this.mapper = mapper;
     this.executionPolicy = executionPolicy;
+    this.sqlClassifier = new ClickHouseReadOnlySqlClassifier();
   }
 
   @Tool(
       name = "execute_sql",
       description =
-          "Execute a ClickHouse SQL statement using the current server-side connection. "
-              + "Use read-only SQL unless the user explicitly requests a mutation.",
-      readOnly = false)
+          "Execute one read-only ClickHouse query with server-enforced row, byte, and time limits.",
+      readOnly = true)
   public Mono<String> executeSql(
       @ToolParam(name = "sql", required = true, description = "ClickHouse SQL to execute")
           String sql) {
-    return service.query(connectionId, sql, Map.of("default_format", "JSON"), identity);
+    String safeSql;
+    try {
+      safeSql = sqlClassifier.requireReadOnly(sql);
+    } catch (IllegalArgumentException error) {
+      return Mono.error(error);
+    }
+    return executionPolicy.guard(
+        "execute_sql",
+        service
+            .query(connectionId, safeSql, EXECUTE_SQL_SETTINGS, identity)
+            .map(this::executeSqlJson)
+            .onErrorResume(this::executeSqlFailure));
   }
 
   @Tool(
@@ -303,6 +323,43 @@ public final class ClickHouseAgentTools {
     } catch (JsonProcessingException error) {
       throw new IllegalStateException("Invalid ClickHouse JSON response", error);
     }
+  }
+
+  private String executeSqlJson(String raw) {
+    try {
+      JsonNode response = mapper.readTree(raw);
+      ObjectNode result = mapper.createObjectNode();
+      ArrayNode columns = result.putArray("columns");
+      response
+          .path("meta")
+          .forEach(
+              metadata -> {
+                ObjectNode column = columns.addObject();
+                column.put("name", metadata.path("name").asText());
+                column.put("type", metadata.path("type").asText());
+              });
+      ArrayNode rows = result.putArray("rows");
+      response.path("data").forEach(rows::add);
+      result.put("rowCount", rows.size());
+      if (!rows.isEmpty()) {
+        result.set("sampleRow", rows.get(0));
+      }
+      return mapper.writeValueAsString(result);
+    } catch (JsonProcessingException error) {
+      throw new IllegalStateException("Invalid ClickHouse JSON response", error);
+    }
+  }
+
+  private Mono<String> executeSqlFailure(Throwable error) {
+    if (error instanceof ProviderOperationException provider
+        && "CLICKHOUSE_QUERY_FAILED".equals(provider.code())) {
+      ObjectNode result = mapper.createObjectNode();
+      result.putArray("columns");
+      result.put("rowCount", 0);
+      result.put("error", safeMessage(error));
+      return Mono.just(result.toString());
+    }
+    return Mono.error(error);
   }
 
   private String schemaJson(String raw, List<SchemaTableRequest> requests) {

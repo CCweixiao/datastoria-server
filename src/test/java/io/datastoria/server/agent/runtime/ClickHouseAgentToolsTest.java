@@ -2,6 +2,10 @@ package io.datastoria.server.agent.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.List;
@@ -16,6 +20,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.Toolkit;
+import io.datastoria.server.identity.Identity;
+import io.datastoria.server.service.ClickHouseConnectionService;
+
+import reactor.core.publisher.Mono;
 
 class ClickHouseAgentToolsTest {
 
@@ -90,6 +98,40 @@ class ClickHouseAgentToolsTest {
       assertThat(properties(schema(toolkit, name)).keySet())
           .containsAll(iterableFieldNames(contract.path(name).path("input")));
     }
+  }
+
+  @Test
+  void executeSqlReturnsFrontendShapeAndEnforcesClickHouseLimits() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    @SuppressWarnings("unchecked")
+    org.mockito.ArgumentCaptor<Map<String, Object>> settings =
+        org.mockito.ArgumentCaptor.forClass(Map.class);
+    when(service.query(anyString(), anyString(), settings.capture(), any()))
+        .thenReturn(
+            Mono.just(
+                """
+                {
+                  "meta":[{"name":"value","type":"UInt64"}],
+                  "data":[{"value":1},{"value":2}],
+                  "rows":2
+                }
+                """));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    JsonNode output =
+        new ObjectMapper()
+            .readTree(tools.executeSql("SELECT number + 1 AS value FROM numbers(2)").block());
+
+    assertThat(output.path("columns").path(0).path("name").asText()).isEqualTo("value");
+    assertThat(output.path("rows").size()).isEqualTo(2);
+    assertThat(output.path("rowCount").asInt()).isEqualTo(2);
+    assertThat(output.path("sampleRow").path("value").asInt()).isEqualTo(1);
+    assertThat(settings.getValue())
+        .containsEntry("readonly", 2)
+        .containsEntry("max_result_rows", 1_000)
+        .containsEntry("max_result_bytes", 1_000_000)
+        .containsEntry("max_execution_time", 30);
   }
 
   private static Map<String, Object> schema(Toolkit toolkit, String name) {
