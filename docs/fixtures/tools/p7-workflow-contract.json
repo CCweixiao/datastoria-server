@@ -1,0 +1,76 @@
+{
+  "generate_sql": {
+    "input": {
+      "userQuestion": "Count events by service",
+      "schemaHints": [
+        {
+          "database": "datastoria_test",
+          "table": "query_events",
+          "columns": [{ "name": "service", "type": "String" }],
+          "engine": "MergeTree"
+        }
+      ],
+      "context": { "database": "datastoria_test", "clickHouseUser": "dev@example.com" }
+    },
+    "output": {
+      "sql": "SELECT service, count() AS total FROM datastoria_test.query_events GROUP BY service LIMIT 10",
+      "notes": "Bounded aggregate",
+      "assumptions": [],
+      "needs_clarification": false,
+      "questions": [],
+      "validation": { "success": true }
+    }
+  },
+  "optimize_sql": {
+    "input": {
+      "sql": "SELECT service, count() FROM datastoria_test.query_events GROUP BY service LIMIT 10",
+      "goal": "latency",
+      "evidence": { "explain_index": { "raw_text": "PrimaryKey" } }
+    },
+    "output": {
+      "original_sql": "SELECT service, count() FROM datastoria_test.query_events GROUP BY service LIMIT 10",
+      "optimized_sql": "SELECT service, count() FROM datastoria_test.query_events GROUP BY service LIMIT 10",
+      "goal": "latency",
+      "changes": ["No evidence-supported rewrite required"],
+      "assumptions": [],
+      "validation": { "success": true }
+    }
+  },
+  "generate_visualization": {
+    "input": {
+      "userQuestion": "Show a bar chart of events by service",
+      "sql": "SELECT service, count() AS total FROM datastoria_test.query_events GROUP BY service LIMIT 10"
+    },
+    "output": {
+      "type": "bar",
+      "titleOption": { "title": "Events by service", "align": "left" },
+      "width": 8,
+      "legendOption": { "placement": "none", "values": [] },
+      "datasource": {
+        "sql": "SELECT service, count() AS total FROM datastoria_test.query_events GROUP BY service LIMIT 10"
+      }
+    }
+  },
+  "search_file": {
+    "input": { "query": "query_events", "glob": "src/**/*.java", "limit": 10 },
+    "output": {
+      "matches": [
+        { "path": "src/test/Example.java", "line": 12, "snippet": "query_events" }
+      ],
+      "hasMore": false
+    }
+  },
+  "read_file": {
+    "input": { "path": "src/test/Example.java", "startLine": 10, "endLine": 20 },
+    "output": {
+      "path": "src/test/Example.java",
+      "startLine": 10,
+      "endLine": 20,
+      "totalLines": 30,
+      "content": "class Example {}",
+      "truncated": false,
+      "hasPrevious": true,
+      "hasNext": true
+    }
+  }
+}

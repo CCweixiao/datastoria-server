@@ -325,6 +325,29 @@ class LocalClickHouseIT {
     assertThat(sse).contains("readonly tools complete", "data: [DONE]");
     assertThat(toolChainModel.outputs()).contains("query_events", "duration_ms", "success", "true");
 
+    WorkflowToolChainModel workflowModel = new WorkflowToolChainModel();
+    fakeProvider.setModel(workflowModel);
+    String workflowSse =
+        web.post()
+            .uri("/api/ai/agent")
+            .header("x-datastoria-user-email", USER)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(
+                "{\"sessionId\":\"local-workflow-session\",\"connectionId\":\""
+                    + connectionId
+                    + "\",\"message\":{\"id\":\"local-workflow-msg\",\"role\":\"user\",\"parts\":["
+                    + "{\"type\":\"text\",\"text\":\"chart event counts by service\"}]},"
+                    + "\"modelConfigId\":\"local-model\"}")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+    assertThat(workflowSse).contains("workflow tools complete", "data: [DONE]");
+    assertThat(workflowModel.outputs())
+        .contains("validation", "success", "rowCount", "bar", "datasource");
+
     connectionService
         .query(connectionId, "SYSTEM FLUSH LOGS", Map.of("default_format", "JSON"), IDENTITY)
         .block();
@@ -369,6 +392,16 @@ class LocalClickHouseIT {
             "INSERT INTO ds_chat_session"
                 + " (id, tenant_id, user_id, connection_id, title, revision, created_at, updated_at)"
                 + " VALUES ('local-tool-session','tenant-test',:user,:connection,'tools',0,:now,:now)")
+        .param("user", USER)
+        .param("connection", connectionId)
+        .param("now", now)
+        .update();
+    jdbcClient
+        .sql(
+            "INSERT INTO ds_chat_session"
+                + " (id, tenant_id, user_id, connection_id, title, revision, created_at, updated_at)"
+                + " VALUES ('local-workflow-session','tenant-test',:user,:connection,"
+                + " 'workflow',0,:now,:now)")
         .param("user", USER)
         .param("connection", connectionId)
         .param("now", now)
@@ -442,6 +475,115 @@ class LocalClickHouseIT {
 
     String outputs() {
       return outputs;
+    }
+  }
+
+  private static final class WorkflowToolChainModel implements Model {
+    private final AtomicInteger topLevelCalls = new AtomicInteger();
+    private volatile String outputs = "";
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      if (tools == null) {
+        captureOutputs(messages);
+        return Flux.just(
+            ChatResponse.builder()
+                .content(List.of(TextBlock.builder().text("workflow tools complete").build()))
+                .finishReason("stop")
+                .build());
+      }
+      if (tools.isEmpty()) {
+        String prompt =
+            messages.stream()
+                .map(Msg::getTextContent)
+                .collect(java.util.stream.Collectors.joining());
+        String json =
+            prompt.contains("visualization")
+                ? "{\"type\":\"bar\",\"title\":\"Events by service\","
+                    + "\"title_align\":\"left\",\"width\":8,"
+                    + "\"legend_placement\":\"none\",\"legend_values\":[]}"
+                : "{\"sql\":\"SELECT service, count() AS total FROM "
+                    + "datastoria_test.query_events GROUP BY service ORDER BY total DESC LIMIT 10\","
+                    + "\"notes\":\"bounded aggregate\",\"assumptions\":[],"
+                    + "\"needs_clarification\":false,\"questions\":[]}";
+        return Flux.just(
+            ChatResponse.builder()
+                .content(List.of(TextBlock.builder().text(json).build()))
+                .finishReason("stop")
+                .build());
+      }
+      captureOutputs(messages);
+      int call = topLevelCalls.incrementAndGet();
+      if (call <= 3) {
+        String name =
+            switch (call) {
+              case 1 -> "generate_sql";
+              case 2 -> "execute_sql";
+              default -> "generate_visualization";
+            };
+        assertThat(tools.stream().map(ToolSchema::getName)).contains(name);
+        String input =
+            switch (call) {
+              case 1 -> "{\"userQuestion\":\"chart event counts by service\","
+                  + "\"schemaHints\":[{\"database\":\"datastoria_test\","
+                  + "\"table\":\"query_events\",\"columns\":["
+                  + "{\"name\":\"service\",\"type\":\"String\"}]}]}";
+              case 2 -> "{\"sql\":\"SELECT service, count() AS total FROM "
+                  + "datastoria_test.query_events GROUP BY service "
+                  + "ORDER BY total DESC LIMIT 10\"}";
+              default -> "{\"userQuestion\":\"bar chart event counts by service\","
+                  + "\"sql\":\"SELECT service, count() AS total FROM "
+                  + "datastoria_test.query_events GROUP BY service "
+                  + "ORDER BY total DESC LIMIT 10\"}";
+            };
+        ToolUseBlock toolCall =
+            ToolUseBlock.builder()
+                .id("p7-workflow-" + call)
+                .name(name)
+                .content(input)
+                .state(ToolCallState.FINISHED)
+                .build();
+        return Flux.just(
+            ChatResponse.builder()
+                .content(List.of(toolCall))
+                .finishReason("tool_calls")
+                .metadata(Map.of())
+                .build());
+      }
+      ChatUsage usage = ChatUsage.builder().inputTokens(5).outputTokens(5).time(0.0).build();
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(TextBlock.builder().text("workflow tools complete").build()))
+              .build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(usage)
+              .finishReason("stop")
+              .metadata(Map.of())
+              .build());
+    }
+
+    String outputs() {
+      return outputs;
+    }
+
+    private void captureOutputs(List<Msg> messages) {
+      outputs =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(ToolResultBlock.class::isInstance)
+              .map(ToolResultBlock.class::cast)
+              .flatMap(result -> result.getOutput().stream())
+              .filter(TextBlock.class::isInstance)
+              .map(TextBlock.class::cast)
+              .map(TextBlock::getText)
+              .reduce("", (left, right) -> left + right);
+    }
+
+    @Override
+    public String getModelName() {
+      return "local-workflow-tool-chain";
     }
   }
 }

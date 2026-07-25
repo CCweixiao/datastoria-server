@@ -102,6 +102,27 @@ class ClickHouseAgentToolsTest {
   }
 
   @Test
+  void p7DiagnosticInputsMatchSharedFrontendGoldenFixture() throws Exception {
+    JsonNode contract =
+        new ObjectMapper()
+            .readTree(
+                java.nio.file.Files.readString(
+                    java.nio.file.Path.of("docs/fixtures/tools/p7-diagnostic-contract.json")));
+    Toolkit toolkit = new Toolkit();
+    toolkit.registerTool(new ClickHouseAgentTools(null, null, null));
+
+    for (String name :
+        List.of(
+            "search_query_log",
+            "collect_cluster_status",
+            "collect_sql_optimization_evidence",
+            "collect_rca_evidence")) {
+      assertThat(properties(schema(toolkit, name)).keySet())
+          .containsAll(iterableFieldNames(contract.path(name).path("input")));
+    }
+  }
+
+  @Test
   void executeSqlReturnsFrontendShapeAndEnforcesClickHouseLimits() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
     @SuppressWarnings("unchecked")

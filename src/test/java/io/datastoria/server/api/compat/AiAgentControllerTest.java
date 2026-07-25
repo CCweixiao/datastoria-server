@@ -214,18 +214,24 @@ class AiAgentControllerTest {
   @Test
   void legacyChatPathsAreImplementedDirectlyBySpring() {
     for (String path : List.of("/api/ai/chat", "/api/ai/chat/v2")) {
-      webTestClient
-          .post()
-          .uri(path)
-          .header("x-datastoria-user-email", USER)
-          .contentType(MediaType.APPLICATION_JSON)
-          .bodyValue("{\"apiKey\":\"must-not-reach-the-browser\"}")
-          .exchange()
-          .expectStatus()
-          .isBadRequest()
-          .expectBody()
-          .jsonPath("$.code")
-          .isEqualTo("CLIENT_SECRET_NOT_ALLOWED");
+      WebTestClient.ResponseSpec response =
+          webTestClient
+              .post()
+              .uri(path)
+              .header("x-datastoria-user-email", USER)
+              .contentType(MediaType.APPLICATION_JSON)
+              .bodyValue("{\"apiKey\":\"must-not-reach-the-browser\"}")
+              .exchange()
+              .expectStatus()
+              .isBadRequest();
+      if ("/api/ai/chat".equals(path)) {
+        response
+            .expectHeader()
+            .valueEquals("Deprecation", "true")
+            .expectHeader()
+            .valueEquals("Link", "</api/ai/agent>; rel=\"successor-version\"");
+      }
+      response.expectBody().jsonPath("$.code").isEqualTo("CLIENT_SECRET_NOT_ALLOWED");
     }
   }
 

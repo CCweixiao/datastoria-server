@@ -1,0 +1,107 @@
+{
+  "search_query_log": {
+    "input": {
+      "mode": "patterns",
+      "metric": "duration",
+      "metric_aggregation": "max",
+      "limit": 10,
+      "time_window": 60,
+      "predicates": [{ "field": "query", "op": "contains_ci", "value": "events" }]
+    },
+    "output": {
+      "success": true,
+      "mode": "patterns",
+      "metric": "duration",
+      "metric_aggregation": "max",
+      "time_window": 60,
+      "defaults_applied": ["type = QueryFinish"],
+      "filters_applied": ["query contains_ci events"],
+      "rowCount": 1,
+      "rows": [{ "sql_preview": "SELECT count() FROM events" }]
+    }
+  },
+  "collect_cluster_status": {
+    "input": {
+      "status_analysis_mode": "snapshot",
+      "checks": ["parts", "disk"],
+      "verbosity": "summary",
+      "max_outliers": 10
+    },
+    "output": {
+      "success": true,
+      "status_analysis_mode": "snapshot",
+      "scope": "single_node",
+      "node_count": 1,
+      "summary": { "total_nodes": 1, "healthy_nodes": 1, "nodes_with_issues": 0 },
+      "categories": {
+        "parts": { "status": "OK", "value": 12 },
+        "disk": { "status": "OK", "value": 25.5 }
+      },
+      "generated_at": "2026-07-25T12:00:00Z"
+    }
+  },
+  "collect_sql_optimization_evidence": {
+    "input": {
+      "sql": "SELECT service, count() FROM datastoria_test.query_events GROUP BY service",
+      "goal": "latency",
+      "mode": "full",
+      "time_window": 60,
+      "requested": { "required": ["indexes"], "optional": ["pipeline"] }
+    },
+    "output": {
+      "goal": "latency",
+      "mode": "full",
+      "sql": "SELECT service, count() FROM datastoria_test.query_events GROUP BY service",
+      "explain_index": { "raw_text": "ReadFromMergeTree", "indexes": [], "summary": [] },
+      "explain_pipeline": { "raw_text": "ExpressionTransform", "operators": [], "summary": [] },
+      "constraints": ["read_only"]
+    }
+  },
+  "collect_rca_evidence": {
+    "input": {
+      "symptom": "high_part_count",
+      "scope": "table",
+      "target": { "database": "datastoria_test", "table": "query_events" },
+      "time_window": 60
+    },
+    "output": {
+      "schema_version": 1,
+      "success": true,
+      "symptom": "high_part_count",
+      "scope": "table",
+      "target": { "database": "datastoria_test", "table": "query_events" },
+      "observations": [
+        {
+          "source": "system.parts",
+          "description": "Active part inventory",
+          "metrics": { "active_parts": 12, "distinct_partitions": 3 }
+        }
+      ],
+      "candidates": [
+        {
+          "cause": "part_inventory_pressure",
+          "support_score": 0.66,
+          "indicators_matched": 2,
+          "indicators_checked": 3,
+          "evidence_for": ["threshold exceeded"],
+          "evidence_against": [],
+          "next_checks": ["inspect merges"]
+        }
+      ],
+      "possible_actions": [
+        {
+          "title": "Investigate merge backlog",
+          "risk": "medium",
+          "tied_to": "merge_backlog"
+        }
+      ],
+      "gaps": [
+        {
+          "description": "Insert time series not collected",
+          "reason": "Use search_query_log"
+        }
+      ],
+      "generated_at": "2026-07-25T12:00:00Z"
+    }
+  }
+}

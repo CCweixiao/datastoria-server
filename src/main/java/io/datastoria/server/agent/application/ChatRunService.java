@@ -1,9 +1,11 @@
 package io.datastoria.server.agent.application;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +21,8 @@ import io.datastoria.server.agent.runtime.AgentToolExecutionPolicy;
 import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
+import io.datastoria.server.agent.runtime.RepositoryAgentTools;
+import io.datastoria.server.agent.runtime.SqlWorkflowAgentTools;
 import io.datastoria.server.api.compat.AgentChatRequest;
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.api.error.PlainTextException;
@@ -95,6 +99,7 @@ public class ChatRunService {
   private final RunLifecycleRecorder lifecycleRecorder;
   private final Scheduler jdbcScheduler;
   private final ObjectMapper mapper;
+  private final String repositoryRoot;
 
   public ChatRunService(
       AgentRunService agentRunService,
@@ -114,6 +119,7 @@ public class ChatRunService {
       ModelAdapterProvider modelAdapterProvider,
       RunLifecycleRecorder lifecycleRecorder,
       ObjectMapper mapper,
+      @Value("${datastoria.agent.repository-root:${user.dir}}") String repositoryRoot,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.agentRunService = agentRunService;
     this.runCreationService = runCreationService;
@@ -132,6 +138,7 @@ public class ChatRunService {
     this.modelAdapterProvider = modelAdapterProvider;
     this.lifecycleRecorder = lifecycleRecorder;
     this.mapper = mapper;
+    this.repositoryRoot = repositoryRoot;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -255,7 +262,8 @@ public class ChatRunService {
             null,
             now,
             now);
-    ResolvedCapabilities resolvedCapabilities = resolveCapabilities(req, identity, runId);
+    ResolvedCapabilities resolvedCapabilities =
+        resolveCapabilities(req, identity, runId, context, adapter);
     try {
       runCreationService.create(run, resolvedCapabilities.skillPins());
     } catch (RuntimeException conflict) {
@@ -281,7 +289,11 @@ public class ChatRunService {
   }
 
   private ResolvedCapabilities resolveCapabilities(
-      AgentChatRequest req, Identity identity, String runId) {
+      AgentChatRequest req,
+      Identity identity,
+      String runId,
+      io.datastoria.server.agent.domain.RunContext context,
+      ModelAdapter adapter) {
     builtinSkillProvisioner.provision(identity.tenantId());
     java.util.List<io.datastoria.server.domain.AgentSkill> selectedSkills =
         skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
@@ -319,17 +331,27 @@ public class ChatRunService {
                         skill.revision(),
                         skill.bundleChecksum()))
             .toList();
+    AgentToolExecutionPolicy toolPolicy =
+        AgentToolExecutionPolicy.tracked(
+            auditLogRepository, jdbcScheduler, identity, runId, req.connectionId());
+    ClickHouseAgentTools clickHouseTools =
+        new ClickHouseAgentTools(
+            clickHouseConnectionService,
+            req.connectionId(),
+            identity,
+            mapper,
+            toolPolicy,
+            rcaTemplateCatalog.findEnabled("high_part_count").orElse(null));
+    Path configuredRoot =
+        repositoryRoot == null || repositoryRoot.isBlank() ? null : Path.of(repositoryRoot);
     return new ResolvedCapabilities(
         new AgentRunCapabilities(
             skills,
-            new ClickHouseAgentTools(
-                clickHouseConnectionService,
-                req.connectionId(),
-                identity,
-                mapper,
-                AgentToolExecutionPolicy.tracked(
-                    auditLogRepository, jdbcScheduler, identity, runId, req.connectionId()),
-                rcaTemplateCatalog.findEnabled("high_part_count").orElse(null))),
+            java.util.List.of(
+                clickHouseTools,
+                new SqlWorkflowAgentTools(
+                    adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
+                new RepositoryAgentTools(configuredRoot, mapper, toolPolicy))),
         pins);
   }
 

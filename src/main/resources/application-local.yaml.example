@@ -36,6 +36,9 @@ management:
 # Generate your own with: openssl rand -base64 32
 # In production this comes from DATASTORIA_MASTER_KEY env var (never committed).
 datastoria:
+  agent:
+    # Canonical repository root exposed read-only to search_file/read_file.
+    repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
   master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
   skills:
     seed-enabled: true

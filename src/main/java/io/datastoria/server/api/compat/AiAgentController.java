@@ -63,6 +63,7 @@ public class AiAgentController {
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
       @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
       ServerWebExchange exchange) {
+    markLegacyRoute(exchange);
     if (raw == null) {
       throw PlainTextException.badRequest("Invalid JSON in request body");
     }
@@ -93,6 +94,16 @@ public class AiAgentController {
                               replayService.encodeAndRecord(
                                   identity.tenantId(), events, provisionalTitle(req))));
             });
+  }
+
+  private static void markLegacyRoute(ServerWebExchange exchange) {
+    if ("/api/ai/chat".equals(exchange.getRequest().getPath().value())) {
+      exchange.getResponse().getHeaders().set("Deprecation", "true");
+      exchange
+          .getResponse()
+          .getHeaders()
+          .set(HttpHeaders.LINK, "</api/ai/agent>; rel=\"successor-version\"");
+    }
   }
 
   private static long parseLastEventId(String value) {
