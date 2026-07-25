@@ -2,14 +2,13 @@ package io.datastoria.server.service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import io.datastoria.server.api.error.NotFoundException;
+import io.datastoria.server.api.error.ResourceInUseException;
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.AgentSkill;
 import io.datastoria.server.domain.AgentSkillResource;
@@ -21,6 +20,10 @@ import io.datastoria.server.dto.SkillResourceResponse;
 import io.datastoria.server.dto.UpsertSkillRequest;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AgentSkillRepository;
+import io.datastoria.server.skill.BuiltinSkillProvisioner;
+import io.datastoria.server.skill.SkillMetadataParser;
+import io.datastoria.server.skill.SkillMetadataParser.ParsedSkillMetadata;
+import io.datastoria.server.skill.SkillToolAvailability;
 
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -28,40 +31,48 @@ import reactor.core.scheduler.Scheduler;
 @Service
 public class AgentSkillService {
 
-  private static final Pattern FRONTMATTER =
-      Pattern.compile("\\A---\\s*\\R([\\s\\S]*?)\\R---\\s*(?:\\R|\\z)");
-  private static final Pattern FIELD =
-      Pattern.compile("(?m)^([A-Za-z][A-Za-z0-9_-]*):\\s*(.*?)\\s*$");
   private static final Pattern SAFE_ID = Pattern.compile("[a-z][a-z0-9_-]{0,254}");
 
   private final AgentSkillRepository repository;
+  private final BuiltinSkillProvisioner builtinSkillProvisioner;
+  private final SkillMetadataParser metadataParser;
+  private final SkillToolAvailability toolAvailability;
   private final Scheduler jdbcScheduler;
 
   public AgentSkillService(
       AgentSkillRepository repository,
+      BuiltinSkillProvisioner builtinSkillProvisioner,
+      SkillMetadataParser metadataParser,
+      SkillToolAvailability toolAvailability,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.repository = repository;
+    this.builtinSkillProvisioner = builtinSkillProvisioner;
+    this.metadataParser = metadataParser;
+    this.toolAvailability = toolAvailability;
     this.jdbcScheduler = jdbcScheduler;
   }
 
   public Mono<List<SkillCatalogResponse>> list(Identity identity, boolean includeDraft) {
     return Mono.fromCallable(
-            () ->
-                repository
-                    .findVisible(identity.tenantId(), identity.userId(), includeDraft)
-                    .stream()
-                    .map(
-                        skill ->
-                            catalog(
-                                skill,
-                                !repository.findResources(skill.tenantId(), skill.id()).isEmpty()))
-                    .toList())
+            () -> {
+              builtinSkillProvisioner.provision(identity.tenantId());
+              return repository
+                  .findVisible(identity.tenantId(), identity.userId(), includeDraft)
+                  .stream()
+                  .map(
+                      skill ->
+                          catalog(
+                              skill,
+                              !repository.findResources(skill.tenantId(), skill.id()).isEmpty()))
+                  .toList();
+            })
         .subscribeOn(jdbcScheduler);
   }
 
   public Mono<SkillDetailResponse> detail(String id, Identity identity, boolean includeDraft) {
     return Mono.fromCallable(
             () -> {
+              builtinSkillProvisioner.provision(identity.tenantId());
               AgentSkill skill = require(id, identity, includeDraft);
               List<String> paths =
                   repository.findResources(skill.tenantId(), skill.id()).stream()
@@ -83,7 +94,7 @@ public class AgentSkillService {
                   catalog.disableSlashCommand(),
                   catalog.showInSqlEditorQuickAction(),
                   catalog.requiredTools(),
-                  identity.isAdmin(),
+                  identity.isAdmin() && !skill.builtin(),
                   skill.content(),
                   paths);
             })
@@ -94,6 +105,7 @@ public class AgentSkillService {
       String id, String path, Identity identity, boolean includeDraft) {
     return Mono.fromCallable(
             () -> {
+              builtinSkillProvisioner.provision(identity.tenantId());
               AgentSkill skill = require(id, identity, includeDraft);
               AgentSkillResource resource =
                   repository.findResources(skill.tenantId(), skill.id()).stream()
@@ -115,6 +127,9 @@ public class AgentSkillService {
     return Mono.<Void>fromRunnable(
             () -> {
               validateId(id);
+              metadataParser.parse(request.content(), id);
+              builtinSkillProvisioner.provision(identity.tenantId());
+              rejectBuiltinMutation(id, identity);
               AgentSkill saved =
                   repository.upsert(
                       new AgentSkill(
@@ -127,6 +142,8 @@ public class AgentSkillService {
                               : defaultValue(request.state(), "draft"),
                           defaultValue(request.scope(), "self"),
                           request.version(),
+                          null,
+                          false,
                           0,
                           null,
                           null,
@@ -153,14 +170,22 @@ public class AgentSkillService {
 
   public Mono<Void> publish(String id, Identity identity) {
     return Mono.<Void>fromRunnable(
-            () -> repository.publish(identity.tenantId(), identity.userId(), id))
+            () -> {
+              builtinSkillProvisioner.provision(identity.tenantId());
+              rejectBuiltinMutation(id, identity);
+              repository.publish(identity.tenantId(), identity.userId(), id);
+            })
         .subscribeOn(jdbcScheduler)
         .then();
   }
 
   public Mono<Void> delete(String id, Identity identity) {
     return Mono.<Void>fromRunnable(
-            () -> repository.delete(identity.tenantId(), identity.userId(), id))
+            () -> {
+              builtinSkillProvisioner.provision(identity.tenantId());
+              rejectBuiltinMutation(id, identity);
+              repository.delete(identity.tenantId(), identity.userId(), id);
+            })
         .subscribeOn(jdbcScheduler)
         .then();
   }
@@ -172,7 +197,9 @@ public class AgentSkillService {
                 skills.stream()
                     .filter(
                         skill ->
-                            !skill.disableSlashCommand() && SAFE_ID.matcher(skill.name()).matches())
+                            "available".equals(skill.status())
+                                && !skill.disableSlashCommand()
+                                && SAFE_ID.matcher(skill.name()).matches())
                     .map(
                         skill ->
                             new CommandResponse(
@@ -192,56 +219,33 @@ public class AgentSkillService {
         .orElseThrow(() -> new NotFoundException("AgentSkill", id));
   }
 
+  private void rejectBuiltinMutation(String id, Identity identity) {
+    repository
+        .findById(identity.tenantId(), identity.userId(), id, true)
+        .filter(AgentSkill::builtin)
+        .ifPresent(
+            ignored -> {
+              throw new ResourceInUseException("BuiltinAgentSkill", id);
+            });
+  }
+
   private SkillCatalogResponse catalog(AgentSkill skill, boolean hasResources) {
-    Metadata metadata = metadata(skill.content(), skill.id());
+    ParsedSkillMetadata metadata = metadataParser.parse(skill.content(), skill.id());
     return new SkillCatalogResponse(
         skill.id(),
         metadata.name(),
         metadata.description(),
         "database",
-        "available",
+        toolAvailability.isAvailable(skill.content(), skill.id()) ? "available" : "disabled",
         skill.state(),
         skill.scope(),
         skill.version(),
-        skill.ownerUserId(),
+        metadata.author() == null ? skill.ownerUserId() : metadata.author(),
         metadata.summary(),
         hasResources,
         metadata.disableSlashCommand(),
         metadata.showInSqlEditorQuickAction(),
         metadata.requiredTools());
-  }
-
-  private static Metadata metadata(String content, String fallbackName) {
-    Matcher frontmatter = FRONTMATTER.matcher(content);
-    String header = frontmatter.find() ? frontmatter.group(1) : "";
-    String body =
-        frontmatter.find(0) ? content.substring(frontmatter.end()).trim() : content.trim();
-    java.util.Map<String, String> fields = new java.util.HashMap<>();
-    Matcher field = FIELD.matcher(header);
-    while (field.find()) {
-      fields.put(field.group(1).toLowerCase(Locale.ROOT), unquote(field.group(2)));
-    }
-    String summary =
-        body.lines()
-            .filter(line -> !line.isBlank() && !line.startsWith("#"))
-            .findFirst()
-            .orElse("");
-    return new Metadata(
-        fields.getOrDefault("name", fallbackName),
-        fields.getOrDefault("description", summary),
-        summary,
-        Boolean.parseBoolean(fields.getOrDefault("disableslashcommand", "false")),
-        Boolean.parseBoolean(fields.getOrDefault("showinsqleditorquickaction", "false")),
-        List.of());
-  }
-
-  private static String unquote(String value) {
-    if (value.length() >= 2
-        && ((value.startsWith("\"") && value.endsWith("\""))
-            || (value.startsWith("'") && value.endsWith("'")))) {
-      return value.substring(1, value.length() - 1);
-    }
-    return value;
   }
 
   private static void validateId(String id) {
@@ -266,12 +270,4 @@ public class AgentSkillService {
   private static <T> List<T> safe(List<T> values) {
     return values == null ? List.of() : values;
   }
-
-  private record Metadata(
-      String name,
-      String description,
-      String summary,
-      boolean disableSlashCommand,
-      boolean showInSqlEditorQuickAction,
-      List<String> requiredTools) {}
 }

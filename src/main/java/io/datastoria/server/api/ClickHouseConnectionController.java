@@ -1,6 +1,8 @@
 package io.datastoria.server.api;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
@@ -96,9 +98,13 @@ public class ClickHouseConnectionController {
   @PostMapping(value = "/{id}/query", produces = MediaType.APPLICATION_JSON_VALUE)
   public Mono<ResponseEntity<Flux<DataBuffer>>> query(
       @PathVariable String id, @RequestBody @Valid ClickHouseQueryRequest request) {
+    Map<String, Object> parameters =
+        request.parameters() == null
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(request.parameters());
+    parameters.putIfAbsent("default_format", "JSON");
     return IdentityContext.current()
-        .flatMap(
-            identity -> service.queryStream(id, request.query(), request.parameters(), identity))
+        .flatMap(identity -> service.queryStream(id, request.query(), parameters, identity))
         .map(
             response -> {
               ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.status());

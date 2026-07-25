@@ -44,6 +44,7 @@ application-prod.yml
 
 ### Local databases ###
 data/
+.local/
 *.db
 *.db-journal
 *.db-wal

@@ -10,6 +10,8 @@ public record AgentSkill(
     String state,
     String scope,
     String version,
+    String bundleChecksum,
+    boolean builtin,
     long revision,
     Instant createdAt,
     Instant updatedAt,

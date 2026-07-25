@@ -18,6 +18,8 @@ AgentScope Java 的实施依据。文档以现有代码为基线，目标读者�
 7. [分阶段 PRD/PDC](delivery/phase-prds.md)：每阶段可直接领取的开发任务、测试与验收。
 8. [AI 实施手册](delivery/ai-implementation-playbook.md)：代码约束、执行顺序、交付模板。
 9. [需求追踪与完成审计](delivery/acceptance-traceability.md)：逐项证明迁移完成的证据。
+10. [本地 ClickHouse（无 Docker）](development/local-clickhouse.md)：固定版本、隔离数据目录、
+    seed 与真实 Java 工具测试。
 
 ## P1 契约冻结产出
 

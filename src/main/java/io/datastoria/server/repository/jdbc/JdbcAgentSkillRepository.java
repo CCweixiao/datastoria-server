@@ -27,6 +27,8 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
               rs.getString("state"),
               rs.getString("scope"),
               rs.getString("version"),
+              rs.getString("bundle_checksum"),
+              rs.getBoolean("builtin"),
               rs.getLong("revision"),
               SqlTimestamps.fromParam(rs, "created_at"),
               SqlTimestamps.fromParam(rs, "updated_at"),
@@ -91,6 +93,7 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
                 """
                 UPDATE ds_agent_skill
                 SET content = :content, state = :state, scope = :scope, version = :version,
+                    bundle_checksum = :bundleChecksum, builtin = :builtin,
                     revision = revision + 1, updated_at = :updatedAt, deleted_at = NULL
                 WHERE tenant_id = :tenantId AND id = :id AND owner_user_id = :ownerUserId
                 """)
@@ -98,6 +101,8 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
             .param("state", skill.state())
             .param("scope", skill.scope())
             .param("version", skill.version())
+            .param("bundleChecksum", skill.bundleChecksum())
+            .param("builtin", skill.builtin())
             .param("updatedAt", SqlTimestamps.toParam(now))
             .param("tenantId", skill.tenantId())
             .param("id", skill.id())
@@ -107,11 +112,11 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
       jdbc.sql(
               """
               INSERT INTO ds_agent_skill
-                (id, tenant_id, owner_user_id, content, state, scope, version, revision,
-                 created_at, updated_at)
+                (id, tenant_id, owner_user_id, content, state, scope, version, bundle_checksum,
+                 builtin, revision, created_at, updated_at)
               VALUES
-                (:id, :tenantId, :ownerUserId, :content, :state, :scope, :version, 0,
-                 :createdAt, :updatedAt)
+                (:id, :tenantId, :ownerUserId, :content, :state, :scope, :version,
+                 :bundleChecksum, :builtin, 0, :createdAt, :updatedAt)
               """)
           .param("id", skill.id())
           .param("tenantId", skill.tenantId())
@@ -120,6 +125,8 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
           .param("state", skill.state())
           .param("scope", skill.scope())
           .param("version", skill.version())
+          .param("bundleChecksum", skill.bundleChecksum())
+          .param("builtin", skill.builtin())
           .param("createdAt", SqlTimestamps.toParam(now))
           .param("updatedAt", SqlTimestamps.toParam(now))
           .update();

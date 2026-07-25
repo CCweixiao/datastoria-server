@@ -37,6 +37,8 @@ management:
 # In production this comes from DATASTORIA_MASTER_KEY env var (never committed).
 datastoria:
   master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  skills:
+    seed-enabled: true
   identity:
     default-tenant: tenant-local
     default-user: dev@example.com

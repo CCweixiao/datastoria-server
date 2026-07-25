@@ -38,6 +38,8 @@ import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.ChatSessionRepository;
 import io.datastoria.server.repository.ModelRepository;
 import io.datastoria.server.service.ClickHouseConnectionService;
+import io.datastoria.server.skill.BuiltinSkillProvisioner;
+import io.datastoria.server.skill.SkillToolAvailability;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -79,6 +81,8 @@ public class ChatRunService {
   private final AgentDefinitionRepository agentDefinitionRepository;
   private final AgentRevisionRepository agentRevisionRepository;
   private final AgentSkillRepository skillRepository;
+  private final BuiltinSkillProvisioner builtinSkillProvisioner;
+  private final SkillToolAvailability skillToolAvailability;
   private final ClickHouseConnectionService clickHouseConnectionService;
   private final ModelAdapterProvider modelAdapterProvider;
   private final RunLifecycleRecorder lifecycleRecorder;
@@ -94,6 +98,8 @@ public class ChatRunService {
       AgentDefinitionRepository agentDefinitionRepository,
       AgentRevisionRepository agentRevisionRepository,
       AgentSkillRepository skillRepository,
+      BuiltinSkillProvisioner builtinSkillProvisioner,
+      SkillToolAvailability skillToolAvailability,
       ClickHouseConnectionService clickHouseConnectionService,
       ModelAdapterProvider modelAdapterProvider,
       RunLifecycleRecorder lifecycleRecorder,
@@ -107,6 +113,8 @@ public class ChatRunService {
     this.agentDefinitionRepository = agentDefinitionRepository;
     this.agentRevisionRepository = agentRevisionRepository;
     this.skillRepository = skillRepository;
+    this.builtinSkillProvisioner = builtinSkillProvisioner;
+    this.skillToolAvailability = skillToolAvailability;
     this.clickHouseConnectionService = clickHouseConnectionService;
     this.modelAdapterProvider = modelAdapterProvider;
     this.lifecycleRecorder = lifecycleRecorder;
@@ -259,8 +267,10 @@ public class ChatRunService {
   }
 
   private AgentRunCapabilities resolveCapabilities(AgentChatRequest req, Identity identity) {
+    builtinSkillProvisioner.provision(identity.tenantId());
     java.util.List<io.agentscope.core.skill.AgentSkill> skills =
         skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
+            .filter(skill -> skillToolAvailability.isAvailable(skill.content(), skill.id()))
             .map(
                 skill -> {
                   java.util.Map<String, String> resources =

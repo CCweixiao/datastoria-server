@@ -23,6 +23,8 @@ spring:
 
 datastoria:
   master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  skills:
+    seed-enabled: false
   identity:
     default-tenant: tenant-test
     default-user: dev@example.com
