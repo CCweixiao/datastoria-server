@@ -17,12 +17,19 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
+import io.datastoria.server.agent.domain.AgentCheckpoint;
+import io.datastoria.server.agent.domain.AgentRun;
+import io.datastoria.server.agent.domain.AgentRunStatus;
+import io.datastoria.server.agent.domain.CheckpointType;
+import io.datastoria.server.agent.domain.RunTransition;
 import io.datastoria.server.domain.AgentDefinition;
 import io.datastoria.server.domain.AgentRevision;
 import io.datastoria.server.domain.ModelProvider;
 import io.datastoria.server.domain.Ulid;
+import io.datastoria.server.repository.AgentCheckpointRepository;
 import io.datastoria.server.repository.AgentDefinitionRepository;
 import io.datastoria.server.repository.AgentRevisionRepository;
+import io.datastoria.server.repository.AgentRunRepository;
 import io.datastoria.server.repository.ModelProviderRepository;
 
 /**
@@ -66,6 +73,8 @@ class MysqlRepositoryIT {
   @Autowired AgentDefinitionRepository agentDefRepo;
   @Autowired AgentRevisionRepository agentRevRepo;
   @Autowired ModelProviderRepository providerRepo;
+  @Autowired AgentRunRepository runRepo;
+  @Autowired AgentCheckpointRepository checkpointRepo;
   @Autowired JdbcClient jdbc;
 
   @Test
@@ -133,5 +142,137 @@ class MysqlRepositoryIT {
     assertThat(published.status()).isEqualTo("published");
     assertThat(published.publishedRevisionId()).isEqualTo(rev.id());
     assertThat(published.updatedAt()).isNotNull();
+  }
+
+  @Test
+  void agentRunStateMachineOnMysql() {
+    String tenant = "tenant-mysql-it";
+    insertSession("sess_run", tenant);
+    Instant now = Instant.now();
+    AgentRun run =
+        new AgentRun(
+            Ulid.next(),
+            tenant,
+            "admin",
+            "sess_run",
+            null,
+            "arev",
+            "mdl",
+            AgentRunStatus.RUNNING,
+            "idem-run",
+            "idem-run",
+            null,
+            null,
+            null,
+            null,
+            null,
+            0L,
+            now,
+            null,
+            now,
+            now);
+    runRepo.create(run);
+
+    assertThat(
+            runRepo.transition(
+                tenant,
+                run.id(),
+                AgentRunStatus.SUCCEEDED,
+                RunTransition.completing(now, "{\"out\":5}")))
+        .isTrue();
+    // Idempotent re-complete does not bump revision.
+    long rev = runRepo.find(tenant, run.id()).orElseThrow().revision();
+    runRepo.transition(
+        tenant, run.id(), AgentRunStatus.SUCCEEDED, RunTransition.completing(now, null));
+    AgentRun done = runRepo.find(tenant, run.id()).orElseThrow();
+    assertThat(done.status()).isEqualTo(AgentRunStatus.SUCCEEDED);
+    assertThat(done.revision()).isEqualTo(rev);
+  }
+
+  @Test
+  void agentCheckpointUpsertOnMysql() {
+    String tenant = "tenant-mysql-it";
+    insertSession("sess_cp", tenant);
+    Instant now = Instant.now();
+    String runId = Ulid.next();
+    runRepo.create(
+        new AgentRun(
+            runId,
+            tenant,
+            "admin",
+            "sess_cp",
+            null,
+            "arev",
+            "mdl",
+            AgentRunStatus.RUNNING,
+            "idem-cp",
+            "idem-cp",
+            null,
+            null,
+            null,
+            null,
+            null,
+            0L,
+            now,
+            null,
+            now,
+            now));
+
+    checkpointRepo.save(
+        new AgentCheckpoint(
+            Ulid.next(),
+            tenant,
+            runId,
+            1,
+            CheckpointType.RUN_STATE,
+            "{\"v\":1}",
+            "v1",
+            "c1",
+            now,
+            now));
+    // Overwrite at sequence 1 (new id, new content).
+    checkpointRepo.save(
+        new AgentCheckpoint(
+            Ulid.next(),
+            tenant,
+            runId,
+            1,
+            CheckpointType.RUN_STATE,
+            "{\"v\":2}",
+            "v1",
+            "c2",
+            now,
+            now));
+    // Append at sequence 2.
+    checkpointRepo.save(
+        new AgentCheckpoint(
+            Ulid.next(),
+            tenant,
+            runId,
+            2,
+            CheckpointType.RUN_STATE,
+            "{\"v\":3}",
+            "v1",
+            "c3",
+            now,
+            now));
+
+    var all = checkpointRepo.findAllByRun(tenant, runId);
+    assertThat(all).hasSize(2);
+    assertThat(checkpointRepo.findLatest(tenant, runId).orElseThrow().stateJson())
+        .contains("\"v\":3");
+  }
+
+  private void insertSession(String id, String tenant) {
+    Instant now = Instant.now();
+    jdbc.sql(
+            "INSERT INTO ds_chat_session"
+                + " (id, tenant_id, user_id, connection_id, title, revision, created_at, updated_at)"
+                + " VALUES (:id,:t,:u,'ch','t',0,:now,:now)")
+        .param("id", id)
+        .param("t", tenant)
+        .param("u", "admin")
+        .param("now", now.toString())
+        .update();
   }
 }

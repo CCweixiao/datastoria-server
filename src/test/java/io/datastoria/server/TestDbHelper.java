@@ -11,6 +11,8 @@ public class TestDbHelper {
     "ds_session_share",
     "ds_feedback_event",
     "ds_chat_message",
+    "ds_agent_checkpoint",
+    "ds_agent_run",
     "ds_chat_session",
     "ds_agent_revision",
     "ds_agent_definition",

@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1（已通过 review）+ P4.2（本次）**
+> 本次交付：**P4.1 + P4.2（已通过 review）+ P4.3（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1、P4.2 review 已通过；可开始 P4.3，P4.3–P4.8 未开始。
+> 状态：P4.1、P4.2 review 已通过；**P4.3 已实现，待 review**；P4.4–P4.8 未开始。
 
 ---
 
@@ -293,3 +293,164 @@ docs/delivery/p4-implementation-report.md                                  (追�
 - 验证：默认 SQLite repository contract + MySQL Testcontainers（CI），dialect parity。
 
 **停在 P4.2 review，不自动开始 P4.3。**
+
+---
+
+# P4.3 — Agent Run / Checkpoint 数据模型（本次交付，待 review）
+
+## P4.3-0. 范围
+
+落地 Agent run 生命周期与 checkpoint 的双方言持久化层（`ds_agent_run` / `ds_agent_checkpoint`），
+完全遵循 `docs/design/database-data-model.md §8`。**AgentScope 内部状态绝不写入
+`ds_chat_message`**——产品消息与 run 状态严格分离，AgentScope state 只以 DataStoria 自有 adapter
+产出的 opaque `state_json` 存入 `ds_agent_checkpoint`，repository 不暴露 AgentScope `State` 类型。
+
+**明确非目标（未实现）**：AI SDK encoder（P4.5）、A01 Java chat API（P4.6）、前端 gateway（P4.7）、
+端到端验证（P4.8）、真实 AgentScope state 序列化 adapter（P4.4/P4.8）。本阶段的 checkpoint 只存
+opaque JSON payload，验证存储/读取/覆盖/顺序语义。**不涉及 P5+ 的 Skill、业务工具、sandbox。**
+
+## P4.3-1. 完成范围
+
+| 子任务 | 交付物 | 状态 |
+| --- | --- | --- |
+| V5 双方言 migration | `db/migration/{sqlite,mysql}/V5__agent_run_and_checkpoint.sql` | ✅ |
+| ds_agent_run | 状态列 + CHECK、`UNIQUE(tenant,user,idempotency_key)`、`UNIQUE(tenant,id)`、tenant/session 索引、FK→session CASCADE | ✅ |
+| ds_agent_checkpoint | `UNIQUE(tenant,run,sequence)`、`state_json` json_valid CHECK、FK→run CASCADE | ✅ |
+| Domain + 状态机 | `agent.domain`：`AgentRunStatus`（7 态 + 迁移表）、`AgentRun`、`AgentCheckpoint`、`CheckpointType`、`RunTransition`、`IllegalRunTransitionException`（均 AgentScope-free） | ✅ |
+| Repository | `AgentRunRepository` / `AgentCheckpointRepository` 接口 + `JdbcAgentRunRepository` / `JdbcAgentCheckpointRepository`（`JdbcClient`，全查询带 `tenant_id`） | ✅ |
+| 取消 observer 持久化 | `agent.application.RunCancellationPersister`（`Consumer<RunCancelled>`，复用 P4.2 observer 缝隙，JDBC 在专用 executor 执行不阻塞 Netty） | ✅ |
+| 测试 | V5SchemaSmokeTest(7) + SqliteAgentRunRepositoryTest(13) + SqliteAgentCheckpointRepositoryTest(4) + RunCancellationPersisterTest(2) = 26；+ MysqlRepositoryIT 新增 2（MySQL） | ✅ |
+
+## P4.3-2. 关键设计决策
+
+1. **状态集合以 doc §8 为准**：`queued/running/waiting_input/succeeded/failed/cancelled/expired`。
+   P4.3 实现 `QUEUED→RUNNING`、`RUNNING→{SUCCEEDED,FAILED,CANCELLED}` 等迁移；`WAITING_INPUT`(HITL) 与
+   `EXPIRED`(timeout) 状态已定义，留给 P4.6/P4.8。（用户指令中的 “COMPLETED” 对应 doc 的 `succeeded`，
+   P4.2 的 `RunCompleted` 事件映射为持久化 `status=succeeded`。）
+2. **终态不可逆**：`AgentRunStatus.canTransitionTo` —— 终态（succeeded/failed/cancelled/expired）自迁移
+   幂等成功，迁移到任何**别的**状态均非法；尤其不能回到 `RUNNING`。`IllegalRunTransitionException`
+   消息只含 runId + 状态，无 prompt/凭据。
+3. **乐观锁避免终态互相覆盖**：`transition` / `applyCancellation` 用
+   `UPDATE ... WHERE id AND tenant_id AND revision = :expected`。0 行更新后 **re-read**：若已落在目标态
+   视为幂等成功，若落在别的状态则抛 `IllegalRunTransitionException`——并发终态竞争必有一个赢、另一个
+   被拒，绝不互相覆盖。测试 `concurrentTerminalTransitionsDoNotOverwrite` 验证（两线程 succeeded vs
+   cancelled → 恰好一个落地、revision==1）。
+4. **幂等**：`succeeded→succeeded`、`cancelled→cancelled` 为 no-op 成功，不 bump revision（测试覆盖）。
+5. **租户边界在 repository**：`find/transition/findByIdempotencyKey/findBySession` 及 checkpoint 全部读写
+   都带 `tenant_id`；`applyCancellation`（observer 入口，只有 runId）先按全局唯一 ULID 解析行得到
+   tenant，再走 tenant-scoped `UPDATE`。**不依赖 controller 做隔离**（跨租户负例测试覆盖）。
+6. **cancel lifecycle observer**：`RunCancellationPersister` 接收 P4.2 `AgentRunService` 在 CANCEL 信号
+   发出的 `RunCancelled`，经专用 daemon executor 调 `applyCancellation` 持久化 `cancelled`（JDBC 不阻塞
+   event loop）；**不向已取消的 Flux 回推事件**。late cancel 到达已终态 run 为安全 no-op（return false，
+   不抛）。AgentRunService 未改动（冻结）。
+7. **checkpoint 语义**：按 `(tenant,run,sequence)` **upsert**——同 sequence 覆盖（保留 `created_at`、
+   bump `updated_at`），新 sequence 追加；latest = max(sequence)。采用项目既有 lookup-then-upsert 约定，
+   不用方言专属 `ON CONFLICT`/`ON DUPLICATE KEY`。
+8. **checkpoint 隔离边界**：`state_json` 为 opaque 字符串（DataStoria adapter 产出），repository 永不引用
+   AgentScope `State`；adapter 必须排除 prompt / API key / provider credential（约束写在接口与 DDL 注释）。
+9. **无 `@Transactional`**：遵循项目既有约定（main 代码无 `@Transactional`），靠条件 UPDATE + DB 约束 +
+   lookup-then-upsert 保证正确性；时间戳统一走 `SqlTimestamps`（SQLite ISO-8601 / MySQL datetime(6)）。
+
+## P4.3-3. 测试命令与结果
+
+```
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./mvnw -B -ntp spotless:apply clean verify
+```
+
+- 全量：`Tests run: 219, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.3 新增 SQLite/persister 测试 **26 个**（V5SchemaSmokeTest 7 + SqliteAgentRunRepositoryTest 13 +
+  SqliteAgentCheckpointRepositoryTest 4 + RunCancellationPersisterTest 2），专项：
+  `./mvnw test -Dtest='V5SchemaSmokeTest,SqliteAgentRunRepositoryTest,SqliteAgentCheckpointRepositoryTest,RunCancellationPersisterTest'` → 26/26。
+- P4.1/P4.2 全部测试仍通过（生命周期未改动）。
+- 无真实网络、无 API key、无真实 provider。
+
+P4.3 测试覆盖矩阵：
+
+| 测试 | 不变量 |
+| --- | --- |
+| V5SchemaSmokeTest | status CHECK、idempotency 唯一、checkpoint sequence 唯一、`json_valid`、FK CASCADE（删 run→checkpoint、删 session→run+checkpoint） |
+| SqliteAgentRunRepositoryTest | create/find 往返、**租户隔离**、idempotency-key 跨租户/用户、session 排序、**合法迁移**、**非法终态迁移被拒**、**终态幂等**、NotFound/cross-tenant、**并发终态不互相覆盖**、observer cancel、late-cancel 不复活终态 |
+| SqliteAgentCheckpointRepositoryTest | append、**overwrite 保留 created_at**、latest=max(seq)、**租户隔离** |
+| RunCancellationPersisterTest | observer→cancelled、幂等、未知 run 安全 |
+
+## P4.3-4. 安全检查
+
+- **租户隔离**：所有 repository 读写带 `tenant_id`；跨租户 `find`/`transition`/`findByIdempotencyKey`/
+  checkpoint 读均返回空或抛 NotFound（测试覆盖）。`applyCancellation` 解析 tenant 后走 tenant-scoped UPDATE。
+- **prompt / key / credential 不入库**：`ds_agent_run` 只存 `input_snapshot_json`（pin 的 revision id 等非敏感
+  元数据）、`usage_json`（token 计数）、`error_code`（`RunFailureCode` 名）+ 固定 `safe_message`；
+  `ds_agent_checkpoint.state_json` 由 DataStoria adapter 产出且约束排除敏感数据。错误文本以
+  `RunFailureCode.safeMessage()` 固定串持久化，永不透传 raw provider 异常。
+- **AgentScope 隔离边界**：`agent.domain` / `repository` / `repository.jdbc` 均不引用 `io.agentscope.*`；
+  AgentScope 类型仍只在 `agent.runtime`。
+- **JDBC 不阻塞 Netty**：observer 的 JDBC 写在专用 daemon executor；repository 为命令式 JDBC（由 P4.6
+  controller 在 bounded scheduler 调度，不在 event loop）。
+- P4.3 未新增 HTTP 端点、未改任何 P3/P4.2 运行时行为、未改 `AgentRunService`（冻结）。
+
+## P4.3-5. MySQL / dialect parity 执行情况
+
+- **本机未执行 MySQL**：`docker info` 不可用 → `SchemaParityTest`（@BeforeAll `Assumptions.abort`，Tests run: 0）
+  与 `MysqlRepositoryIT`（fallback SQLite + `assumeTrue` 跳过）均未实际跑。与 P3/P4.1/P4.2 一致。
+- V5 已同时提供 SQLite + MySQL 两份 migration，列名 / PK / FK / 唯一键一致（`SchemaParityTest` 在 CI
+  Docker 环境自动覆盖 `ds_agent_run` / `ds_agent_checkpoint`）；`MysqlRepositoryIT` 新增 2 个用例
+  （run 状态机 + checkpoint upsert）由 CI `mysql-contract` 兜底。
+- 真实 provider smoke：未执行（P4.6 范围）。
+
+## P4.3-6. 回滚
+
+- P4.3 为**纯新增**：2 份 V5 migration + `agent.domain` 新类型 + 2 个 repository 接口/实现 +
+  `RunCancellationPersister` + 测试 + `TestDbHelper` 增 2 表。无 P4.2 运行时改动、无端点、无配置。
+- 回滚 = 删除上述文件 + 撤销 `MysqlRepositoryIT`/`TestDbHelper` 的新增行 + 撤销报告 P4.3 段。Flyway V5
+  回滚采用备份恢复/前向修复（不写破坏性 down migration，符合 doc §10）。
+- 对线上无影响：未引入 Spring bean 装配以外的运行时行为变化（repository/persister 为新增 `@Repository`/普通类）。
+
+## P4.3-7. 已知风险（不阻断 P4.4）
+
+1. **乐观锁 0-rows 重检路径**：本地 SQLite 单连接（test `maximum-pool-size=1`）下并发测试为串行化执行，
+   验证的是“终态不互相覆盖”的不变量；真正的多连接并发竞争（条件 UPDATE 返回 0 行后 re-read）由 CI
+   `MysqlRepositoryIT`（多连接 Testcontainer）覆盖。本地未跑 MySQL（见 §5）。
+2. **run→session / checkpoint→run CASCADE 删除**：删 session 会级联删 run+checkpoint。若将来需要 run 审计
+   保留，需调整 FK 策略或加 retention（doc §8 提及 TTL，留给后续）。
+3. **idempotency_key 可空**：`UNIQUE(tenant,user,idempotency_key)` 允许多个 NULL（无 key 的 run 不去重）；
+   幂等去重由 P4.6 controller 用 `findByIdempotencyKey` lookup-then-create 实现。
+4. **AgentScope state adapter 未实现**：checkpoint 当前存 opaque JSON；真实 AgentScope `State` ↔ `state_json`
+   的序列化 adapter 在 P4.4/P4.8，届时须保证不含 prompt/key。
+5. **`applyCancellation` 按 runId 解析 tenant**：runId 为全局唯一 ULID，且该入口仅服务端 observer 调用
+   （非客户端请求），无租户混淆面；客户端 cancel 端点（P4.6）将额外 tenant-scoped 校验。
+
+## P4.3-8. 修改文件
+
+```
+src/main/resources/db/migration/sqlite/V5__agent_run_and_checkpoint.sql          (新增)
+src/main/resources/db/migration/mysql/V5__agent_run_and_checkpoint.sql           (新增)
+src/main/java/io/datastoria/server/agent/domain/AgentRunStatus.java             (新增，状态机)
+src/main/java/io/datastoria/server/agent/domain/AgentRun.java                   (新增)
+src/main/java/io/datastoria/server/agent/domain/AgentCheckpoint.java            (新增)
+src/main/java/io/datastoria/server/agent/domain/CheckpointType.java             (新增)
+src/main/java/io/datastoria/server/agent/domain/RunTransition.java              (新增)
+src/main/java/io/datastoria/server/agent/domain/IllegalRunTransitionException.java (新增)
+src/main/java/io/datastoria/server/repository/AgentRunRepository.java           (新增)
+src/main/java/io/datastoria/server/repository/AgentCheckpointRepository.java    (新增)
+src/main/java/io/datastoria/server/repository/jdbc/JdbcAgentRunRepository.java  (新增)
+src/main/java/io/datastoria/server/repository/jdbc/JdbcAgentCheckpointRepository.java (新增)
+src/main/java/io/datastoria/server/agent/application/RunCancellationPersister.java (新增)
+src/test/java/io/datastoria/server/repository/V5SchemaSmokeTest.java            (新增)
+src/test/java/io/datastoria/server/repository/SqliteAgentRunRepositoryTest.java (新增)
+src/test/java/io/datastoria/server/repository/SqliteAgentCheckpointRepositoryTest.java (新增)
+src/test/java/io/datastoria/server/agent/application/RunCancellationPersisterTest.java (新增)
+src/test/java/io/datastoria/server/MysqlRepositoryIT.java                        (新增 run/checkpoint 用例)
+src/test/java/io/datastoria/server/TestDbHelper.java                            (增 ds_agent_checkpoint / ds_agent_run)
+docs/delivery/p4-implementation-report.md                                       (追加 P4.3)
+```
+
+## P4.3-9. 下一阶段（P4.4）计划
+
+- run/checkpoint 与 `AgentRunService`/事件流的持久化接线（run 创建于请求、completed/failed 落库、
+  RunCancelled 经 observer 落库）——属 P4.6 chat endpoint 范畴，P4.4 视 review 决定是否先做状态机
+  service 封装。
+- 真实 AgentScope `State` ↔ `state_json` 的 DataStoria adapter（序列化、checksum、codec_version）。
+- run 事件持久化（`ds_agent_event`，doc §8 可选表）用于断线续传 / `Last-Event-ID` 重放。
+
+**停在 P4.3 review，不自动开始 P4.4。**
+
