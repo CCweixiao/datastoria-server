@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { validateSessionId } from "./remote-chat-request";
 
 export const AI_FEEDBACK_SOURCES = ["auto_explain_error"] as const;
@@ -14,36 +13,11 @@ export const AUTO_EXPLAIN_NEGATIVE_REASON_CODES = [
 
 export type AutoExplainNegativeReasonCode = (typeof AUTO_EXPLAIN_NEGATIVE_REASON_CODES)[number];
 
-export const autoExplainFeedbackPayloadSchema = z.object({
-  queryId: z.string().trim().min(1).max(255),
-  errorCode: z.string().trim().min(1).max(64).nullable().optional(),
-  sql: z.string().trim().min(1).max(100000).nullable().optional(),
-});
-
-export type AutoExplainFeedbackPayload = z.infer<typeof autoExplainFeedbackPayloadSchema>;
-
-const feedbackUpsertRequestSchema = z
-  .object({
-    source: z.enum(AI_FEEDBACK_SOURCES),
-    sessionId: z.string().refine(validateSessionId, {
-      message: "sessionId must be a non-empty string with max length 64",
-    }),
-    messageId: z.string().trim().min(1).max(255),
-    solved: z.boolean(),
-    reasonCode: z.enum(AUTO_EXPLAIN_NEGATIVE_REASON_CODES).nullable().optional(),
-    freeText: z.string().trim().max(2000).nullable().optional(),
-    payload: autoExplainFeedbackPayloadSchema,
-    recoveryActionTaken: z.boolean().optional().default(false),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.solved && !value.reasonCode) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "reasonCode is required when solved is false",
-        path: ["reasonCode"],
-      });
-    }
-  });
+export type AutoExplainFeedbackPayload = {
+  queryId: string;
+  errorCode?: string | null;
+  sql?: string | null;
+};
 
 export type AIFeedbackEventPayload = AutoExplainFeedbackPayload;
 
@@ -66,24 +40,74 @@ export function normalizeFeedbackText(value: string | null | undefined): string 
 export function validateUpsertFeedbackEventRequest(
   payload: unknown
 ): UpsertFeedbackEventRequest | null {
-  const result = feedbackUpsertRequestSchema.safeParse(payload);
-  if (!result.success) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const value = payload as Record<string, unknown>;
+  const detail =
+    value.payload && typeof value.payload === "object"
+      ? (value.payload as Record<string, unknown>)
+      : null;
+  const source = value.source;
+  const sessionId = value.sessionId;
+  const messageId = typeof value.messageId === "string" ? value.messageId.trim() : "";
+  const solved = value.solved;
+  const reasonCode = value.reasonCode;
+  const queryId = typeof detail?.queryId === "string" ? detail.queryId.trim() : "";
+  const errorCode =
+    detail?.errorCode == null
+      ? null
+      : typeof detail.errorCode === "string"
+        ? detail.errorCode.trim()
+        : undefined;
+  const sql =
+    detail?.sql == null ? null : typeof detail.sql === "string" ? detail.sql.trim() : undefined;
+  const freeText =
+    value.freeText == null
+      ? null
+      : typeof value.freeText === "string"
+        ? value.freeText.trim()
+        : undefined;
+  const validReason =
+    reasonCode == null ||
+    AUTO_EXPLAIN_NEGATIVE_REASON_CODES.includes(reasonCode as AutoExplainNegativeReasonCode);
+
+  if (
+    source !== "auto_explain_error" ||
+    typeof sessionId !== "string" ||
+    !validateSessionId(sessionId) ||
+    !messageId ||
+    messageId.length > 255 ||
+    typeof solved !== "boolean" ||
+    !detail ||
+    !queryId ||
+    queryId.length > 255 ||
+    errorCode === undefined ||
+    (errorCode?.length ?? 0) > 64 ||
+    sql === undefined ||
+    (sql?.length ?? 0) > 100_000 ||
+    freeText === undefined ||
+    (freeText?.length ?? 0) > 2_000 ||
+    !validReason ||
+    (!solved && reasonCode == null) ||
+    (value.recoveryActionTaken != null && typeof value.recoveryActionTaken !== "boolean")
+  ) {
     return null;
   }
 
   return {
-    source: result.data.source,
-    sessionId: result.data.sessionId,
-    messageId: result.data.messageId,
-    solved: result.data.solved,
-    reasonCode: result.data.solved ? null : (result.data.reasonCode ?? null),
+    source,
+    sessionId,
+    messageId,
+    solved,
+    reasonCode: solved ? null : (reasonCode as AutoExplainNegativeReasonCode),
     payload: {
-      queryId: result.data.payload.queryId,
-      errorCode: result.data.payload.errorCode ?? null,
-      sql: normalizeFeedbackText(result.data.payload.sql),
+      queryId,
+      errorCode,
+      sql: normalizeFeedbackText(sql),
     },
-    freeText: result.data.solved ? null : normalizeFeedbackText(result.data.freeText),
-    recoveryActionTaken: result.data.recoveryActionTaken,
+    freeText: solved ? null : normalizeFeedbackText(freeText),
+    recoveryActionTaken: (value.recoveryActionTaken as boolean | undefined) ?? false,
   };
 }
 

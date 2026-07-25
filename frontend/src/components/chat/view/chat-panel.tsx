@@ -12,11 +12,11 @@ import { useConnection } from "@/components/connection/connection-context";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
+import type { RemoteChat } from "@/lib/ai/session/remote-chat";
 import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
-import type { Connection } from "@/lib/connection/connection";
 import { backendApiFetch } from "@/lib/backend-api";
+import type { Connection } from "@/lib/connection/connection";
 import { toastManager } from "@/lib/toast";
-import type { Chat } from "@ai-sdk/react";
 import { Download, Loader2, Maximize2, Minimize2, Plus, Share2, Square, X } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -284,7 +284,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     toggleDisplayMode,
     selectChat,
   } = useChatPanel();
-  const [chat, setChat] = useState<Chat<AppUIMessage> | null>(null);
+  const [chat, setChat] = useState<RemoteChat | null>(null);
   const [chatTitle, setChatTitle] = useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState(false);
   const [isSharing, setIsSharing] = useState(false);

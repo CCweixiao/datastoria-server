@@ -14,12 +14,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModelConfig } from "@/hooks/use-model-config";
+import type { LanguageModelUsage } from "@/lib/ai/ai-types";
 import type { CommandDetail } from "@/lib/ai/commands/command-manager";
 import { resolveModelSupportsImageInput } from "@/lib/ai/llm/llm-provider-factory";
 import type { ClickHouseSetting } from "@/lib/clickhouse/clickhouse-setting-loader";
 import type { DatabaseInfo, TableInfo } from "@/lib/connection/connection";
 import { cn } from "@/lib/utils";
-import type { LanguageModelUsage } from "ai";
 import { ImagePlus, MessageSquarePlus, Plus, Send, Square, X } from "lucide-react";
 import * as React from "react";
 import { useAgentCommands } from "../agent-command-context";

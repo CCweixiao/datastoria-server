@@ -1181,3 +1181,27 @@ ID，不携带 secret。对话联调应验证两轮历史、刷新后的 assista
   和优先级由自动化测试覆盖。
 
 **P4.8 已完成并停止；不自动开始 P5。前后端联调已经可以在 P5 开始前进行。**
+
+## P4.8-5. 后续完整迁移审计修复（2026-07-25）
+
+在与原 `datastoria` 仓库逐项核对时，继续修复了两个会破坏“Java 后端唯一执行者”约束的问题：
+
+1. 前端已删除 `ai` 和 `@ai-sdk/react` 依赖，不再使用 `Chat`、`useChat` 或
+   `DefaultChatTransport`。新的 `RemoteChat` 只负责直接调用 Spring REST、解析 Java 输出的
+   UI-message SSE、维护视图状态及调用 action/resume API；它不包含 provider、Agent、Skill 或
+   Tool 执行逻辑。
+2. GitHub Copilot OAuth 模型在 Java 获取后会物化为真实 `ds_model_provider`/`ds_model` 配置，
+   返回可选的 `configId`，运行时由认证用户身份解析服务端加密 OAuth credential，再构造
+   AgentScope 模型。OAuth 模型不会混入 tenant 级 `systemModels`，避免重复展示及向没有该用户
+   credential 的其他用户暴露不可执行配置。
+
+本轮回归：
+
+- Java：`./mvnw test`，**365/365** 通过；`spotless:apply` 后专项检查通过。
+- 前端：TypeScript 通过；Vitest **57 files / 297 tests** 通过；`next build --webpack` 成功；
+  生产依赖与源码均无 `ai`/`@ai-sdk/react`。
+- 本机仍无 Docker，`SchemaParityTest` 为 **0 tests**；这项限制与上节相同。
+
+完整迁移审计仍在继续：OpenAI Codex 订阅认证使用 ChatGPT Responses API，并非
+Chat Completions。它需要独立的 Java AgentScope Responses adapter 后才能算真实接入，不能复用
+现有 OpenAI-compatible adapter。此项完成前不开始 P5。

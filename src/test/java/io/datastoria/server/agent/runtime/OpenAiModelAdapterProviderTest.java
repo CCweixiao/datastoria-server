@@ -8,13 +8,16 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
+import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.ModelProviderRepository;
+import io.datastoria.server.service.OAuthCredentialService;
 import io.datastoria.server.service.SecretService;
 
 class OpenAiModelAdapterProviderTest {
@@ -28,7 +31,8 @@ class OpenAiModelAdapterProviderTest {
     when(secrets.decrypt("model-secret", "tenant-1")).thenReturn("sk-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(providers, secrets).adapterFor(model("model-secret"));
+        new OpenAiModelAdapterProvider(providers, secrets, mock(OAuthCredentialService.class))
+            .adapterFor(model("model-secret"));
 
     assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
     verify(secrets).decrypt("model-secret", "tenant-1");
@@ -42,9 +46,29 @@ class OpenAiModelAdapterProviderTest {
         .thenReturn(Optional.of(provider("anthropic", null, "provider-secret")));
 
     assertThatThrownBy(
-            () -> new OpenAiModelAdapterProvider(providers, secrets).adapterFor(model(null)))
+            () ->
+                new OpenAiModelAdapterProvider(
+                        providers, secrets, mock(OAuthCredentialService.class))
+                    .adapterFor(model(null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Unsupported provider type");
+  }
+
+  @Test
+  void resolvesGitHubCopilotCredentialFromAuthenticatedUserOAuth() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    OAuthCredentialService oauth = mock(OAuthCredentialService.class);
+    Identity identity = new Identity("tenant-1", "user-1", Set.of("ROLE_USER"));
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(Optional.of(provider("github-copilot", "https://api.githubcopilot.com", null)));
+    when(oauth.accessToken("github", identity)).thenReturn("oauth-server-only");
+
+    ModelAdapter adapter =
+        new OpenAiModelAdapterProvider(providers, secrets, oauth).adapterFor(model(null), identity);
+
+    assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
+    verify(oauth).accessToken("github", identity);
   }
 
   private static Model model(String secretId) {

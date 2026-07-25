@@ -1,4 +1,4 @@
-import type { LanguageModelUsage } from "ai";
+import type { LanguageModelUsage } from "@/lib/ai/ai-types";
 
 const ZERO_USAGE: LanguageModelUsage = {
   inputTokens: 0,

@@ -14,9 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
 import type { AutoExplainNegativeReasonCode } from "@/lib/ai/session/feedback-events";
+import { useRemoteChat, type RemoteChat } from "@/lib/ai/session/remote-chat";
 import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
 import { backendApiFetch } from "@/lib/backend-api";
-import { useChat, type Chat } from "@ai-sdk/react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -165,24 +165,24 @@ const AutoExplainFeedback = memo(function AutoExplainFeedback({
       const response = await backendApiFetch(
         `${getSessionApiBase()}/api/ai/chat/feedback/auto-explain`,
         {
-        method: "POST",
-        headers: sessionIdentityHeaders({
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          source: "auto_explain_error",
-          sessionId,
-          messageId: assistantMessageId,
-          solved,
-          reasonCode: solved ? null : selectedReason,
-          freeText: solved ? null : freeText,
-          recoveryActionTaken,
-          payload: {
-            queryId,
-            errorCode: errorCode ?? null,
-            sql: sql ?? null,
-          },
-        }),
+          method: "POST",
+          headers: sessionIdentityHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({
+            source: "auto_explain_error",
+            sessionId,
+            messageId: assistantMessageId,
+            solved,
+            reasonCode: solved ? null : selectedReason,
+            freeText: solved ? null : freeText,
+            recoveryActionTaken,
+            payload: {
+              queryId,
+              errorCode: errorCode ?? null,
+              sql: sql ?? null,
+            },
+          }),
         }
       );
 
@@ -428,7 +428,7 @@ export const QueryErrorAIExplanation = memo(function QueryErrorAIExplanation({
   sql,
 }: QueryErrorAIExplanationProps) {
   const { connection } = useConnection();
-  const [chat, setChat] = useState<Chat<AppUIMessage> | null>(null);
+  const [chat, setChat] = useState<RemoteChat | null>(null);
   const chatQueryIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -488,12 +488,10 @@ const QueryErrorAIExplanationContent = memo(function QueryErrorAIExplanationCont
   sql,
   connectionId,
 }: QueryErrorAIExplanationProps & {
-  chat: Chat<AppUIMessage>;
+  chat: RemoteChat;
   connectionId: string;
 }) {
-  const { messages, error, sendMessage, status, stop } = useChat({
-    chat,
-  });
+  const { messages, error, sendMessage, status, stop } = useRemoteChat(chat);
   const sentKeyRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hasRequested, setHasRequested] = useState(false);

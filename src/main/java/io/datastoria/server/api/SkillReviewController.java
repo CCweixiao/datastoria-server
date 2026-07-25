@@ -91,7 +91,7 @@ public class SkillReviewController {
                   new HarnessAgentFactory()
                       .create(
                           context,
-                          adapters.adapterFor(model),
+                          adapters.adapterFor(model, identity),
                           AgentRuntimeConfig.minimal(
                               "Review the supplied AI skill file. Return valid JSON only."),
                           prompt(skillId, path, content));

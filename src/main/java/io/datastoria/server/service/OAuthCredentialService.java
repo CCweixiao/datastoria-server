@@ -125,6 +125,21 @@ public class OAuthCredentialService {
         .flatMap(bundle -> remote.getGitHubModels(text(bundle.payload(), "access_token")));
   }
 
+  /** Returns a decrypted access token only to the server-side model adapter boundary. */
+  public String accessToken(String provider, Identity identity) {
+    OAuthCredential credential =
+        credentials
+            .findByOwner(identity.tenantId(), identity.userId(), provider)
+            .orElseThrow(() -> new NotFoundException("OAuthCredential", provider));
+    try {
+      return text(
+          mapper.readTree(secrets.decrypt(credential.secretId(), identity.tenantId())),
+          "access_token");
+    } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+      throw new IllegalStateException("Stored OAuth credential is invalid", exception);
+    }
+  }
+
   private Mono<OAuthCredentialResponse> persist(
       String provider, JsonNode payload, Identity identity) {
     if (payload.hasNonNull("error")) {

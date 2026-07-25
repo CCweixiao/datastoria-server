@@ -1,12 +1,17 @@
 import { AppLogo } from "@/components/app-logo";
 import { UserProfileImage } from "@/components/user-profile-image";
-import type { AppUIMessage, FilePart, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
+import type {
+  AppUIMessage,
+  FilePart,
+  LanguageModelUsage,
+  PendingActionData,
+  ToolPart,
+} from "@/lib/ai/ai-types";
 import { CLICKHOUSE_TOOL_NAMES } from "@/lib/ai/tools/clickhouse/clickhouse-tools";
 import { HUMAN_INTERACTION_TOOL_NAMES } from "@/lib/ai/tools/server/human-interaction-types";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
 import { DateTimeExtension } from "@/lib/datetime-utils";
 import { cn } from "@/lib/utils";
-import type { LanguageModelUsage } from "ai";
 import { Info, Loader2 } from "lucide-react";
 import { memo } from "react";
 import {

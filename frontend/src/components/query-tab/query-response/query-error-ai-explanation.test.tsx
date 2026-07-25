@@ -52,8 +52,8 @@ vi.mock("@number-flow/react", () => ({
   default: () => null,
 }));
 
-vi.mock("@ai-sdk/react", () => ({
-  useChat: () => ({
+vi.mock("@/lib/ai/session/remote-chat", () => ({
+  useRemoteChat: () => ({
     messages: [],
     error: undefined,
     sendMessage: sendMessageMock,

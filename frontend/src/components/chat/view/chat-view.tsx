@@ -3,9 +3,9 @@
 import { useConnection } from "@/components/connection/connection-context";
 import type { AppUIMessage } from "@/lib/ai/ai-types";
 import { MentionContext } from "@/lib/ai/mention-context";
+import { useRemoteChat, type RemoteChat } from "@/lib/ai/session/remote-chat";
 import "@/lib/number-utils"; // Ensure formatTimeDiff is available
 
-import { useChat, type Chat } from "@ai-sdk/react";
 import {
   forwardRef,
   useCallback,
@@ -29,8 +29,6 @@ import { SampleQuestions } from "./sample-questions";
 import { type ChatComposerInput } from "./use-chat-panel";
 import { useTokenUsage } from "./use-token-usage";
 
-const CHAT_STREAM_UPDATE_THROTTLE_MS = 50;
-
 function useStableCallback<Args extends unknown[], Return>(
   callback: (...args: Args) => Return
 ): (...args: Args) => Return {
@@ -44,7 +42,7 @@ function useStableCallback<Args extends unknown[], Return>(
 }
 
 interface ChatViewProps {
-  chat: Chat<AppUIMessage>;
+  chat: RemoteChat;
   onClose?: () => void;
   onNewChat?: () => void;
   currentDatabase?: string;
@@ -75,10 +73,7 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
     }
     setPromptInput(undefined);
   }, [chat.id, externalInput]);
-  const { messages, error, sendMessage, status, stop } = useChat({
-    chat,
-    experimental_throttle: CHAT_STREAM_UPDATE_THROTTLE_MS,
-  });
+  const { messages, error, sendMessage, status, stop } = useRemoteChat(chat);
 
   // Focus input when ChatView is mounted
   useEffect(() => {

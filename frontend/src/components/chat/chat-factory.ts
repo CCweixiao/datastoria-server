@@ -5,13 +5,12 @@ import {
 import { ModelManager } from "@/components/settings/models/model-manager";
 import type { PlanToolOutput } from "@/lib/ai/agent/plan/planning-types";
 import type { AgentContext, AppUIMessage, Message } from "@/lib/ai/ai-types";
+import { RemoteChat } from "@/lib/ai/session/remote-chat";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
 import { backendApiFetch } from "@/lib/backend-api";
 import { Connection } from "@/lib/connection/connection";
-import { Chat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import { v7 as uuidv7 } from "uuid";
 import { ChatContext, type DatabaseContext } from "./chat-context";
 import { ChatUIContext } from "./chat-ui-context";
@@ -199,13 +198,10 @@ function buildChatRequestHeaders(
 }
 
 export class ChatFactory {
-  private static readonly resumeTargets = new WeakMap<
-    Chat<AppUIMessage>,
-    (runId: string) => void
-  >();
+  private static readonly resumeTargets = new WeakMap<RemoteChat, (runId: string) => void>();
 
   static async respondToQuestion(
-    chat: Chat<AppUIMessage>,
+    chat: RemoteChat,
     runId: string,
     actionId: string,
     response: unknown
@@ -242,7 +238,7 @@ export class ChatFactory {
   }
 
   static async resolveApproval(
-    chat: Chat<AppUIMessage>,
+    chat: RemoteChat,
     runId: string,
     actionId: string,
     approved: boolean
@@ -312,7 +308,7 @@ export class ChatFactory {
   /**
    * Create or retrieve a persisted chat instance
    */
-  static async create(options: ChatFactoryCreateOptions): Promise<Chat<AppUIMessage>> {
+  static async create(options: ChatFactoryCreateOptions): Promise<RemoteChat> {
     const sessionId = options.sessionId || newUniqueSessionId();
     const historicalMessages = options.initialMessages;
 
@@ -348,7 +344,10 @@ export class ChatFactory {
       },
       onFinish: async ({ message, connectionId, sessionId }) => {
         let title: string | undefined;
-        if (message.metadata?.title && typeof message.metadata.title.text === "string") {
+        if (typeof message.metadata?.title === "string") {
+          title = message.metadata.title;
+          ChatUIContext.updateTitle(title);
+        } else if (message.metadata?.title && typeof message.metadata.title.text === "string") {
           title = message.metadata.title.text;
           ChatUIContext.updateTitle(title);
         } else if (
@@ -375,7 +374,7 @@ export class ChatFactory {
    * Create an ephemeral chat instance for one-off UI surfaces.
    * Does not load history, persist messages, or request a generated title.
    */
-  static async createEphemeral(options: ChatFactoryCreateOptions): Promise<Chat<AppUIMessage>> {
+  static async createEphemeral(options: ChatFactoryCreateOptions): Promise<RemoteChat> {
     return ChatFactory.createInternal({
       ...options,
       ephemeral: true,
@@ -384,7 +383,7 @@ export class ChatFactory {
     });
   }
 
-  private static async createInternal(options: CreateInternalOptions): Promise<Chat<AppUIMessage>> {
+  private static async createInternal(options: CreateInternalOptions): Promise<RemoteChat> {
     const sessionId = options.sessionId || newUniqueSessionId();
     const modelConfig = options.model;
     const connection = options.connection ?? null;
@@ -394,88 +393,73 @@ export class ChatFactory {
     const javaApiBase = (
       process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
     ).replace(/\/+$/, "");
-    // Create Chat instance
-    const chat = new Chat<AppUIMessage>({
+    const prepareRequest = async (
+      messages: AppUIMessage[],
+      signal: AbortSignal
+    ): Promise<Response> => {
+      const currentModel = modelConfig || ChatFactory.getCurrentModelConfig();
+      await options.onPrepareSendMessagesRequest?.({
+        sessionId,
+        connection,
+        connectionId,
+        historicalMessages: options.initialMessages,
+        messages,
+      });
+      const requestContext = options.context ?? ChatContext.build();
+      const agentConfiguration = AgentConfigurationManager.getConfiguration();
+      const agentContext = buildAgentContextWithResponseLanguage(
+        options.agentContext,
+        agentConfiguration.aiResponseLanguage
+      );
+      const body = buildSendMessagesRequestPayload({
+        sessionId,
+        connectionId,
+        messages,
+        trigger: "submit-message",
+        messageId: messages.at(-1)?.id,
+        body: {},
+        requestContext,
+        currentModel,
+        generateTitle: options.generateTitle,
+        ephemeral: options.ephemeral,
+        pruneValidateSql: agentConfiguration.pruneValidateSql ?? true,
+        outputReasoning: agentConfiguration.outputReasoning ?? true,
+        reasoningLevel: agentConfiguration.reasoningLevel,
+        agentContext,
+        chatPersistenceMode: "remote",
+      });
+      return backendApiFetch(`${javaApiBase}/api/ai/agent`, {
+        method: "POST",
+        headers: buildChatRequestHeaders({ "Content-Type": "application/json" }, options.shareCode),
+        body: JSON.stringify(body),
+        signal,
+      });
+    };
+
+    const chat = new RemoteChat({
       id: sessionId,
-      generateId: newUniqueSessionId,
-
-      transport: new DefaultChatTransport({
-        fetch: async (input, init) => {
-          if (resumeRunId && String(input).includes(`${encodeURIComponent(resumeRunId)}:resume`)) {
-            return backendApiFetch(input, { ...init, method: "POST" });
-          }
-          const endpoint = `${javaApiBase}/api/ai/agent`;
-          return backendApiFetch(endpoint, init);
-        },
-        prepareReconnectToStreamRequest: ({ headers, credentials }) => {
-          if (!resumeRunId) {
-            throw new Error("No suspended run is selected.");
-          }
-          return {
-            api: `${javaApiBase}/api/ai/runs/${encodeURIComponent(resumeRunId)}:resume`,
-            headers,
-            credentials,
-          };
-        },
-
-        prepareSendMessagesRequest: async ({
-          messages,
-          trigger,
-          messageId,
-          body,
-          headers,
-          credentials,
-        }) => {
-          // Get current model config dynamically if not provided in options
-          const currentModel = modelConfig || ChatFactory.getCurrentModelConfig();
-
-          await options.onPrepareSendMessagesRequest?.({
-            sessionId,
-            connection,
-            connectionId,
-            historicalMessages: options.initialMessages,
-            messages: messages as AppUIMessage[],
-          });
-
-          const requestContext = options.context ?? ChatContext.build();
-          const agentConfiguration = AgentConfigurationManager.getConfiguration();
-          const agentContext = buildAgentContextWithResponseLanguage(
-            options.agentContext,
-            agentConfiguration.aiResponseLanguage
-          );
-          return {
-            body: buildSendMessagesRequestPayload({
-              sessionId,
-              connectionId,
-              messages: messages as AppUIMessage[],
-              trigger,
-              messageId,
-              body,
-              requestContext,
-              currentModel,
-              generateTitle: options.generateTitle,
-              ephemeral: options.ephemeral,
-              pruneValidateSql: agentConfiguration.pruneValidateSql ?? true,
-              outputReasoning: agentConfiguration.outputReasoning ?? true,
-              reasoningLevel: agentConfiguration.reasoningLevel,
-              agentContext,
-              chatPersistenceMode: "remote",
-            }),
-            headers: buildChatRequestHeaders(headers, options.shareCode),
-            credentials,
-          };
-        },
-      }),
-
       messages: options.initialMessages,
-
+      sendRequest: prepareRequest,
+      resumeRequest: async (headers, signal) => {
+        if (!resumeRunId) {
+          throw new Error("No suspended run is selected.");
+        }
+        return backendApiFetch(
+          `${javaApiBase}/api/ai/runs/${encodeURIComponent(resumeRunId)}:resume`,
+          {
+            method: "POST",
+            headers: buildChatRequestHeaders(headers, options.shareCode),
+            signal,
+          }
+        );
+      },
       onFinish: options.onFinish
-        ? async ({ message }) => {
+        ? async (message) => {
             await options.onFinish?.({
               sessionId,
               connection,
               connectionId,
-              message: message as AppUIMessage,
+              message,
             });
           }
         : undefined,

@@ -254,7 +254,7 @@ public class ChatRunService {
             .orElseThrow(() -> new NotFoundException("Model", run.modelId()));
     ModelAdapter adapter;
     try {
-      adapter = modelAdapterProvider.adapterFor(model);
+      adapter = modelAdapterProvider.adapterFor(model, identity);
     } catch (RuntimeException ignored) {
       throw new ProviderOperationException(
           "PROVIDER_UNAVAILABLE", 503, "The selected model provider is unavailable");
@@ -442,7 +442,7 @@ public class ChatRunService {
     // credential failures must not leave a run that can never emit a terminal lifecycle event.
     ModelAdapter adapter;
     try {
-      adapter = modelAdapterProvider.adapterFor(modelConfig);
+      adapter = modelAdapterProvider.adapterFor(modelConfig, identity);
     } catch (RuntimeException ignored) {
       // Adapter initialization can touch decrypted server-side credentials. Do not retain the
       // original exception as a cause: the global error logger must not receive provider secrets.

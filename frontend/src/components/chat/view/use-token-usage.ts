@@ -1,8 +1,7 @@
 "use client";
 
-import type { AppUIMessage } from "@/lib/ai/ai-types";
+import type { AppUIMessage, LanguageModelUsage } from "@/lib/ai/ai-types";
 import { normalizeUsage, sumTokenUsage } from "@/lib/ai/token-usage-utils";
-import type { LanguageModelUsage } from "ai";
 import { useMemo } from "react";
 
 const EMPTY_USAGE: LanguageModelUsage = {

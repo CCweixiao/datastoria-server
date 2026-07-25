@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
-import type { LanguageModelUsage } from "ai";
+import type { LanguageModelUsage } from "@/lib/ai/ai-types";
 import { Info } from "lucide-react";
 
 const NumberFlow = ({ value }: { value: number }) => <>{value.toLocaleString()}</>;

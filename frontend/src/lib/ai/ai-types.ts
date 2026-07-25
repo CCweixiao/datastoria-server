@@ -1,6 +1,25 @@
 import type { PlannerMetadata } from "@/lib/ai/agent/plan/planning-types";
 import type { ReasoningLevel } from "@/lib/ai/reasoning-levels";
-import type { LanguageModelUsage, UIMessage } from "ai";
+
+export type LanguageModelUsage = {
+  inputTokens?: number;
+  inputTokenDetails?: {
+    noCacheTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
+  outputTokens?: number;
+  outputTokenDetails?: {
+    textTokens?: number;
+    reasoningTokens?: number;
+  };
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  [key: string]: unknown;
+};
 
 export interface AgentContext {
   /** Whether to prune successful validate_sql tool calls from history. Default: true. */
@@ -44,6 +63,31 @@ export interface ToolResultPart {
 
 export type MessagePart = TextPart | FilePart | ToolCallPart | ToolResultPart;
 
+export type UIMessagePart =
+  | TextPart
+  | FilePart
+  | {
+      type: "reasoning";
+      text: string;
+      providerMetadata?: unknown;
+    }
+  | {
+      type: "dynamic-tool" | `tool-${string}`;
+      toolCallId: string;
+      toolName?: string;
+      state?: string;
+      input?: unknown;
+      output?: unknown;
+      errorText?: string;
+      approval?: { id: string };
+      [key: string]: unknown;
+    }
+  | {
+      type: "data-pending-action";
+      id?: string;
+      data: PendingActionData;
+    };
+
 export type Mention = DatabaseMention | TableMention | SettingMention;
 
 export interface DatabaseMention {
@@ -74,10 +118,9 @@ export interface MentionMetadata {
  * Shared metadata bag for chat messages.
  *
  * This is:
- * - Used as the `metadata` generic for `UIMessage<MessageMetadata>`
  * - Persisted on the client in the `Message.metadata` field
  *
- * It intentionally allows arbitrary extra keys to match the `ai` SDK contract.
+ * It intentionally allows arbitrary extra keys from the Java stream protocol.
  */
 export type MessageMetadata = {
   planner?: PlannerMetadata;
@@ -89,10 +132,12 @@ export type MessageMetadata = {
   /** Client-captured submit time for stable user-message display. */
   createdAt?: number;
   /** LLM-generated chat title (v2 skill-based chat). */
-  title?: {
-    text: string;
-    usage: LanguageModelUsage;
-  };
+  title?:
+    | string
+    | {
+        text: string;
+        usage: LanguageModelUsage;
+      };
   mentionMetadata?: MentionMetadata;
   // Allow arbitrary extra metadata fields coming from the SDK or future agents
   [key: string]: unknown;
@@ -133,11 +178,9 @@ export interface Chat {
 }
 
 /**
- * App UI message: UIMessage with MessageMetadata plus UI timestamps.
+ * App UI message rendered from the Java UI-message SSE protocol.
  * Single source of truth for message metadata (usage, planner) shared with Message.
  */
-type AppTools = import("@/lib/ai/tools/clickhouse/clickhouse-tools").ClickHouseUITools;
-
 export type PendingActionData = {
   runId: string;
   actionId: string;
@@ -147,11 +190,11 @@ export type PendingActionData = {
   request: unknown;
 };
 
-type AppDataTypes = {
-  "pending-action": PendingActionData;
-};
-
-export type AppUIMessage = UIMessage<MessageMetadata, AppDataTypes, AppTools> & {
+export type AppUIMessage = {
+  id: string;
+  role: MessageRole;
+  parts: UIMessagePart[];
+  metadata?: MessageMetadata;
   updatedAt?: Date;
   createdAt?: Date;
 };

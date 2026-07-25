@@ -23,7 +23,6 @@ describe("getAutoExplainState", () => {
       getAvailableModels: vi.fn().mockReturnValue([{ id: "model-1" }]),
     } as unknown as ReturnType<typeof ModelManager.getInstance>);
     vi.mocked(AgentConfigurationManager.getConfiguration).mockReturnValue({
-      mode: "v2",
       autoExplainClickHouseErrors: true,
       autoExplainBlacklist: ["194", "241"],
     });
@@ -50,7 +49,6 @@ describe("getAutoExplainState", () => {
     expect(getAutoExplainState(undefined)).toBe(AutoExplainState.DISABLED);
 
     vi.mocked(AgentConfigurationManager.getConfiguration).mockReturnValue({
-      mode: "v2",
       autoExplainClickHouseErrors: false,
       autoExplainBlacklist: ["62"],
     });
@@ -59,7 +57,6 @@ describe("getAutoExplainState", () => {
 
   it("respects the configured blacklist", () => {
     vi.mocked(AgentConfigurationManager.getConfiguration).mockReturnValue({
-      mode: "v2",
       autoExplainClickHouseErrors: true,
       autoExplainBlacklist: ["60"],
     });

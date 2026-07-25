@@ -1,4 +1,4 @@
-import type { LanguageModelUsage } from "ai";
+import type { LanguageModelUsage } from "@/lib/ai/ai-types";
 
 export type Intent = "generator" | "optimizer" | "visualizer" | "general";
 

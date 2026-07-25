@@ -1,6 +1,5 @@
-import type { Mention, MentionMetadata, MessageMetadata } from "@/lib/ai/ai-types";
+import type { AppUIMessage, Mention, MentionMetadata, MessageMetadata } from "@/lib/ai/ai-types";
 import type { Connection } from "@/lib/connection/connection";
-import type { UIMessage } from "ai";
 
 const INLINE_CODE_TOKEN_REGEX = /`([^`\n]+)`(?=[\s?!.,;:)\]}]|$)/g;
 const DATABASE_COMMENT_MAX_LENGTH = 200;
@@ -126,7 +125,7 @@ export class MentionContext {
     return sections.length > 1 ? sections.join("\n") : "";
   }
 
-  static inject<TMessage extends UIMessage>(messages: TMessage[]): TMessage[] {
+  static inject<TMessage extends AppUIMessage>(messages: TMessage[]): TMessage[] {
     const activeMentionsByKind = new Map<Mention["kind"], Mention[]>();
 
     return messages.map((message) => {

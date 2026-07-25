@@ -139,10 +139,28 @@ class AvailableModelsApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
+        .jsonPath("$.systemModels[*].modelId")
+        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("copilot-model")))
         .jsonPath("$.githubModels[0].provider")
         .isEqualTo("GitHub Copilot")
         .jsonPath("$.githubModels[0].modelId")
-        .isEqualTo("copilot-model");
+        .isEqualTo("copilot-model")
+        .jsonPath("$.githubModels[0].configId")
+        .isNotEmpty();
+
+    web.post()
+        .uri("/api/ai/models/available")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.systemModels[*].modelId")
+        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("copilot-model")))
+        .jsonPath("$.githubModels.length()")
+        .isEqualTo(1);
   }
 
   private void createProviderAndModel(String providerKey, String modelKey, String displayName) {
