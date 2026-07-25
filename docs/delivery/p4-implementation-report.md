@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2 + P4.3（均已通过 review）**
+> 本次交付：**P4.1 + P4.2 + P4.3（已通过 review）+ P4.4（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1、P4.2、P4.3 review 已通过；P4.4–P4.8 未开始。
+> 状态：P4.1、P4.2、P4.3 review 已通过；**P4.4 已实现，待 review**；P4.5–P4.8 未开始。
 
 ---
 
@@ -456,3 +456,167 @@ docs/delivery/p4-implementation-report.md                                       
 - run 事件持久化（`ds_agent_event`，doc §8 可选表）用于断线续传 / `Last-Event-ID` 重放。
 
 **P4.3 review 已通过；不自动开始 P4.4。**
+
+---
+
+# P4.4 — Checkpoint state adapter（本次交付，待 review）
+
+## P4.4-0. 范围
+
+实现 DataStoria 自有的 Agent checkpoint state adapter：把 AgentScope `State` 与持久化的
+`state_json` 隔离开，定义稳定的 `codec_version` / checksum，支持编码、解码、版本拒绝、checksum
+不匹配检测，并保证序列化结果不含 prompt / API key / provider credential。接入 P4.3 的
+`AgentCheckpointRepository`，但**不实现 HTTP chat endpoint**（P4.6）。
+
+**明确非目标（未实现）**：AI SDK encoder（P4.5）、A01 Java chat API（P4.6）、前端 gateway（P4.7）、
+端到端 run resume（P4.8）。P4.4 的 checkpoint 只持久化 agent 的安全控制字段，**不含对话 context**
+（prompt）；resume 时由 `ds_chat_message` 重建消息（P4.8）。不涉及 P5+ Skill / 工具状态。
+
+## P4.4-1. 分层
+
+```text
+agent.domain (AgentScope-free):
+  CheckpointContent(codecVersion, stateJson, checksum)
+  CheckpointState(sessionId, userId, replyId, currentIteration, summary, shutdownInterrupted, metadata)
+  CheckpointCodec interface + CURRENT_VERSION="ds-checkpoint-v1"
+  UnsupportedCodecVersionException / ChecksumMismatchException
+agent.runtime (AgentScope 只能在此):
+  JsonCheckpointCodec        — canonical JSON + SHA-256 + 敏感键 redaction（AgentScope-free，用 Jackson）
+  CheckpointStateAdapter     — State <-> CheckpointContent 接口（引用 io.agentscope State）
+  AgentScopeCheckpointAdapter— 仅抽取 AgentState 的安全标量，排除 context（prompt）
+agent.application (AgentScope-free):
+  CheckpointStore            — CheckpointContent -> AgentCheckpointRepository 写入 / 读回
+```
+
+`domain` / `application` / `repository` 均不引用 `io.agentscope.*`；AgentScope `State` 仅出现在
+`agent.runtime` 的 adapter（满足 ADR-0004 §7 隔离边界）。
+
+## P4.4-2. 完成范围
+
+| 子任务 | 交付物 | 状态 |
+| --- | --- | --- |
+| Codec domain | `CheckpointContent`、`CheckpointState`、`CheckpointCodec`(+`CURRENT_VERSION`)、两个异常 | ✅ |
+| Codec 实现 | `JsonCheckpointCodec`：canonical JSON、SHA-256 checksum、版本拒绝、checksum 校验、敏感键 redaction | ✅ |
+| AgentScope 隔离 adapter | `CheckpointStateAdapter` 接口 + `AgentScopeCheckpointAdapter`（AgentState 安全标量 ↔ content，排除 context） | ✅ |
+| 接入 repository | `CheckpointStore`（application，content ↔ `AgentCheckpointRepository`，tenant-scoped，复用 P4.3 原子 upsert） | ✅ |
+| 测试 | 16 个：codec 9 + adapter 3 + DB wiring 4 | ✅ |
+
+## P4.4-3. 关键设计决策
+
+1. **隔离边界**：AgentScope `State`/`AgentState` 只在 `agent.runtime.AgentScopeCheckpointAdapter`；
+   `CheckpointContent`/`CheckpointState` 是 DataStoria 自有 domain 类型，repository 与 controller 不感知
+   AgentScope。换 runtime 只重写 adapter。
+2. **codec_version**：`"ds-checkpoint-v1"`（`CheckpointCodec.CURRENT_VERSION`）。decode 遇未知版本抛
+   `UnsupportedCodecVersionException`，绝不静默误解析旧/不兼容 blob。
+3. **checksum**：SHA-256 over `"<codecVersion>\n<canonicalStateJson>"`（hex，64 字符），绑定 payload 与
+   codec 版本。**canonical = 经同一 ObjectMapper 的 record 声明序 + `ORDER_MAP_ENTRIES_BY_KEYS` 排序的
+   Map 键**，故即使 MySQL `json` 列读回时重排格式，decode 重新 canonicalize 后 checksum 仍一致（dialect
+   无关）。decode 重算 checksum 与存储值不等 → `ChecksumMismatchException`（篡改/损坏）。
+4. **prompt / 凭据排除（核心安全属性）**：`CheckpointState` 只承载控制标量（session/user/reply id、
+   迭代、summary、shutdown 标志 + metadata），**绝不包含 `context`（消息列表，含 prompt 与工具结果）**。
+   adapter 在 `checkpoint()` 里**不读** `agentState.getContext()`。测试：源 AgentState 的 context 含
+   `"my secret prompt sk-SECRET-123"`，序列化后 stateJson **不含** 该串、也不含 `"context"` 键。
+5. **敏感键 redaction（defense-in-depth）**：即便 `metadata` 出现 `api_key`/`secret`/`credential`/
+   `password`/`token`/`authorization` 键，codec 递归替换为 `"[REDACTED]"` 再序列化（按键名，不影响合法值）。
+6. **restore 不重建 context**：`restore()` 只回填安全标量，context 留空；run resume（P4.8）从
+   `ds_chat_message` 重建消息后再调用模型 —— 与 harness-agent §10（checkpoint 存 compaction 摘要、产品
+   消息单独存）一致。
+7. **接入 repository 不改 P4.3 语义**：`CheckpointStore.save` 复用 P4.3 race-safe upsert（同 sequence
+   覆盖、新 sequence 追加）；`loadLatest` tenant-scoped，并跳过无 checksum 的行（DB 列允许 NULL，仅非
+   adapter 生产者）。未新增端点、未改 `AgentRunService`（冻结）。
+
+## P4.4-4. 测试命令与结果
+
+```
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./mvnw -B -ntp spotless:apply clean verify
+./mvnw -o test
+```
+
+- `./mvnw -o test` 汇总：`Tests run: 237, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.4 新增 16 测试：`JsonCheckpointCodecTest`(9) + `AgentScopeCheckpointAdapterTest`(3) +
+  `CheckpointStoreTest`(4)，专项：
+  `./mvnw test -Dtest='JsonCheckpointCodecTest,AgentScopeCheckpointAdapterTest,CheckpointStoreTest'` → 16/16。
+- P4.1/P4.2/P4.3 全部仍通过。
+- 无真实网络、无 API key、无真实 provider。
+
+P4.4 测试覆盖矩阵：
+
+| 测试 | 不变量 |
+| --- | --- |
+| JsonCheckpointCodecTest | 正常往返、确定性 canonical、版本拒绝、**stateJson 篡改→ChecksumMismatch**、**checksum 篡改→ChecksumMismatch**、blank 字段拒绝、**敏感 metadata 键 redaction** |
+| AgentScopeCheckpointAdapterTest | **源 context 含 prompt+key 但序列化排除**、restore 安全标量往返且 context 为空、未知 State 类型拒绝 |
+| CheckpointStoreTest | 经 repository 往返（stateJson/checksum/codecVersion 一致）、**持久化 blob 不含 prompt/secret**、同 sequence 覆盖、**跨租户 loadLatest 为空**、restore 重建安全状态 |
+
+## P4.4-5. 安全检查
+
+- **prompt / API key / credential 不入 checkpoint**：`CheckpointState` 无 context 字段；adapter 不读
+  `AgentState.getContext()`；codec 再做敏感键 redaction。源 state 含 `"sk-SECRET-123"` / prompt 时，
+  落库 `state_json` 不含（3 个测试断言）。
+- **完整性**：checksum SHA-256 绑定 codec_version + canonical payload；篡改 stateJson 或 checksum 均
+  被 `ChecksumMismatchException` 拒绝（2 个测试）。
+- **版本安全**：未知 `codec_version` 抛 `UnsupportedCodecVersionException`，不静默解析。
+- **隔离边界**：`agent.domain` / `agent.application` / `repository` 不引用 `io.agentscope.*`（编译期保证）。
+- **租户隔离**：`CheckpointStore.loadLatest` 走 tenant-scoped repository；跨租户返回空（测试覆盖）。
+- **JDBC 不阻塞 Netty**：`CheckpointStore` 为命令式 JDBC，由 P4.6 controller 在 bounded scheduler 调度；
+  checkpoint 写非 hot path。
+- 未新增 HTTP 端点、未改 P4.2/P4.3 运行时行为、未改 DDL（V5 schema 已满足 `state_json`/`codec_version`/
+  `checksum` 列）。
+
+## P4.4-6. MySQL / dialect 兼容
+
+- **本机未执行 MySQL**：`docker info` 不可用 → `SchemaParityTest`（Tests run: 0，@BeforeAll abort）、
+  `MysqlRepositoryIT`（fallback + assumeTrue 跳过）。与 P3/P4.1–P4.3 一致，不声称 MySQL 通过。
+- 双方言兼容设计：checksum 基于 canonical form（decode 重新 canonicalize），吸收 MySQL `json` 列读回时
+  的格式重排；`state_json` 在 SQLite 为 TEXT、MySQL 为 `json`，均由 P4.3 V5 migration 承载。CI
+  `mysql-contract` + `SchemaParityTest`（Docker）兜底。
+
+## P4.4-7. 回滚
+
+- P4.4 为**纯新增**：5 个 domain 类 + 2 个 runtime 类（codec impl + adapter）+ adapter 接口 +
+  `CheckpointStore` + 3 个测试。无 DDL 变更、无端点、无 P4.2/P4.3 代码改动。
+- 回滚 = 删除上述文件 + 撤销报告 P4.4 段。`ds_agent_checkpoint` 表结构不变（仍可存其它来源的 opaque
+  blob），无数据迁移。
+- 对线上无影响：`CheckpointStore` 虽为 `@Component`，但当前无调用方（P4.6 chat 流程才接入）。
+
+## P4.4-8. 已知风险（不阻断 P4.5）
+
+1. **resume 未实现**：P4.4 的 restore 只回填控制标量，context 留空；真正 run resume（重建消息、恢复
+   AgentScope 运行态）在 P4.8。
+2. **permission/tool/task context 不持久化**：P4 minimal checkpoint 只存控制标量；HITL pending action、
+   工具上下文等留给后续阶段（`checkpoint_type='pending_action'` 已在 V5 预留）。
+3. **checksum 基于 canonical 而非原始字节**：纯空白/键序差异（语义等价）不会被判定篡改；语义变更必被
+   检出（设计如此，避免 MySQL 重排误报）。
+4. **`loadLatest` 跳过无 checksum 行**：DB 列允许 NULL（非 adapter 生产者）；当前所有 checkpoint 均由
+   adapter 产出（带 checksum），不受影响。
+5. **MySQL 本机未验证**（见 §6），CI 兜底。
+
+## P4.4-9. 修改文件
+
+```
+src/main/java/io/datastoria/server/agent/domain/CheckpointContent.java              (新增)
+src/main/java/io/datastoria/server/agent/domain/CheckpointState.java                (新增)
+src/main/java/io/datastoria/server/agent/domain/CheckpointCodec.java                (新增)
+src/main/java/io/datastoria/server/agent/domain/UnsupportedCodecVersionException.java (新增)
+src/main/java/io/datastoria/server/agent/domain/ChecksumMismatchException.java      (新增)
+src/main/java/io/datastoria/server/agent/runtime/JsonCheckpointCodec.java           (新增)
+src/main/java/io/datastoria/server/agent/runtime/CheckpointStateAdapter.java        (新增)
+src/main/java/io/datastoria/server/agent/runtime/AgentScopeCheckpointAdapter.java   (新增)
+src/main/java/io/datastoria/server/agent/application/CheckpointStore.java           (新增)
+src/test/java/io/datastoria/server/agent/runtime/JsonCheckpointCodecTest.java       (新增)
+src/test/java/io/datastoria/server/agent/runtime/AgentScopeCheckpointAdapterTest.java (新增)
+src/test/java/io/datastoria/server/agent/application/CheckpointStoreTest.java       (新增)
+docs/delivery/p4-implementation-report.md                                           (追加 P4.4)
+```
+
+## P4.4-10. 下一阶段（P4.5）计划
+
+- 捕获 Node A01 golden stream（`docs/api/stream-protocol.md` fixture），实现
+  `AiSdkStreamEncoder`：把内部 `AgentRunEvent` 编码为 AI SDK UI Message Stream 字节。
+- 与 P4.2 事件模型对齐：`RunStarted`→`start`/`start-step`、`TextDelta`→`text-delta`、
+  `ReasoningDelta`→`reasoning-delta`、`UsageReported`→`finish` 的 messageMetadata.usage、
+  `RunFailed`→`error`、`RunCancelled`→`abort`。
+- 语义 diff 规则按 stream-protocol §6；先纯文本/reasoning/usage/error/cancel fixture。
+
+**停在 P4.4 review，不自动开始 P4.5。**
+
