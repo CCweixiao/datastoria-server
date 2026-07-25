@@ -4,7 +4,6 @@ import {
   DEFAULT_AUTO_EXPLAIN_BLACKLIST,
   normalizeAIResponseLanguage,
   type AgentConfiguration,
-  type AgentMode,
   type AIResponseLanguage,
 } from "@/components/settings/agent/agent-manager";
 import { Button } from "@/components/ui/button";
@@ -201,12 +200,6 @@ export function AgentEdit() {
     setDropdownContainer(containerRef.current?.closest("[role='dialog']") as HTMLElement | null);
   }, []);
 
-  const handleModeChange = (value: string) => {
-    const newConfig = { ...configuration, mode: value as AgentMode };
-    setConfiguration(newConfig);
-    AgentConfigurationManager.setConfiguration(newConfig);
-  };
-
   const handlePruningChange = (checked: boolean) => {
     const newConfig = { ...configuration, pruneValidateSql: checked };
     setConfiguration(newConfig);
@@ -299,36 +292,6 @@ export function AgentEdit() {
           <col />
         </colgroup>
         <TableBody>
-          <TableRow className="h-12 hover:bg-transparent">
-            <TableCell className="px-0 pl-4 py-1 align-middle">
-              <Label>Agent Mode</Label>
-            </TableCell>
-            <TableCell className="px-0 py-1 align-middle">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-9 w-[300px] justify-between">
-                    {configuration.mode === "v2" ? "V2 (Skill-based)" : "V1 (Legacy)"}
-                    <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent container={dropdownContainer} className="w-[300px] z-[10000]">
-                  <DropdownMenuRadioGroup
-                    value={configuration.mode}
-                    onValueChange={handleModeChange}
-                  >
-                    <DropdownMenuRadioItem value="v2">V2 (Skill-based)</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="legacy">
-                      V1 (Should not be used)
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TableCell>
-            <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
-              Select which agent architecture to use for chat interactions.
-            </TableCell>
-          </TableRow>
-
           <TableRow className="h-12 hover:bg-transparent">
             <TableCell className="px-0 pl-4 py-1 align-middle">
               <Label>Context Pruning</Label>

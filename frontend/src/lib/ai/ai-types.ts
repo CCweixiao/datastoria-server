@@ -170,17 +170,12 @@ export type ToolPart = AppUIMessage["parts"][0] & {
   toolCallId?: string;
 };
 
-/**
- * Request payload for the "skill" tool — loads one or more skill manuals (SKILL.md).
- */
+/** Render payload emitted by the server-side AgentScope `skill` tool. */
 export type SkillToolInput = {
   names: string[];
 };
 
-/**
- * Request payload for the "skill_resource" tool — loads additional reference files
- * (e.g. AGENTS.md, rules/*.md) for skills whose manuals are already in context.
- */
+/** Render payload emitted by the server-side AgentScope `skill_resource` tool. */
 export type SkillResourceToolInput = {
   resources: {
     /** Skill name (frontmatter `name` or folder name). */

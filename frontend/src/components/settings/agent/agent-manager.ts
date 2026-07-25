@@ -5,8 +5,6 @@ import {
 } from "@/lib/ai/reasoning-levels";
 import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 
-export type AgentMode = "v2" | "legacy";
-
 const CONFIG_KEY = "settings.ai.agent";
 export const AGENT_CONFIG_UPDATED_EVENT = "AGENT_CONFIG_UPDATED";
 
@@ -45,7 +43,6 @@ export const normalizeAutoExplainLanguage = normalizeAIResponseLanguage;
 export const normalizeSqlReviewLanguage = normalizeAIResponseLanguage;
 
 export type AgentConfiguration = {
-  mode: AgentMode;
   /** Whether to prune successful validate_sql tool calls from history. Default true. */
   pruneValidateSql?: boolean;
   /** Whether to request reasoning summaries from models that support them. Default true. */
@@ -70,7 +67,6 @@ export class AgentConfigurationManager {
 
   private static defaults(): AgentConfiguration {
     return {
-      mode: "v2",
       pruneValidateSql: true,
       outputReasoning: true,
       reasoningLevel: DEFAULT_REASONING_LEVEL,
@@ -105,13 +101,18 @@ export class AgentConfigurationManager {
           }
           const payload = (await response.json()) as { entries?: Record<string, string> };
           const stored = payload.entries?.[CONFIG_KEY];
-          const parsed = stored ? (JSON.parse(stored) as AgentConfiguration) : this.defaults();
+          const parsed: AgentConfiguration & { mode?: unknown } = stored
+            ? (JSON.parse(stored) as AgentConfiguration & { mode?: unknown })
+            : this.defaults();
+          const { mode: _legacyMode, ...current } = parsed;
           this.configuration = {
             ...this.defaults(),
-            ...parsed,
-            reasoningLevel: normalizeReasoningLevel(parsed.reasoningLevel),
+            ...current,
+            reasoningLevel: normalizeReasoningLevel(current.reasoningLevel),
             aiResponseLanguage: normalizeAIResponseLanguage(
-              parsed.aiResponseLanguage ?? parsed.sqlReviewLanguage ?? parsed.autoExplainLanguage
+              current.aiResponseLanguage ??
+                current.sqlReviewLanguage ??
+                current.autoExplainLanguage
             ),
           };
           return this.configuration;
@@ -126,10 +127,11 @@ export class AgentConfigurationManager {
 
   public static setConfiguration(cfg: AgentConfiguration) {
     const {
+      mode: _legacyMode,
       autoExplainLanguage: _legacyAutoExplain,
       sqlReviewLanguage: _legacySqlReview,
       ...rest
-    } = cfg;
+    } = cfg as AgentConfiguration & { mode?: unknown };
     const normalized = {
       ...rest,
       reasoningLevel: normalizeReasoningLevel(cfg.reasoningLevel),

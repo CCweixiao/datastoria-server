@@ -1,11 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CommandManager } from "../commands/command-manager";
 import type { SkillDetailResponse } from "./skill-provider";
 
 describe("Java and frontend Skill catalog contract", () => {
-  it("consumes the shared detail fixture and derives the same command semantics", () => {
+  it("consumes the shared detail fixture as display-only data", () => {
     const fixturePath = resolve(process.cwd(), "../docs/fixtures/skills/catalog-detail.json");
     const skill = JSON.parse(readFileSync(fixturePath, "utf8")) as SkillDetailResponse;
 
@@ -18,14 +17,8 @@ describe("Java and frontend Skill catalog contract", () => {
       requiredTools: ["execute_sql"],
       resourcePaths: ["references/rules.md"],
     });
-    expect(CommandManager.fromSkills([skill]).listCommands()).toEqual([
-      {
-        name: "catalog-contract",
-        description: "Shared catalog contract",
-        skillId: "catalog-contract",
-        showInSqlEditorQuickAction: true,
-        template: "Use the `catalog-contract` skill for this request: $ARGUMENTS",
-      },
-    ]);
+    expect(skill.name).toBe("catalog-contract");
+    expect(skill.description).toBe("Shared catalog contract");
+    expect(skill.showInSqlEditorQuickAction).toBe(true);
   });
 });
