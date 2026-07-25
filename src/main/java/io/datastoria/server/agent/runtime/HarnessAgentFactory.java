@@ -6,6 +6,7 @@ import java.util.List;
 
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.RunContext;
@@ -44,7 +45,7 @@ public final class HarnessAgentFactory {
 
   public RunnableAgent create(
       RunContext context, ModelAdapter modelAdapter, AgentRuntimeConfig config, String userText) {
-    return create(context, modelAdapter, config, List.of(), userText);
+    return create(context, modelAdapter, config, AgentRunCapabilities.none(), List.of(), userText);
   }
 
   public RunnableAgent create(
@@ -53,12 +54,34 @@ public final class HarnessAgentFactory {
       AgentRuntimeConfig config,
       List<ChatTurn> history,
       String userText) {
-    HarnessAgent agent =
+    return create(context, modelAdapter, config, AgentRunCapabilities.none(), history, userText);
+  }
+
+  public RunnableAgent create(
+      RunContext context,
+      ModelAdapter modelAdapter,
+      AgentRuntimeConfig config,
+      AgentRunCapabilities capabilities,
+      List<ChatTurn> history,
+      String userText) {
+    Toolkit toolkit = new Toolkit();
+    if (capabilities.tools() != null) {
+      toolkit.registerTool(capabilities.tools());
+    }
+    HarnessAgent.Builder builder =
         HarnessAgent.builder()
             .name("run-" + context.runId())
             .sysPrompt(config.systemPrompt())
             .model(modelAdapter.modelFor(context))
-            .maxIters(config.maxIters())
+            .toolkit(toolkit)
+            .maxIters(config.maxIters());
+    if (!capabilities.skills().isEmpty()) {
+      builder.skillRepository(new InMemoryAgentSkillRepository(capabilities.skills()));
+    } else {
+      builder.disableDynamicSkills();
+    }
+    HarnessAgent agent =
+        builder
             .disableCompaction()
             .disableFilesystemTools()
             .disableShellTool()
@@ -69,7 +92,6 @@ public final class HarnessAgentFactory {
             .disableAtPathExpansion()
             .disableSubagents()
             .disableDynamicSubagents()
-            .disableDynamicSkills()
             .disableDefaultWorkspaceSkills()
             .disableToolsConfig()
             .enableAgentTracingLog(false)

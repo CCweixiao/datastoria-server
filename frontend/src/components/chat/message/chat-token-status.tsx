@@ -3,9 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
-import NumberFlow from "@number-flow/react";
 import type { LanguageModelUsage } from "ai";
 import { Info } from "lucide-react";
+
+const NumberFlow = ({ value }: { value: number }) => <>{value.toLocaleString()}</>;
 
 interface ChatTokenStatusProps {
   usage: LanguageModelUsage;

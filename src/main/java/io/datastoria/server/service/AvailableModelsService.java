@@ -5,6 +5,9 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
@@ -26,14 +29,20 @@ public class AvailableModelsService {
 
   private final ModelRepository modelRepo;
   private final ModelProviderRepository providerRepo;
+  private final ModelCatalogProvisioner catalogProvisioner;
+  private final ObjectMapper mapper;
   private final Scheduler jdbcScheduler;
 
   public AvailableModelsService(
       ModelRepository modelRepo,
       ModelProviderRepository providerRepo,
+      ModelCatalogProvisioner catalogProvisioner,
+      ObjectMapper mapper,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.modelRepo = modelRepo;
     this.providerRepo = providerRepo;
+    this.catalogProvisioner = catalogProvisioner;
+    this.mapper = mapper;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -43,6 +52,7 @@ public class AvailableModelsService {
   }
 
   private List<ModelProps> buildSystemModels(Identity identity) {
+    catalogProvisioner.provision(identity);
     List<ModelProvider> providers = providerRepo.findAll(identity.tenantId());
     return modelRepo.findEnabled(identity.tenantId()).stream()
         .map(m -> toModelProps(m, providers))
@@ -50,6 +60,7 @@ public class AvailableModelsService {
   }
 
   private ModelProps toModelProps(Model model, List<ModelProvider> providers) {
+    JsonNode capabilities = parseObject(model.capabilitiesJson());
     String providerKey =
         providers.stream()
             .filter(p -> p.id().equals(model.providerId()))
@@ -61,14 +72,36 @@ public class AvailableModelsService {
         model.modelKey(),
         model.description(),
         model.isFree(),
-        true,
+        capabilities.path("autoSelectable").asBoolean(true),
         !model.enabled(),
-        List.of("chat"),
-        false,
-        true,
-        false,
-        List.of(),
+        stringList(capabilities.path("supportedEndpoints"), List.of("chat")),
+        capabilities.path("supportsImageInput").asBoolean(false),
+        capabilities.path("supportsTemperature").asBoolean(true),
+        capabilities.path("supportsReasoning").asBoolean(false),
+        stringList(capabilities.path("reasoningLevels"), List.of()),
         model.source(),
         model.id());
+  }
+
+  private JsonNode parseObject(String json) {
+    if (json == null || json.isBlank()) {
+      return mapper.createObjectNode();
+    }
+    try {
+      JsonNode parsed = mapper.readTree(json);
+      return parsed.isObject() ? parsed : mapper.createObjectNode();
+    } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+      return mapper.createObjectNode();
+    }
+  }
+
+  private static List<String> stringList(JsonNode node, List<String> fallback) {
+    if (!node.isArray()) {
+      return fallback;
+    }
+    return java.util.stream.StreamSupport.stream(node.spliterator(), false)
+        .filter(JsonNode::isTextual)
+        .map(JsonNode::asText)
+        .toList();
   }
 }

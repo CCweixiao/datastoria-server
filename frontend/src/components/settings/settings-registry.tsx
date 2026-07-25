@@ -25,7 +25,8 @@ export const SETTINGS_REGISTRY: Record<SettingsSection, SettingsPageConfig> = {
   },
   models: {
     title: "Models",
-    description: "Configure AI models. API keys are only stored at your client side.",
+    description:
+      "Configure server-managed AI models. Credentials are encrypted and stored only by the backend.",
     component: ModelsEdit,
   },
   agent: {

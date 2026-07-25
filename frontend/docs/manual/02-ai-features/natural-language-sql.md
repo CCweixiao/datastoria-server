@@ -50,8 +50,8 @@ When the question is submitted,
 1. The front end will send your question along with your selected model to the backend server
 2. The backend will assembly your question with some predefined prompt and send request to the selected model for response
 3. The AI will generate a SQL to query the version of ClickHouse
-4. This SQL will be sent to your browser side, your browser will then sends the query to your ClickHouse to execute the SQL
-5. When the SQL execution finishes, the browser will then send the query result to LLM(via the backend server) for final answer
+4. The Java AgentScope runtime executes required SQL through the selected server-side ClickHouse connection.
+5. Tool results stay in the backend agent run and are streamed to the browser as run events.
 
 The following sequence diagram illustrates this process:
 
@@ -251,7 +251,7 @@ The AI automatically uses your database schema to:
 ## Privacy and Security
 
 - Your natural language prompts are sent to the LLM provider you configure
-- Generated queries are executed directly from your browser to ClickHouse, NOT at the server side
+- Generated queries are executed by Spring Boot through the persisted server-side ClickHouse connection.
 - No query results are sent to external services
 - See [AI Model Configuration](./ai-model-configuration.md) for privacy details
 
@@ -260,4 +260,3 @@ The AI automatically uses your database schema to:
 - **[Query Optimization](./query-optimization.md)** — Learn how AI can help optimize your queries
 - **[Intelligent Visualization](./intelligent-visualization.md)** — Generate charts from natural language
 - **[AI Model Configuration](./ai-model-configuration.md)** — Set up your LLM provider API keys
-

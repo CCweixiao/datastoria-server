@@ -3,7 +3,6 @@ import { z } from "zod";
 export const skillReviewModelSchema = z.object({
   provider: z.string().min(1),
   modelId: z.string().min(1),
-  apiKey: z.string().min(1).optional(),
 });
 
 export const skillReviewFileSchema = z.object({

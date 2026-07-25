@@ -1,11 +1,19 @@
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
+import { loadEffectiveConfiguration, saveConfiguration } from "@/lib/configuration-client";
 import type { QueryContext } from "./query-context";
+
+const CONFIG_KEY = "settings.query-context";
 
 class QueryContextManager {
   private static instance: QueryContextManager;
+  private context: Partial<QueryContext> = {};
 
-  private get storage() {
-    return StorageManager.getInstance().getStorageProvider().subStorage("settings:query-context");
+  private constructor() {
+    void loadEffectiveConfiguration()
+      .then((configuration) => {
+        const stored = configuration.entries[CONFIG_KEY];
+        this.context = stored ? (JSON.parse(stored) as Partial<QueryContext>) : {};
+      })
+      .catch((error) => console.error("Failed to load query context:", error));
   }
 
   public static getInstance(): QueryContextManager {
@@ -21,21 +29,16 @@ class QueryContextManager {
 
   public getStoredContext(): Partial<QueryContext> {
     // Get stored context without defaults (for editing)
-    return this.storage.getAsJSON<Partial<QueryContext>>(() => ({
-      //
-      // Default context values
-      //
-      // opentelemetry_start_trace_probability: 1,
-      // output_format_pretty_row_numbers: true,
-      // output_format_pretty_max_rows: 1000,
-      max_execution_time: 60,
-    }));
+    return { ...this.context };
   }
 
   public setContext(context: Partial<QueryContext>): void {
     // Save exactly what is passed, without merging with defaults
     // Defaults will be applied when reading via getContext()
-    this.storage.setJSON(context);
+    this.context = { ...context };
+    void saveConfiguration(CONFIG_KEY, this.context).catch((error) =>
+      console.error("Failed to save query context:", error)
+    );
   }
 
   public updateContext(updates: Partial<QueryContext>): void {

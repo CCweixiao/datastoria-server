@@ -28,12 +28,14 @@ Last Updated: December 27, 2025
 
 ## 3. Data Storage
 
-- We use JWT for session management. 
-- Database connection strings and credentials, as well as LLM provider API keys, are typically stored locally in your browser side.
+- Application state, chat sessions, model configuration, and connection configuration are stored by
+  Spring Boot.
+- ClickHouse passwords and LLM provider credentials are encrypted in backend secret columns and are
+  never returned to the browser.
 
 ## 4. Third-Party Services
 
-We use OAuth providers (Google, GitHub, Microsoft) for authentication. These services have their own privacy policies.
+Configured identity providers have their own privacy policies.
 
 ## 5. Security
 
@@ -42,4 +44,3 @@ The security of your data is important to us, but remember that no method of tra
 ## 6. Contact Us
 
 If you have any questions about this Privacy Policy, please contact us.
-

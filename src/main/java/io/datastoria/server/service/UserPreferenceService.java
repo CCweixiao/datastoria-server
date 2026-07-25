@@ -38,16 +38,19 @@ public class UserPreferenceService {
   private final ConfigEntryRepository configRepo;
   private final UserModelPreferenceRepository modelPrefRepo;
   private final ModelRepository modelRepo;
+  private final SystemConfigurationProvisioner configurationProvisioner;
   private final Scheduler jdbcScheduler;
 
   public UserPreferenceService(
       ConfigEntryRepository configRepo,
       UserModelPreferenceRepository modelPrefRepo,
       ModelRepository modelRepo,
+      SystemConfigurationProvisioner configurationProvisioner,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.configRepo = configRepo;
     this.modelPrefRepo = modelPrefRepo;
     this.modelRepo = modelRepo;
+    this.configurationProvisioner = configurationProvisioner;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -103,6 +106,7 @@ public class UserPreferenceService {
   }
 
   private EffectiveConfig merge(Identity identity) {
+    configurationProvisioner.provision(identity.tenantId());
     List<ConfigEntry> entries = configRepo.findEffective(identity.tenantId(), identity.userId());
     List<ConfigEntry> sorted =
         entries.stream()

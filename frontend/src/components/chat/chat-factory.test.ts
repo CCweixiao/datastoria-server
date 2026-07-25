@@ -31,7 +31,7 @@ describe("buildSendMessagesRequestPayload", () => {
       messageId: "message-1",
       body: {},
       requestContext: diagnosisContext,
-      currentModel: { provider: "openai", modelId: "gpt-5" },
+      currentModel: { configId: "model-config-1" },
       generateTitle: false,
       ephemeral: true,
       pruneValidateSql: true,
@@ -45,7 +45,7 @@ describe("buildSendMessagesRequestPayload", () => {
     });
   });
 
-  it("includes server tool connection credentials when provided", () => {
+  it("never includes server credentials and uses backend model id", () => {
     const payload = buildSendMessagesRequestPayload({
       sessionId: "session-1",
       connectionId: "default@https://example.com",
@@ -54,27 +54,16 @@ describe("buildSendMessagesRequestPayload", () => {
       messageId: "message-1",
       body: {},
       requestContext: diagnosisContext,
-      clickHouseConnection: {
-        url: "https://clickhouse.example.com",
-        user: "default",
-        password: "secret",
-        cluster: "prod_cluster",
-      },
-      currentModel: { provider: "openai", modelId: "gpt-5" },
+      currentModel: { configId: "model-config-1" },
       generateTitle: false,
       ephemeral: true,
       pruneValidateSql: true,
       chatPersistenceMode: "remote",
     });
 
-    expect(payload).toMatchObject({
-      connection: {
-        url: "https://clickhouse.example.com",
-        user: "default",
-        password: "secret",
-        cluster: "prod_cluster",
-      },
-    });
+    expect(payload).toMatchObject({ modelConfigId: "model-config-1" });
+    expect(payload).not.toHaveProperty("connection");
+    expect(payload).not.toHaveProperty("model");
   });
 
   it("includes diagnosis context in local chat payloads", () => {
@@ -166,7 +155,7 @@ describe("buildSendMessagesRequestPayload", () => {
       messageId: "message-1",
       body: {},
       requestContext: diagnosisContext,
-      currentModel: { provider: "OpenAI", modelId: "gpt-5.2" },
+      currentModel: { configId: "model-config-2" },
       generateTitle: false,
       ephemeral: true,
       pruneValidateSql: true,

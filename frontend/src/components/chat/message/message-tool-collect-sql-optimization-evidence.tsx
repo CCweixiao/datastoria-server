@@ -2,7 +2,7 @@ import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import type {
   CollectSqlOptimizationEvidenceInput,
   EvidenceContext,
-} from "@/lib/ai/tools/clickhouse/collect-sql-optimization-evidence";
+} from "@/lib/ai/tools/clickhouse/clickhouse-tool-contracts";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";

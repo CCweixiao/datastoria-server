@@ -1,7 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { User } from "lucide-react";
-import { useSession } from "next-auth/react";
 
 interface UserProfileImageProps {
   user?: {
@@ -13,10 +12,7 @@ interface UserProfileImageProps {
 }
 
 export function UserProfileImage({ user, className, fallbackClassName }: UserProfileImageProps) {
-  const { data: session } = useSession();
-
-  // Use passed user, or fallback to session user
-  const displayUser = user ?? session?.user;
+  const displayUser = user;
 
   return (
     <Avatar className={cn("h-6 w-6", className)}>

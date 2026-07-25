@@ -6,7 +6,6 @@ import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
 import { DateTimeExtension } from "@/lib/datetime-utils";
 import { cn } from "@/lib/utils";
-import NumberFlow from "@number-flow/react";
 import type { LanguageModelUsage } from "ai";
 import { Info, Loader2 } from "lucide-react";
 import { memo } from "react";
@@ -34,6 +33,8 @@ import { MessageToolSearchFile } from "./message-tool-search-file";
 import { MessageToolSkill } from "./message-tool-skill";
 import { MessageToolValidateSql } from "./message-tool-validate-sql";
 import { MessageUser } from "./message-user";
+
+const NumberFlow = ({ value }: { value: number }) => <>{value.toLocaleString()}</>;
 
 const MESSAGE_MARKDOWN_STYLE = { fontSize: "0.9rem", lineHeight: "1.6" } as const;
 

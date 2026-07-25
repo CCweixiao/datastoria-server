@@ -7,7 +7,6 @@ const ENV_BACKUP = { ...process.env };
 describe("RemoteSessionRepository", () => {
   beforeEach(() => {
     process.env = { ...ENV_BACKUP };
-    delete process.env.NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND;
     delete process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL;
     delete process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
   });
@@ -18,7 +17,7 @@ describe("RemoteSessionRepository", () => {
     vi.resetModules();
   });
 
-  it("adds the session share code header when loading a shared session (node mode)", async () => {
+  it("uses Spring by default and adds the session share code header", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -36,15 +35,14 @@ describe("RemoteSessionRepository", () => {
     const repository = new RemoteSessionRepository();
     await repository.getSession("session-1", { shareCode: "share-token" });
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/ai/chat/sessions/session-1", {
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/ai/chat/sessions/session-1", {
       headers: { [SESSION_SHARE_CODE_HEADER]: "share-token" },
       credentials: "same-origin",
       cache: "no-store",
     });
   });
 
-  it("targets the Java backend and attaches the identity header (java mode)", async () => {
-    process.env.NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND = "java";
+  it("targets the Java backend and attaches the identity header", async () => {
     process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL = "http://localhost:8080";
     process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL = "dev@example.com";
     const fetchMock = vi.fn().mockResolvedValue(

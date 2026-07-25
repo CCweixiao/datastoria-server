@@ -143,7 +143,7 @@ class UserPreferenceApiTest {
   }
 
   @Test
-  void getPreferencesWhenEmptyReturnsEmptyMap() {
+  void getPreferencesMaterializesSystemDefaults() {
     web.get()
         .uri("/api/me/ai/preferences")
         .header("x-datastoria-user-email", "dev@example.com")
@@ -152,7 +152,13 @@ class UserPreferenceApiTest {
         .isOk()
         .expectBody()
         .jsonPath("$.entries.length()")
-        .isEqualTo(0)
+        .isEqualTo(3)
+        .jsonPath("$.entries['settings.ai.agent']")
+        .exists()
+        .jsonPath("$.entries['settings.query-context']")
+        .isEqualTo("{\"max_execution_time\":60}")
+        .jsonPath("$.entries['settings.ui']")
+        .isEqualTo("{\"theme\":\"dark\"}")
         .jsonPath("$.revision")
         .isEqualTo(0);
   }

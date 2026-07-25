@@ -5,7 +5,6 @@ import {
   type ProviderSetting,
 } from "@/components/settings/models/model-manager";
 import { ProviderLogo } from "@/components/shared/provider-logo";
-import { Dialog as SharedDialog } from "@/components/shared/use-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,42 +23,12 @@ import {
   isJavaConfigurationBackend,
 } from "@/lib/ai/configuration/configuration-gateway";
 import { resolveModelSupportsImageInput, type ModelProps } from "@/lib/ai/llm/llm-provider-factory";
-import {
-  PROVIDER_GITHUB_COPILOT,
-  PROVIDER_GLM,
-  PROVIDER_OPENAI_CODEX,
-} from "@/lib/ai/llm/provider-ids";
 import { TextHighlighter } from "@/lib/text-highlighter";
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  Search,
-  X,
-} from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
-import { CodexLoginComponent } from "./codex-login-component";
-import { GitHubLoginComponent } from "./github-login-component";
-
-const PROVIDER_LINKS: Record<string, string> = {
-  OpenAI: "https://platform.openai.com/api-keys",
-  Google: "https://aistudio.google.com/app/apikey",
-  Anthropic: "https://console.anthropic.com/settings/keys",
-  OpenRouter: "https://openrouter.ai/settings/keys",
-  Groq: "https://console.groq.com/keys",
-  Cerebras: "https://cloud.cerebras.ai/platform",
-  Nebius: "https://tokenfactory.nebius.com/",
-  [PROVIDER_GLM]: "https://open.bigmodel.cn/",
-  [PROVIDER_OPENAI_CODEX]: "https://developers.openai.com/codex/auth",
-};
-
-const LOGIN_PROVIDERS = new Set([PROVIDER_GITHUB_COPILOT, PROVIDER_OPENAI_CODEX]);
 
 export function ModelsEdit() {
-  const { allModels, modelSettings, providerSettings, fetchDynamicModels } = useModelConfig();
+  const { allModels, modelSettings, providerSettings } = useModelConfig();
   const modelManager = ModelManager.getInstance();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,20 +71,19 @@ export function ModelsEdit() {
   const handleModelDisabled = useCallback(
     (provider: string, modelId: string, disabled: boolean) => {
       modelManager.updateModelSetting(provider, modelId, { disabled });
+      const model = modelCatalog[`${provider}:${modelId}`];
+      if (model) {
+        void getAiConfigurationGateway()
+          .setModelEnabled(model, !disabled)
+          .catch((error) => console.error(`Failed to update ${provider}/${modelId}:`, error));
+      }
     },
-    [modelManager]
+    [modelCatalog, modelManager]
   );
 
-  const handleProviderApiKeyChange = useCallback(
-    (provider: string, apiKey: string) => {
-      if (javaConfiguration) {
-        setServerCredentialDrafts((current) => ({ ...current, [provider]: apiKey }));
-        return;
-      }
-      modelManager.updateProviderSetting(provider, { apiKey });
-    },
-    [javaConfiguration, modelManager]
-  );
+  const handleProviderApiKeyChange = useCallback((provider: string, apiKey: string) => {
+    setServerCredentialDrafts((current) => ({ ...current, [provider]: apiKey }));
+  }, []);
 
   const persistServerCredential = useCallback(
     async (provider: string) => {
@@ -123,12 +91,20 @@ export function ModelsEdit() {
       if (!javaConfiguration || !credential) return;
       try {
         await getAiConfigurationGateway().saveProviderCredential(provider, credential);
+        const refreshed = await getAiConfigurationGateway().listProviders();
+        const configured = refreshed.find((candidate) => candidate.providerKey === provider);
+        if (configured) {
+          modelManager.updateProviderSetting(provider, {
+            credentialConfigured: configured.credentialConfigured,
+            maskedHint: configured.maskedHint,
+          });
+        }
         setServerCredentialDrafts((current) => ({ ...current, [provider]: "" }));
       } catch (error) {
         console.error(`Failed to save ${provider} credential:`, error);
       }
     },
-    [javaConfiguration, serverCredentialDrafts]
+    [javaConfiguration, modelManager, serverCredentialDrafts]
   );
 
   const [providers, setProviders] = useState<Array<[string, ModelSetting[]]>>([]);
@@ -166,69 +142,9 @@ export function ModelsEdit() {
     );
 
     const entries = Object.entries(grouped);
-    for (const loginProvider of LOGIN_PROVIDERS) {
-      const hasProvider = entries.some(([provider]) => provider === loginProvider);
-      if (!hasProvider) {
-        const providerLabel = loginProvider.toLowerCase();
-        if (!queryLower.trim() || providerLabel.includes(queryLower)) {
-          entries.push([loginProvider, [] as ModelSetting[]]);
-        }
-      }
-    }
-
     entries.sort(([a], [b]) => a.localeCompare(b));
     setProviders(entries);
   }, [allModels, modelSettings, searchQuery]);
-
-  const handleCopilotLogin = async () => {
-    SharedDialog.showDialog({
-      title: "Login with GitHub Copilot",
-      description: "Authorize this application to access your GitHub Copilot models.",
-      className: "w-full max-w-[600px] sm:max-w-[600px]",
-      overlayClassName: "bg-black/70 backdrop-blur-sm",
-      mainContent: (
-        <GitHubLoginComponent
-          onSuccess={(tokens) => {
-            modelManager.updateProviderSetting(PROVIDER_GITHUB_COPILOT, {
-              apiKey: tokens.accessToken,
-              refreshToken: tokens.refreshToken,
-              accessTokenExpiresAt: tokens.accessTokenExpiresAt,
-              refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-              authError: undefined,
-            });
-            fetchDynamicModels(tokens.accessToken);
-            SharedDialog.close();
-          }}
-          onCancel={() => {
-            SharedDialog.close();
-          }}
-        />
-      ),
-    });
-  };
-
-  const handleCodexLogin = async () => {
-    SharedDialog.showDialog({
-      title: "Login with OpenAI Codex",
-      description: "Authorize this application to access Codex with your ChatGPT subscription.",
-      className: "w-full max-w-[760px] sm:max-w-[760px]",
-      overlayClassName: "bg-black/70 backdrop-blur-sm",
-      mainContent: (
-        <CodexLoginComponent
-          onSuccess={(tokens) => {
-            modelManager.updateProviderSetting(PROVIDER_OPENAI_CODEX, {
-              apiKey: tokens.accessToken,
-              refreshToken: tokens.refreshToken,
-              accessTokenExpiresAt: tokens.accessTokenExpiresAt,
-              refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-              authError: undefined,
-            });
-            SharedDialog.close();
-          }}
-        />
-      ),
-    });
-  };
 
   // Expand all providers when searching
   useEffect(() => {
@@ -273,6 +189,12 @@ export function ModelsEdit() {
       if (javaConfiguration) {
         void getAiConfigurationGateway()
           .clearProviderCredential(provider)
+          .then(() =>
+            modelManager.updateProviderSetting(provider, {
+              credentialConfigured: false,
+              maskedHint: null,
+            })
+          )
           .catch((error) => console.error(`Failed to clear ${provider} credential:`, error));
         setServerCredentialDrafts((current) => ({ ...current, [provider]: "" }));
         setClearConfirmProvider(null);
@@ -283,17 +205,6 @@ export function ModelsEdit() {
     },
     [javaConfiguration, modelManager]
   );
-
-  // Mask API key to show only first 8 characters by default
-  const getMaskedApiKey = useCallback((apiKey: string, isVisible: boolean) => {
-    if (!apiKey || isVisible) {
-      return apiKey;
-    }
-    if (apiKey.length <= 8) {
-      return "•".repeat(apiKey.length);
-    }
-    return `${apiKey.slice(0, 8)}${"•".repeat(Math.min(apiKey.length - 8, 12))}`;
-  }, []);
 
   // Auto-reveal API key when user focuses on the input
   const handleApiKeyFocus = useCallback(
@@ -368,15 +279,13 @@ export function ModelsEdit() {
                             />
                             <span className="font-semibold text-sm">{provider}</span>
                             <span className="text-xs text-muted-foreground">
-                              {LOGIN_PROVIDERS.has(provider) && !providerSetting?.apiKey
-                                ? "(Login to use models)"
-                                : hasSystemModels
-                                  ? `(${providerModels.length} ${
-                                      providerModels.length === 1 ? "model" : "models"
-                                    }, system-backed available)`
-                                  : `(${providerModels.length} ${
-                                      providerModels.length === 1 ? "model" : "models"
-                                    })`}
+                              {hasSystemModels
+                                ? `(${providerModels.length} ${
+                                    providerModels.length === 1 ? "model" : "models"
+                                  }, system-backed available)`
+                                : `(${providerModels.length} ${
+                                    providerModels.length === 1 ? "model" : "models"
+                                  })`}
                             </span>
                           </button>
                         </TableCell>
@@ -385,188 +294,101 @@ export function ModelsEdit() {
                         </TableCell>
                         <TableCell className="py-1.5 pr-4">
                           <div className="flex items-center gap-2">
-                            {PROVIDER_LINKS[provider] && (
-                              <a
-                                href={PROVIDER_LINKS[provider]}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                title={`Get ${provider} API key`}
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            )}
-                            {LOGIN_PROVIDERS.has(provider) && (
-                              <div className="flex items-center gap-2 min-w-0">
-                                {!providerSetting?.apiKey ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={
-                                      provider === PROVIDER_GITHUB_COPILOT
-                                        ? handleCopilotLogin
-                                        : handleCodexLogin
+                            <div className="flex items-center gap-1 flex-1 ">
+                              <>
+                                <Input
+                                  type={visibleApiKeys.has(provider) ? "text" : "password"}
+                                  value={
+                                    javaConfiguration
+                                      ? (serverCredentialDrafts[provider] ?? "")
+                                      : ""
+                                  }
+                                  onChange={(e) => {
+                                    handleProviderApiKeyChange(provider, e.target.value);
+                                    // Auto-reveal when user starts typing
+                                    if (e.target.value && !visibleApiKeys.has(provider)) {
+                                      setVisibleApiKeys((prev) => new Set(prev).add(provider));
                                     }
-                                    className="h-7 text-xs"
-                                  >
-                                    {provider === PROVIDER_GITHUB_COPILOT
-                                      ? "Login with Copilot"
-                                      : "Login with Codex"}
-                                  </Button>
-                                ) : (
-                                  <StatusPopover
-                                    open={clearConfirmProvider === provider}
-                                    onOpenChange={(open) =>
-                                      setClearConfirmProvider(open ? provider : null)
-                                    }
-                                    trigger={
-                                      <Button variant="outline" size="sm" className="h-7 text-xs">
-                                        Logout
-                                      </Button>
-                                    }
-                                    side="top"
-                                    align="center"
-                                    sideOffset={4}
-                                    icon={
-                                      <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-                                    }
-                                    title="Confirm logout"
-                                  >
-                                    <div className="text-xs mb-3">
-                                      This will clear your local {provider} tokens. You'll need to
-                                      log in again to use {provider} models.
-                                    </div>
-                                    <div className="flex justify-end gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8 rounded-sm text-sm"
-                                        onClick={() => setClearConfirmProvider(null)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="destructive"
-                                        size="sm"
-                                        className="h-8 rounded-sm text-sm"
-                                        onClick={() => handleClearProviderKey(provider)}
-                                      >
-                                        Logout
-                                      </Button>
-                                    </div>
-                                  </StatusPopover>
-                                )}
-                                {providerSetting?.authError && (
-                                  <div className="text-xs text-destructive whitespace-nowrap">
-                                    {providerSetting.authError === "refresh_failed"
-                                      ? "Session refresh failed. Please login again."
-                                      : "Session expired. Please login again."}
+                                  }}
+                                  onBlur={() => void persistServerCredential(provider)}
+                                  onFocus={() => handleApiKeyFocus(provider)}
+                                  placeholder={
+                                    providerSetting?.credentialConfigured
+                                      ? `${providerSetting.maskedHint ?? "Credential configured"} — enter a new key to rotate`
+                                      : `Enter ${provider} API key (encrypted by Java backend)`
+                                  }
+                                  className="w-full h-8 border-0 border-b border-muted-foreground/20 rounded-none pl-0 bg-transparent focus-visible:ring-0 pr-8"
+                                />
+                                {(serverCredentialDrafts[provider] ||
+                                  providerSetting?.credentialConfigured) && (
+                                  <div className="right-0 flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleApiKeyVisibility(provider)}
+                                      className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                                      title={
+                                        visibleApiKeys.has(provider)
+                                          ? "Hide API key"
+                                          : "Show API key"
+                                      }
+                                    >
+                                      {visibleApiKeys.has(provider) ? (
+                                        <EyeOff className="h-4 w-4" />
+                                      ) : (
+                                        <Eye className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                    <StatusPopover
+                                      open={clearConfirmProvider === provider}
+                                      onOpenChange={(open) =>
+                                        setClearConfirmProvider(open ? provider : null)
+                                      }
+                                      trigger={
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs"
+                                        >
+                                          Clear
+                                        </Button>
+                                      }
+                                      side="left"
+                                      align="end"
+                                      sideOffset={4}
+                                      icon={
+                                        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+                                      }
+                                      title="Clear API key"
+                                    >
+                                      <div className="text-xs mb-3">
+                                        Remove the saved API key for {provider}?
+                                      </div>
+                                      <div className="flex justify-end gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 rounded-sm text-sm"
+                                          onClick={() => setClearConfirmProvider(null)}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="destructive"
+                                          size="sm"
+                                          className="h-8 rounded-sm text-sm"
+                                          onClick={() => handleClearProviderKey(provider)}
+                                        >
+                                          Clear
+                                        </Button>
+                                      </div>
+                                    </StatusPopover>
                                   </div>
                                 )}
-                              </div>
-                            )}
-                            {!LOGIN_PROVIDERS.has(provider) && (
-                              <div className="flex items-center gap-1 flex-1 ">
-                                <>
-                                  <Input
-                                    type="text"
-                                    value={
-                                      javaConfiguration
-                                        ? (serverCredentialDrafts[provider] ?? "")
-                                        : providerSetting?.apiKey
-                                          ? visibleApiKeys.has(provider)
-                                            ? providerSetting.apiKey
-                                            : getMaskedApiKey(providerSetting.apiKey, false)
-                                          : ""
-                                    }
-                                    onChange={(e) => {
-                                      handleProviderApiKeyChange(provider, e.target.value);
-                                      // Auto-reveal when user starts typing
-                                      if (e.target.value && !visibleApiKeys.has(provider)) {
-                                        setVisibleApiKeys((prev) => new Set(prev).add(provider));
-                                      }
-                                    }}
-                                    onBlur={() => void persistServerCredential(provider)}
-                                    onFocus={() => handleApiKeyFocus(provider)}
-                                    placeholder={
-                                      javaConfiguration
-                                        ? `Enter ${provider} API key (stored by Java backend)`
-                                        : `Enter ${provider} API key`
-                                    }
-                                    className="w-full h-8 border-0 border-b border-muted-foreground/20 rounded-none pl-0 bg-transparent focus-visible:ring-0 pr-8"
-                                  />
-                                  {(javaConfiguration || providerSetting?.apiKey) && (
-                                    <div className="right-0 flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleApiKeyVisibility(provider)}
-                                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                                        title={
-                                          visibleApiKeys.has(provider)
-                                            ? "Hide API key"
-                                            : "Show API key"
-                                        }
-                                      >
-                                        {visibleApiKeys.has(provider) ? (
-                                          <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                          <Eye className="h-4 w-4" />
-                                        )}
-                                      </button>
-                                      <StatusPopover
-                                        open={clearConfirmProvider === provider}
-                                        onOpenChange={(open) =>
-                                          setClearConfirmProvider(open ? provider : null)
-                                        }
-                                        trigger={
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-6 px-2 text-xs"
-                                          >
-                                            Clear
-                                          </Button>
-                                        }
-                                        side="left"
-                                        align="end"
-                                        sideOffset={4}
-                                        icon={
-                                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-                                        }
-                                        title="Clear API key"
-                                      >
-                                        <div className="text-xs mb-3">
-                                          Remove the saved API key for {provider}?
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-8 rounded-sm text-sm"
-                                            onClick={() => setClearConfirmProvider(null)}
-                                          >
-                                            Cancel
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            variant="destructive"
-                                            size="sm"
-                                            className="h-8 rounded-sm text-sm"
-                                            onClick={() => handleClearProviderKey(provider)}
-                                          >
-                                            Clear
-                                          </Button>
-                                        </div>
-                                      </StatusPopover>
-                                    </div>
-                                  )}
-                                </>
-                              </div>
-                            )}
+                              </>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>

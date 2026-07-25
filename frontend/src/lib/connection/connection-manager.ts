@@ -1,6 +1,5 @@
-import { StorageManager } from "../storage/storage-provider-manager";
+import { listUserState, putUserState } from "@/lib/user-state-client";
 import type { ConnectionConfig } from "./connection-config";
-import { loadFromLegacyStorage } from "./connection-private";
 
 export const ConnectionChangeType = {
   ADD: 0,
@@ -17,6 +16,44 @@ export interface ConnectionChangeEventArgs {
   afterChange: ConnectionConfig | null;
 }
 
+type ServerConnection = {
+  id: string;
+  name: string;
+  url: string;
+  username: string;
+  cluster?: string | null;
+  enabled: boolean;
+  revision: number;
+};
+
+function apiUrl(path: string): string {
+  const base = (
+    process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+  ).replace(/\/+$/, "");
+  return `${base}${path}`;
+}
+
+function headers(extra?: HeadersInit): HeadersInit {
+  const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+  return {
+    ...(email ? { "x-datastoria-user-email": email } : {}),
+    ...(extra ?? {}),
+  };
+}
+
+function fromServer(connection: ServerConnection): ConnectionConfig {
+  return {
+    id: connection.id,
+    revision: connection.revision,
+    name: connection.name,
+    url: connection.url,
+    user: connection.username,
+    password: "",
+    cluster: connection.cluster ?? "",
+    editable: true,
+  };
+}
+
 export class ConnectionManager {
   private static instance: ConnectionManager;
 
@@ -24,201 +61,134 @@ export class ConnectionManager {
     return this.instance || (this.instance = new this());
   }
 
-  private connectionMap: Map<string, ConnectionConfig>;
-  private connectionArray: ConnectionConfig[];
-
-  private getConnectionStorage() {
-    return StorageManager.getInstance().getStorageProvider().subStorage("connections");
-  }
-
-  private loadFromStorage(): void {
-    const connectionStorage = this.getConnectionStorage();
-    let savedConnections: unknown[] = [];
-    try {
-      savedConnections = this.getConnectionStorage().getAsJSON<unknown[]>(() => []);
-    } catch {
-      // Ignore
-    }
-
-    this.connectionMap = new Map();
-    this.connectionArray = [];
-    for (const val of savedConnections) {
-      // Type guard for connection data
-      if (
-        typeof val !== "object" ||
-        val === null ||
-        !("name" in val) ||
-        !("url" in val) ||
-        !("user" in val)
-      ) {
-        continue;
-      }
-
-      const connData = val as {
-        name: string;
-        url: string;
-        user: string;
-        password?: string;
-        cluster?: string;
-        isCluster?: boolean;
-        editable?: boolean;
-      };
-
-      // Process old data
-      const cluster =
-        connData.cluster === undefined && connData.isCluster
-          ? connData.name
-          : connData.cluster || "";
-
-      const connection: ConnectionConfig = {
-        name: connData.name,
-        url: connData.url,
-        user: connData.user,
-        password: connData.password || "",
-        cluster: cluster,
-        editable: connData.editable !== undefined ? connData.editable : true,
-      };
-
-      this.connectionArray.push(connection);
-      this.connectionMap.set(connection.name, connection);
-    }
-
-    let hasLegacyMerge = false;
-    const legacyStorage = loadFromLegacyStorage();
-    for (const legacyConnection of legacyStorage.connections) {
-      if (this.connectionMap.has(legacyConnection.name)) {
-        continue;
-      }
-      this.connectionArray.push(legacyConnection);
-      this.connectionMap.set(legacyConnection.name, legacyConnection);
-      hasLegacyMerge = true;
-    }
-
-    this.connectionArray.sort((a, c) => a.name.localeCompare(c.name));
-    if (hasLegacyMerge) {
-      connectionStorage.setJSON(this.connectionArray);
-    }
-    if (
-      legacyStorage.selectedConnectionName !== null &&
-      connectionStorage.getChildAsString("selected") === null &&
-      this.connectionMap.has(legacyStorage.selectedConnectionName)
-    ) {
-      connectionStorage.setChildAsString("selected", legacyStorage.selectedConnectionName);
-    }
-  }
+  private connectionMap = new Map<string, ConnectionConfig>();
+  private connectionArray: ConnectionConfig[] = [];
+  private selectedName: string | undefined;
+  private readonly hydration: Promise<void>;
 
   constructor() {
-    this.connectionMap = new Map();
-    this.connectionArray = [];
-    this.loadFromStorage();
-    StorageManager.getInstance().subscribeToStorageProviderChange(() => this.loadFromStorage());
+    this.hydration = this.reload();
+  }
+
+  async ready(): Promise<void> {
+    await this.hydration;
+  }
+
+  private async reload(): Promise<void> {
+    const [response, selection] = await Promise.all([
+      fetch(apiUrl("/api/connections"), { headers: headers() }),
+      listUserState<string>("connection-selection").catch(() => []),
+    ]);
+    if (!response.ok) {
+      throw new Error(`Failed to load ClickHouse connections: ${response.status}`);
+    }
+    const connections = (await response.json()) as ServerConnection[];
+    this.connectionArray = connections.map(fromServer).sort((a, b) => a.name.localeCompare(b.name));
+    this.connectionMap = new Map(
+      this.connectionArray.map((connection) => [connection.name, connection])
+    );
+    const selected = selection.find((entry) => entry.key === "current")?.value;
+    this.selectedName = selected && this.connectionMap.has(selected) ? selected : undefined;
   }
 
   getConnections(): ConnectionConfig[] {
     return this.connectionArray;
   }
 
-  contains(name: string) {
+  contains(name: string): boolean {
     return this.connectionMap.has(name);
   }
 
-  add(connection: ConnectionConfig): ConnectionChangeEventArgs {
-    this.connectionArray.push(connection);
-
-    try {
-      this.getConnectionStorage().setJSON(this.connectionArray);
-    } catch (e) {
-      this.connectionArray.pop();
-      throw e;
+  async add(connection: ConnectionConfig): Promise<ConnectionChangeEventArgs> {
+    const response = await fetch(apiUrl("/api/connections"), {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        name: connection.name,
+        url: connection.url,
+        username: connection.user,
+        password: connection.password,
+        cluster: connection.cluster || null,
+        enabled: true,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create ClickHouse connection: ${response.status}`);
     }
-
-    this.connectionMap.set(connection.name, connection);
-    this.connectionArray.sort((a, c) => a.name.localeCompare(c.name));
-
-    return {
-      type: ConnectionChangeType.ADD,
-      beforeChange: null,
-      afterChange: connection,
-    };
+    const saved = fromServer((await response.json()) as ServerConnection);
+    this.connectionArray.push(saved);
+    this.connectionArray.sort((a, b) => a.name.localeCompare(b.name));
+    this.connectionMap.set(saved.name, saved);
+    return { type: ConnectionChangeType.ADD, beforeChange: null, afterChange: saved };
   }
 
-  replace(name: string, newConnection: ConnectionConfig): ConnectionChangeEventArgs {
-    const index = this.indexOf(name);
-    if (index === -1) {
+  async replace(name: string, newConnection: ConnectionConfig): Promise<ConnectionChangeEventArgs> {
+    const existing = this.connectionMap.get(name);
+    if (!existing?.id) {
       return this.add(newConnection);
     }
-
-    const oldConnection = this.connectionArray[index];
-    this.connectionArray[index] = newConnection;
-    try {
-      this.getConnectionStorage().setJSON(this.connectionArray);
-    } catch (e) {
-      this.connectionArray[index] = oldConnection;
-      throw e;
+    const response = await fetch(apiUrl(`/api/connections/${existing.id}`), {
+      method: "PUT",
+      headers: headers({
+        "Content-Type": "application/json",
+        "If-Match": `"${existing.revision ?? 0}"`,
+      }),
+      body: JSON.stringify({
+        name: newConnection.name,
+        url: newConnection.url,
+        username: newConnection.user,
+        ...(newConnection.password ? { password: newConnection.password } : {}),
+        cluster: newConnection.cluster || null,
+        enabled: true,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to update ClickHouse connection: ${response.status}`);
     }
-
+    const saved = fromServer((await response.json()) as ServerConnection);
+    this.connectionArray = this.connectionArray
+      .filter((connection) => connection.name !== name)
+      .concat(saved)
+      .sort((a, b) => a.name.localeCompare(b.name));
     this.connectionMap.delete(name);
-    this.connectionMap.set(newConnection.name, newConnection);
-    this.connectionArray.sort((a, c) => a.name.localeCompare(c.name));
-
-    return {
-      type: ConnectionChangeType.MODIFY,
-      beforeChange: oldConnection,
-      afterChange: newConnection,
-    };
+    this.connectionMap.set(saved.name, saved);
+    return { type: ConnectionChangeType.MODIFY, beforeChange: existing, afterChange: saved };
   }
 
-  remove(name: string): ConnectionChangeEventArgs {
-    let oldConnection = null;
-
-    const newConnectionArray = [];
-    for (let i = 0; i < this.connectionArray.length; i++) {
-      if (this.connectionArray[i].name !== name) {
-        newConnectionArray.push(this.connectionArray[i]);
-      } else {
-        oldConnection = this.connectionArray[i];
-      }
+  async remove(name: string): Promise<ConnectionChangeEventArgs> {
+    const existing = this.connectionMap.get(name) ?? null;
+    if (!existing?.id) {
+      return { type: ConnectionChangeType.REMOVE, beforeChange: existing, afterChange: null };
     }
-
-    if (oldConnection !== null) {
-      this.getConnectionStorage().setJSON(newConnectionArray);
-
-      this.connectionArray = newConnectionArray;
-      this.connectionMap.delete(name);
+    const response = await fetch(apiUrl(`/api/connections/${existing.id}`), {
+      method: "DELETE",
+      headers: headers({ "If-Match": `"${existing.revision ?? 0}"` }),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete ClickHouse connection: ${response.status}`);
     }
-
-    return {
-      type: ConnectionChangeType.REMOVE,
-      beforeChange: oldConnection,
-      afterChange: null,
-    };
+    this.connectionArray = this.connectionArray.filter((connection) => connection.name !== name);
+    this.connectionMap.delete(name);
+    if (this.selectedName === name) {
+      this.selectedName = undefined;
+    }
+    return { type: ConnectionChangeType.REMOVE, beforeChange: existing, afterChange: null };
   }
 
-  private indexOf(name: string): number {
-    for (let i = 0; i < this.connectionArray.length; i++) {
-      if (this.connectionArray[i].name === name) return i;
-    }
-    return -1;
+  first(): ConnectionConfig | null {
+    return this.connectionArray[0] ?? null;
   }
 
-  public first(): ConnectionConfig | null {
-    return this.connectionArray.length > 0 ? this.connectionArray[0] : null;
+  saveLastSelected(name: string | undefined): void {
+    this.selectedName = name;
+    void putUserState("connection-selection", "current", name ?? null).catch((error) =>
+      console.error("Failed to persist selected connection:", error)
+    );
   }
 
-  public saveLastSelected(name: string | undefined) {
-    if (name === undefined) {
-      this.getConnectionStorage().removeChild("selected");
-    } else {
-      this.getConnectionStorage().setChildAsString("selected", name);
-    }
-  }
-
-  public getLastSelectedOrFirst() {
-    const selected = this.getConnectionStorage().getChildAsString("selected");
-    if (selected === null) {
-      return this.first();
-    }
-    const selectedConn = this.connectionArray.find((conn) => conn.name === selected);
-    return selectedConn === undefined ? this.first() : selectedConn;
+  getLastSelectedOrFirst(): ConnectionConfig | null {
+    return (
+      (this.selectedName ? this.connectionMap.get(this.selectedName) : undefined) ?? this.first()
+    );
   }
 }

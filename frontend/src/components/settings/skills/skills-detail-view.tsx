@@ -1,7 +1,6 @@
 "use client";
 
 import type { ModelSelection } from "@/components/chat/input/model-selector-impl";
-import { useRuntimeConfig } from "@/components/runtime-config-provider";
 import FloatingProgressBar from "@/components/shared/floating-progress-bar";
 import { useTheme } from "@/components/shared/theme-provider";
 import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
@@ -13,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useModelConfig } from "@/hooks/use-model-config";
 import type { SkillDetailResponse, SkillResourceResponse } from "@/lib/ai/skills/skill-provider";
 import type { SkillReviewResponse } from "@/lib/ai/skills/skill-review";
-import { BasePath } from "@/lib/base-path";
+import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDiffViewer from "react-diff-viewer-continued";
@@ -32,12 +31,12 @@ interface SkillsDetailViewProps {
 }
 
 function buildSkillDetailUrl(skillId: string): string {
-  return BasePath.getURL(`/api/ai/skills/${encodeURIComponent(skillId)}`);
+  return backendApiUrl(`/api/ai/skills/${encodeURIComponent(skillId)}`);
 }
 
 function buildSkillResourceUrl(skillId: string, resourcePath: string): string {
   const searchParams = new URLSearchParams({ path: resourcePath });
-  return BasePath.getURL(`/api/ai/skills/${encodeURIComponent(skillId)}/resource?${searchParams}`);
+  return backendApiUrl(`/api/ai/skills/${encodeURIComponent(skillId)}/resource?${searchParams}`);
 }
 
 function normalizeReferencePath(folderPath: string, input: string): string {
@@ -76,9 +75,8 @@ async function readJsonError(response: Response, fallback: string): Promise<stri
 // ---------------------------------------------------------------------------
 
 export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
-  const { allowEditSkill } = useRuntimeConfig();
   const { theme } = useTheme();
-  const { availableModels, selectedModel, providerSettings } = useModelConfig();
+  const { availableModels, selectedModel } = useModelConfig();
   const [detail, setDetail] = useState<SkillDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +96,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
   const [isDeleteReferenceConfirmOpen, setIsDeleteReferenceConfirmOpen] = useState(false);
   const [reviewModel, setReviewModel] = useState<ModelSelection | null>(null);
   const [reviewResult, setReviewResult] = useState<SkillReviewResponse | null>(null);
+  const allowEditSkill = detail?.canEdit ?? false;
 
   const [renderMode, setRenderMode] = useState<"rendered" | "raw">("rendered");
   const detailRequestIdRef = useRef(0);
@@ -162,6 +161,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
 
     fetch(buildSkillDetailUrl(skillId), {
       signal: controller.signal,
+      headers: backendApiHeaders(),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -185,7 +185,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
 
   const fetchResource = useCallback(
     async (resourcePath: string): Promise<SkillResourceResponse> => {
-      const response = await fetch(buildSkillResourceUrl(skillId, resourcePath));
+      const response = await fetch(buildSkillResourceUrl(skillId, resourcePath), {
+        headers: backendApiHeaders(),
+      });
       if (!response.ok) {
         throw new Error(await readJsonError(response, `HTTP ${response.status}`));
       }
@@ -226,6 +228,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
 
       fetch(buildSkillResourceUrl(skillId, resourcePath), {
         signal: controller.signal,
+        headers: backendApiHeaders(),
       })
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -260,7 +263,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
   }, []);
 
   const reloadDetail = useCallback(async () => {
-    const response = await fetch(buildSkillDetailUrl(skillId));
+    const response = await fetch(buildSkillDetailUrl(skillId), {
+      headers: backendApiHeaders(),
+    });
     if (!response.ok) {
       throw new Error(await readJsonError(response, `HTTP ${response.status}`));
     }
@@ -285,9 +290,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
 
       const response = await fetch(buildSkillDetailUrl(skillId), {
         method: "PATCH",
-        headers: {
+        headers: backendApiHeaders({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           action: "publish",
           resources,
@@ -507,32 +512,17 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
       return;
     }
 
-    const providerSetting = providerSettings.find((item) => item.provider === reviewModel.provider);
-    const requestedReviewModel = providerSetting?.apiKey
-      ? {
-          provider: reviewModel.provider,
-          modelId: reviewModel.modelId,
-          apiKey: providerSetting.apiKey,
-        }
-      : {
-          provider: reviewModel.provider,
-          modelId: reviewModel.modelId,
-        };
-
     setIsReviewing(true);
     setReviewError(null);
     setReviewResult(null);
 
     try {
-      const response = await fetch(BasePath.getURL("/api/ai/skills/actions/review"), {
+      const response = await fetch(backendApiUrl("/api/ai/skills/actions/review"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: backendApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           scope: "file",
           skillId,
-          model: requestedReviewModel,
           target: {
             primaryPath: selectedFile,
             files: [
@@ -555,7 +545,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     } finally {
       setIsReviewing(false);
     }
-  }, [currentContent, providerSettings, reviewModel, selectedFile, skillId]);
+  }, [currentContent, reviewModel, selectedFile, skillId]);
 
   const applyReviewProposal = useCallback(() => {
     if (!selectedFile || !reviewResult) {

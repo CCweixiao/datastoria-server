@@ -1,4 +1,4 @@
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
+import { loadEffectiveConfiguration, saveConfiguration } from "@/lib/configuration-client";
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light" | "system";
@@ -19,22 +19,30 @@ const initialState: ThemeProviderState = {
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+const CONFIG_KEY = "settings.ui";
 
 export function ThemeProvider({
   children,
   defaultTheme = "dark",
   ...props
 }: Omit<ThemeProviderProps, "storageKey">) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // Only access localStorage on client side
-    if (typeof window === "undefined") {
-      return defaultTheme;
-    }
-    const themeStorage = StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("settings:ui:theme");
-    return (themeStorage.getString() as Theme) || defaultTheme;
-  });
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadEffectiveConfiguration()
+      .then((configuration) => {
+        const raw = configuration.entries[CONFIG_KEY];
+        const stored = raw ? (JSON.parse(raw) as { theme?: Theme }).theme : undefined;
+        if (!cancelled && (stored === "dark" || stored === "light" || stored === "system")) {
+          setThemeState(stored);
+        }
+      })
+      .catch((error) => console.error("Failed to load theme:", error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -54,11 +62,10 @@ export function ThemeProvider({
   }, [theme]);
 
   const setTheme = (theme: Theme) => {
-    StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("settings:ui:theme")
-      .setString(theme);
     setThemeState(theme);
+    void saveConfiguration(CONFIG_KEY, { theme }).catch((error) =>
+      console.error("Failed to save theme:", error)
+    );
   };
 
   const value = {

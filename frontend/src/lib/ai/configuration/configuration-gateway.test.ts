@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("configuration gateway", () => {
-  it("keeps the existing Node route as the default rollback path", async () => {
+  it("defaults to the Spring Boot API and ignores browser OAuth tokens", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ systemModels: [], githubModels: [] }), {
         status: 200,
@@ -17,18 +17,18 @@ describe("configuration gateway", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { getAiConfigurationGateway } = await import("./configuration-gateway");
-    await getAiConfigurationGateway().listAvailableModels({ githubToken: "legacy-token" });
+    await getAiConfigurationGateway().listAvailableModels();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/ai/models/available",
+      "http://127.0.0.1:8080/api/ai/models/available",
       expect.objectContaining({
-        body: JSON.stringify({ github: { token: "legacy-token" } }),
+        body: "{}",
       })
     );
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("legacy-token");
   });
 
   it("uses Java APIs without sending a browser apiKey", async () => {
-    vi.stubEnv("NEXT_PUBLIC_DATASTORIA_CONFIG_BACKEND", "java");
     vi.stubEnv("NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL", "http://localhost:8080");
     vi.stubEnv("NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL", "dev@example.com");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -40,7 +40,7 @@ describe("configuration gateway", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { getAiConfigurationGateway } = await import("./configuration-gateway");
-    await getAiConfigurationGateway().listAvailableModels({ githubToken: "must-not-leak" });
+    await getAiConfigurationGateway().listAvailableModels();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/ai/models/available",
@@ -55,7 +55,7 @@ describe("configuration gateway", () => {
   });
 
   it("persists selected model by backend config id", async () => {
-    vi.stubEnv("NEXT_PUBLIC_DATASTORIA_CONFIG_BACKEND", "java");
+    vi.stubEnv("NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL", "http://localhost:8080");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("{}", {
         status: 200,
@@ -72,7 +72,7 @@ describe("configuration gateway", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/me/ai/model-preference",
+      "http://localhost:8080/api/me/ai/model-preference",
       expect.objectContaining({
         body: JSON.stringify({ modelConfigId: "model-config-id" }),
       })

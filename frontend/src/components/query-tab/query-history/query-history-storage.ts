@@ -9,6 +9,7 @@ export interface QueryHistoryEntry {
 
 export interface QueryHistoryStorage {
   load(): QueryHistoryEntry[];
+  hydrate?(): Promise<QueryHistoryEntry[]>;
   save(entries: QueryHistoryEntry[]): void;
   clear(): void;
 }

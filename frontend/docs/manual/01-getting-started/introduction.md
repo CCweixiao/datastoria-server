@@ -19,7 +19,7 @@ DataStoria is a comprehensive web-based interface for ClickHouse that combines p
 
 DataStoria is built on three fundamental principles:
 
-1. **Privacy First** — All SQL queries execute directly from your browser to your ClickHouse server. Your credentials and query results never leave your machine.
+1. **Backend Security Boundary** — Spring Boot stores encrypted credentials and executes ClickHouse and model requests. The browser never receives saved secrets.
 
 2. **AI-Enhanced Intelligence** — Leverage cutting-edge AI to convert natural language into optimized SQL queries, get intelligent query suggestions, and generate visualizations automatically.
 
@@ -49,9 +49,9 @@ DataStoria is built on three fundamental principles:
 
 ### 🔒 Privacy & Security
 
-- **100% Local Execution** — All SQL queries run directly from your browser to your ClickHouse server, ensuring complete privacy.
-- **No Data Collection** — Your credentials and query results never leave your machine.
-- **Bring Your Own API Key** — Use your own LLM API keys for AI features, keeping your data under your control.
+- **Server-side execution** — SQL and AgentScope tools execute through the selected backend connection.
+- **Encrypted secrets** — ClickHouse passwords and provider credentials are encrypted at rest and omitted from API responses.
+- **Bring Your Own API Key** — Submit provider credentials directly to Spring Boot and manage them through backend APIs.
 
 ## Who is DataStoria For?
 

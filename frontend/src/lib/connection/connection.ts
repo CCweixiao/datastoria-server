@@ -2,7 +2,6 @@ import type { DependencyTableInfo } from "@/components/dependency-view/dependenc
 import { QueryContextManager } from "@/components/settings/query-context/query-context-manager";
 import type { ClickHouseSetting } from "@/lib/clickhouse/clickhouse-setting-loader";
 import type { ConnectionConfig } from "./connection-config";
-import { getAuthUser } from "./connection-private";
 
 // Re-export ConnectionConfig for convenience
 export type { ConnectionConfig };
@@ -176,10 +175,10 @@ const USER_CANCELLED_ERROR_MESSAGE = "User cancelled";
 
 export class Connection {
   // Static config
+  readonly id?: string;
   readonly name: string;
   readonly url: string;
   readonly user: string;
-  readonly password?: string;
   readonly cluster?: string;
 
   // Runtime properties
@@ -194,10 +193,10 @@ export class Connection {
   readonly legacyConnectionId: string;
 
   private constructor(config: ConnectionConfig) {
+    this.id = config.id;
     this.name = config.name;
     this.url = config.url;
     this.user = config.user;
-    this.password = config.password;
     this.cluster = config.cluster;
 
     const urlObj = new URL(config.url);
@@ -218,9 +217,10 @@ export class Connection {
 
     this.legacyConnectionId = `${config.user}@${this.host}`;
     this.connectionId =
-      config.cluster && config.cluster.length > 0
+      config.id ??
+      (config.cluster && config.cluster.length > 0
         ? `${config.user}@${this.host}?cluster=${encodeURIComponent(config.cluster)}`
-        : this.legacyConnectionId;
+        : this.legacyConnectionId);
 
     // Initialize metadata with defaults
     this.metadata = {
@@ -287,7 +287,7 @@ export class Connection {
   public query(
     sql: string,
     params?: Record<string, unknown>,
-    headers?: Record<string, string>
+    _headers?: Record<string, string>
   ): { response: Promise<QueryResponse>; abortController: AbortController } {
     // Validate connection is properly initialized
     if (!this.host || !this.path) {
@@ -300,50 +300,31 @@ export class Connection {
     const [replacedSql] = this.resolveClusterTemplates(sql);
     sql = replacedSql;
 
-    const requestHeaders: Record<string, string> = headers || {};
-
-    // Set default ClickHouse headers if not provided
-    if (!requestHeaders["Content-Type"]) {
-      requestHeaders["Content-Type"] = "text/plain";
-    }
-
     const queryParameters = this.buildQueryParameters(params);
 
     // Can't add this header automatically
     // Some clusters are deployed after load balancers which may have enable CORS already
     // queryParameters["add_http_cors_header"] = "1";
 
-    // Build URL with query parameters
-    const url = new URL(this.path, this.host);
-    Object.entries(queryParameters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.append(key, String(value));
-      }
-    });
-
-    // Build Basic Auth header
-    const authUser = getAuthUser(this.user, this.password, this.cluster);
-    const basicAuth = btoa(`${authUser}:${this.password || ""}`);
-    requestHeaders["Authorization"] = `Basic ${basicAuth}`;
-
     // Create abort controller for the caller to use
     const abortController = new AbortController();
 
     const response = (async (): Promise<QueryResponse> => {
       try {
-        const fetchUrl = url.toString();
-
-        // Validate URL before making request
-        if (!fetchUrl || !(fetchUrl.startsWith("http://") || fetchUrl.startsWith("https://"))) {
-          throw new QueryError(
-            `Invalid URL: ${fetchUrl}. Connection may not be properly initialized.`
-          );
+        if (!this.id) {
+          throw new QueryError("Connection must be saved before executing a query");
         }
-
-        const response = await fetch(fetchUrl, {
+        const apiBase = (
+          process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+        ).replace(/\/+$/, "");
+        const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+        const response = await fetch(`${apiBase}/api/connections/${this.id}/query`, {
           method: "POST",
-          headers: requestHeaders,
-          body: sql,
+          headers: {
+            "Content-Type": "application/json",
+            ...(identity ? { "x-datastoria-user-email": identity } : {}),
+          },
+          body: JSON.stringify({ query: sql, parameters: queryParameters }),
           signal: abortController.signal,
         });
 
@@ -414,7 +395,7 @@ export class Connection {
   public queryRawResponse(
     sql: string,
     params?: Record<string, unknown>,
-    headers?: Record<string, string>
+    _headers?: Record<string, string>
   ): { response: Promise<Response>; abortController: AbortController } {
     if (!this.host || !this.path) {
       throw new QueryError(
@@ -425,38 +406,25 @@ export class Connection {
     const [replacedSql] = this.resolveClusterTemplates(sql);
     sql = replacedSql;
 
-    const requestHeaders: Record<string, string> = headers || {};
-    if (!requestHeaders["Content-Type"]) {
-      requestHeaders["Content-Type"] = "text/plain";
-    }
-
     const queryParameters = this.buildQueryParameters(params);
-
-    const url = new URL(this.path, this.host);
-    Object.entries(queryParameters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.append(key, String(value));
-      }
-    });
-
-    const authUser = getAuthUser(this.user, this.password, this.cluster);
-    const basicAuth = btoa(`${authUser}:${this.password || ""}`);
-    requestHeaders["Authorization"] = `Basic ${basicAuth}`;
 
     const abortController = new AbortController();
 
     const response = (async (): Promise<Response> => {
-      const fetchUrl = url.toString();
-      if (!fetchUrl || !(fetchUrl.startsWith("http://") || fetchUrl.startsWith("https://"))) {
-        throw new QueryError(
-          `Invalid URL: ${fetchUrl}. Connection may not be properly initialized.`
-        );
+      if (!this.id) {
+        throw new QueryError("Connection must be saved before executing a query");
       }
-
-      const res = await fetch(fetchUrl, {
+      const apiBase = (
+        process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+      ).replace(/\/+$/, "");
+      const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+      const res = await fetch(`${apiBase}/api/connections/${this.id}/query`, {
         method: "POST",
-        headers: requestHeaders,
-        body: sql,
+        headers: {
+          "Content-Type": "application/json",
+          ...(identity ? { "x-datastoria-user-email": identity } : {}),
+        },
+        body: JSON.stringify({ query: sql, parameters: queryParameters }),
         signal: abortController.signal,
       });
 
@@ -516,18 +484,7 @@ export class Connection {
       return this.query(processedSql, params, headers);
     }
 
-    return this.query(
-      `
-SELECT * FROM remote(
-  '${node}', 
-  view(
-        ${processedSql}
-  ), 
-  '${this.metadata.internalUser}', 
-  '${this.password}')`,
-      params,
-      headers
-    );
+    return this.query(processedSql, params, headers);
   }
 
   /**

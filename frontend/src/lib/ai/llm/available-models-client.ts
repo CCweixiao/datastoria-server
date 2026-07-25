@@ -8,28 +8,15 @@ export interface AvailableModelsResponse {
 
 const inFlightRequests = new Map<string, Promise<AvailableModelsResponse>>();
 
-export async function fetchAvailableModels(tokens?: {
-  githubToken?: string;
-}): Promise<AvailableModelsResponse> {
-  const requestBody = tokens
-    ? {
-        ...(tokens.githubToken
-          ? {
-              github: {
-                token: tokens.githubToken,
-              },
-            }
-          : {}),
-      }
-    : {};
-  const requestKey = JSON.stringify(requestBody);
+export async function fetchAvailableModels(): Promise<AvailableModelsResponse> {
+  const requestKey = "spring";
   const existing = inFlightRequests.get(requestKey);
   if (existing) {
     return existing;
   }
 
   const request = (async () => {
-    return getAiConfigurationGateway().listAvailableModels(tokens);
+    return getAiConfigurationGateway().listAvailableModels();
   })().finally(() => {
     inFlightRequests.delete(requestKey);
   });

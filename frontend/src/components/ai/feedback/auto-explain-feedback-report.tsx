@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { BasePath } from "@/lib/base-path";
+import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { useEffect, useState } from "react";
 
 type FeedbackReportResponse = {
@@ -35,8 +35,9 @@ export function AutoExplainFeedbackReport() {
           source: "auto_explain_error",
           days: String(days),
         });
-        const response = await fetch(BasePath.getURL(`/api/ai/chat/feedback/report?${params}`), {
+        const response = await fetch(backendApiUrl(`/api/ai/chat/feedback/report?${params}`), {
           cache: "no-store",
+          headers: backendApiHeaders(),
         });
 
         if (response.status === 403) {

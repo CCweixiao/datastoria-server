@@ -23,7 +23,7 @@ class AvailableModelsApiTest {
   }
 
   @Test
-  void emptyDbReturnsEmptyArrays() {
+  void emptyDbIsProvisionedWithBackendManagedBuiltins() {
     web.post()
         .uri("/api/ai/models/available")
         .header("x-datastoria-user-email", "dev@example.com")
@@ -34,7 +34,11 @@ class AvailableModelsApiTest {
         .isOk()
         .expectBody()
         .jsonPath("$.systemModels.length()")
-        .isEqualTo(0)
+        .isEqualTo(4)
+        .jsonPath("$.systemModels[*].modelId")
+        .value(org.hamcrest.Matchers.hasItem("gpt-5.4"))
+        .jsonPath("$.systemModels[*].supportsReasoning")
+        .value(org.hamcrest.Matchers.hasItem(true))
         .jsonPath("$.githubModels.length()")
         .isEqualTo(0);
   }
@@ -55,7 +59,7 @@ class AvailableModelsApiTest {
   }
 
   @Test
-  void githubTokenIsIgnoredNotRejected() {
+  void githubTokenIsRejected() {
     web.post()
         .uri("/api/ai/models/available")
         .header("x-datastoria-user-email", "dev@example.com")
@@ -63,7 +67,10 @@ class AvailableModelsApiTest {
         .bodyValue("{\"github\":{\"token\":\"ghu_abc\"}}")
         .exchange()
         .expectStatus()
-        .isOk();
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.code")
+        .isEqualTo("CLIENT_SECRET_NOT_ALLOWED");
   }
 
   @Test
@@ -81,15 +88,9 @@ class AvailableModelsApiTest {
         .isOk()
         .expectBody()
         .jsonPath("$.systemModels.length()")
-        .isEqualTo(2)
-        .jsonPath("$.systemModels[0].provider")
-        .isEqualTo("openai")
-        .jsonPath("$.systemModels[0].modelId")
-        .isEqualTo("gpt-4")
-        .jsonPath("$.systemModels[0].free")
-        .isEqualTo(false)
-        .jsonPath("$.systemModels[1].provider")
-        .isEqualTo("anthropic");
+        .isEqualTo(6)
+        .jsonPath("$.systemModels[*].modelId")
+        .value(org.hamcrest.Matchers.hasItems("gpt-4", "claude-3"));
   }
 
   private void createProviderAndModel(String providerKey, String modelKey, String displayName) {

@@ -137,7 +137,7 @@ const applyQueryToEditor = (
     // Focus the editor
     editor.focus();
   }
-  // Save to localStorage
+  // Save to the backend.
   QueryInputLocalStorage.saveInput(editor.getValue(), storageKey);
 };
 
@@ -416,6 +416,12 @@ export const QueryInputView = forwardRef<QueryInputViewRef, QueryInputViewProps>
         const extendedEditor = editor as ExtendedEditor;
         const session = editor.getSession();
         editor.setValue(QueryInputLocalStorage.getInput(storageKey));
+        void QueryInputLocalStorage.getInputAsync(storageKey).then((saved) => {
+          if (editor.getValue().trim().length === 0 && saved) {
+            editor.setValue(saved);
+            editor.clearSelection();
+          }
+        });
         editor.renderer.setScrollMargin(5, 10, 0, 0);
 
         // Prevent scroll event propagation from tooltip description to suggestion list
@@ -578,20 +584,12 @@ export const QueryInputView = forwardRef<QueryInputViewRef, QueryInputViewProps>
       if (!editorRef.current) return;
 
       // Load saved content for the new key
-      const savedValue = QueryInputLocalStorage.getInput(storageKey);
-
-      // Stop the change event from triggering save back to storage momentarily if needed
-      // But handleChange uses the *current* storageKey from closure or ref?
-      // handleChange depends on [storageKey], so it should be updated.
-      // react-ace might fire onChange synchronously during setValue.
-      // If it does, 'handleChange' will be called.
-      // It will use the NEW storageKey.
-      // It will save 'savedValue' to 'storageKey'.
-      // This is redundant but harmless (saving what we just loaded).
-
-      editorRef.current.setValue(savedValue);
-      editorRef.current.clearSelection();
-      editorRef.current.focus();
+      const editor = editorRef.current;
+      void QueryInputLocalStorage.getInputAsync(storageKey).then((savedValue) => {
+        editor.setValue(savedValue);
+        editor.clearSelection();
+        editor.focus();
+      });
 
       // Update completers based on language
       if (language === "dsql") {

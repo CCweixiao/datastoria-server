@@ -5,7 +5,7 @@ import type {
   FilterSpec,
   PanelDescriptor,
 } from "@/components/shared/dashboard/dashboard-model";
-import { StorageManager } from "@/lib/storage/storage-manager";
+import { deleteUserState, listUserState, putUserState } from "@/lib/user-state-client";
 
 /**
  * Represents a saved custom dashboard configuration
@@ -22,7 +22,7 @@ export interface CustomDashboardConfig {
 
 /**
  * Storage manager for custom dashboards.
- * Persists dashboard configs to localStorage under "custom-dashboards" namespace.
+ * Persists dashboard configs through the backend user-state API.
  */
 export class CustomDashboardStorage {
   private static instance: CustomDashboardStorage;
@@ -34,45 +34,49 @@ export class CustomDashboardStorage {
     return this.instance;
   }
 
-  private getStorage() {
-    return StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("custom-dashboards")
-      .withCompression(true);
+  private dashboards = new Map<string, CustomDashboardConfig>();
+
+  private constructor() {
+    void listUserState<CustomDashboardConfig>("custom-dashboard")
+      .then((entries) => {
+        this.dashboards = new Map(entries.map((entry) => [entry.key, entry.value]));
+      })
+      .catch((error) => console.error("Failed to load custom dashboards:", error));
   }
 
   /**
    * Get all saved dashboards (metadata only for listing)
    */
   getAll(): CustomDashboardConfig[] {
-    const stored = this.getStorage().getAsJSON<Record<string, CustomDashboardConfig>>(() => ({}));
-    return Object.values(stored).sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...this.dashboards.values()].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /**
    * Get a single dashboard by ID
    */
   get(id: string): CustomDashboardConfig | null {
-    const stored = this.getStorage().getAsJSON<Record<string, CustomDashboardConfig>>(() => ({}));
-    return stored[id] ?? null;
+    return this.dashboards.get(id) ?? null;
   }
 
   /**
    * Save a dashboard (create or update)
    */
   save(config: CustomDashboardConfig): void {
-    const stored = this.getStorage().getAsJSON<Record<string, CustomDashboardConfig>>(() => ({}));
-    stored[config.id] = { ...config, updatedAt: Date.now() };
-    this.getStorage().setJSON(stored);
+    const saved = { ...config, updatedAt: Date.now() };
+    this.dashboards.set(config.id, saved);
+    void putUserState("custom-dashboard", config.id, saved).catch((error) =>
+      console.error("Failed to save custom dashboard:", error)
+    );
   }
 
   /**
    * Delete a dashboard by ID
    */
   delete(id: string): void {
-    const stored = this.getStorage().getAsJSON<Record<string, CustomDashboardConfig>>(() => ({}));
-    delete stored[id];
-    this.getStorage().setJSON(stored);
+    this.dashboards.delete(id);
+    void deleteUserState("custom-dashboard", id).catch((error) =>
+      console.error("Failed to delete custom dashboard:", error)
+    );
   }
 
   /**

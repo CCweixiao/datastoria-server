@@ -44,11 +44,6 @@ vi.mock("@/components/connection/connection-context", () => ({
   }),
 }));
 
-vi.mock("next-auth/react", () => ({
-  useSession: () => ({ data: null }),
-  signOut: vi.fn(),
-}));
-
 vi.mock("@/components/ui/sidebar", () => ({
   Sidebar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SidebarContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

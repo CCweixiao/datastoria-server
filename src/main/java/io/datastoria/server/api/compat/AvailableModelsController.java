@@ -1,7 +1,5 @@
 package io.datastoria.server.api.compat;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,14 +17,11 @@ import reactor.core.publisher.Mono;
 
 /**
  * A12 compatibility endpoint. Returns the server-managed model catalog so the frontend no longer
- * needs to keep model lists in localStorage. Rejects bodies carrying {@code apiKey}; ignores (with
- * warning) the legacy {@code github.token} field until P10 OAuth lands.
+ * needs to keep model lists in browser storage. Provider credentials are server-managed.
  */
 @RestController
 @RequestMapping("/api/ai/models/available")
 public class AvailableModelsController {
-
-  private static final Logger log = LoggerFactory.getLogger(AvailableModelsController.class);
 
   private final AvailableModelsService service;
 
@@ -43,9 +38,7 @@ public class AvailableModelsController {
       }
       JsonNode github = body.get("github");
       if (github != null && github.has("token")) {
-        log.warn(
-            "github.token received on /api/ai/models/available — ignored until P10 OAuth."
-                + " Caller should migrate to server-side token flow.");
+        throw new ClientSecretNotAllowedException("github.token");
       }
     }
     return IdentityContext.current().flatMap(service::getAvailableModels).map(ResponseEntity::ok);

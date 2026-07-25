@@ -7,7 +7,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
-import type { GetTablesInput, GetTablesOutput } from "@/lib/ai/tools/clickhouse/get-tables";
+import type {
+  GetTablesInput,
+  GetTablesOutput,
+} from "@/lib/ai/tools/clickhouse/clickhouse-tool-contracts";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
 

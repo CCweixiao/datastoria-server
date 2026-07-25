@@ -1,14 +1,17 @@
-import type { ServerDatabaseContext } from "@/lib/ai/agent/common-types";
+import type { DatabaseContext } from "@/components/chat/chat-context";
 import type { AgentContext, AppUIMessage } from "@/lib/ai/ai-types";
-import type { ClickHouseConnection } from "@/lib/ai/tools/clickhouse/clickhouse-tools";
+
+export interface ServerDatabaseContext extends DatabaseContext {
+  userEmail?: string;
+  clusterAvailable?: boolean;
+}
 
 export interface ChatRequestBase {
   sessionId: string;
   connectionId: string;
   ephemeral?: boolean;
   context?: ServerDatabaseContext;
-  connection?: ClickHouseConnection;
-  model?: { provider: string; modelId: string; apiKey?: string };
+  modelConfigId?: string;
   agentContext?: AgentContext;
 }
 

@@ -19,7 +19,8 @@ The Intelligent Visualization feature uses AI to:
 - Generate a SQL to meet your need
 - Generate visualizations automatically
 
-It does NOT fetch data from your local and sends data to LLM for visualization. Instead, LLM generates the SQL for visualization and visualization UI spec together, it's your client that fetch data and renders data in the browser. This saves lots of token compared to the LLM side visualization output.
+The Java AgentScope runtime generates SQL and visualization specifications. Spring Boot executes SQL
+through the persisted ClickHouse connection; the browser renders the returned visualization data.
 
 > **Note**: Visualizations are generated from query results. Learn more about [query execution](../03-query-experience/query-execution.md).
 
@@ -183,4 +184,3 @@ Visualize query performance improvements:
 - **[Query Optimization](./query-optimization.md)** — Optimize queries before visualizing
 - **[Node Dashboard](../04-cluster-management/node-dashboard.md)** — Monitor individual node performance
 - **[Cluster Dashboard](../04-cluster-management/cluster-dashboard.md)** — Monitor cluster-wide metrics
-

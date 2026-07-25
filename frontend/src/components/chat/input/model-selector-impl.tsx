@@ -24,7 +24,6 @@ import {
   resolveModelSupportsReasoning,
   type ModelProps,
 } from "@/lib/ai/llm/llm-provider-factory";
-import { PROVIDER_GITHUB_COPILOT } from "@/lib/ai/llm/provider-ids";
 import {
   formatReasoningLevel,
   getDefaultReasoningLevel,
@@ -320,7 +319,6 @@ function ModelCommandItem({
 
 export interface ModelSelectorImplProps {
   className?: string;
-  autoSelectAvailable?: boolean;
   value?: ModelSelection | null;
   onChange?: (model: ModelSelection) => void;
   disabled?: boolean;
@@ -336,7 +334,6 @@ export interface ModelSelectorImplProps {
 
 export function ModelSelectorImpl({
   className,
-  autoSelectAvailable,
   value,
   onChange,
   disabled = false,
@@ -350,17 +347,10 @@ export function ModelSelectorImpl({
   showReasoningControls,
 }: ModelSelectorImplProps = {}) {
   const [open, setOpen] = useState(false);
-  const {
-    availableModels,
-    selectedModel,
-    setSelectedModel,
-    isLoading,
-    providerSettings,
-    copilotModelsLoaded,
-  } = useModelConfig();
-  const effectiveAutoSelectAvailable =
-    autoSelectAvailable ??
-    availableModels.some((model) => model.provider === "System" && model.modelId === "Auto");
+  const { availableModels, selectedModel, setSelectedModel, isLoading } = useModelConfig();
+  const effectiveAutoSelectAvailable = availableModels.some(
+    (model) => model.provider === "System" && model.modelId === "Auto"
+  );
   const activeModel = value ?? selectedModel;
   const [highlightedValue, setHighlightedValue] = useState<string | undefined>(
     activeModel ? `${activeModel.provider} ${activeModel.modelId}` : undefined
@@ -417,19 +407,6 @@ export function ModelSelectorImpl({
         (m) => m.provider === selectedModel.provider && m.modelId === selectedModel.modelId
       );
 
-    const copilotSetting = providerSettings.find((p) => p.provider === PROVIDER_GITHUB_COPILOT);
-    const isSelectedCopilot = selectedModel?.provider === PROVIDER_GITHUB_COPILOT;
-    // Avoid resetting Copilot selection while models load dynamically.
-    // This keeps the user's choice stable until Copilot models are available.
-    if (
-      isSelectedCopilot &&
-      copilotSetting?.apiKey &&
-      !isSelectedModelAvailable &&
-      !copilotModelsLoaded
-    ) {
-      return;
-    }
-
     if (!selectedModel || !isSelectedModelAvailable) {
       // If auto-select is available, default to "System (Auto)"
       // Otherwise, select the first available user-configured model
@@ -447,8 +424,6 @@ export function ModelSelectorImpl({
     setSelectedModel,
     effectiveAutoSelectAvailable,
     isLoading,
-    copilotModelsLoaded,
-    providerSettings,
   ]);
 
   useEffect(() => {

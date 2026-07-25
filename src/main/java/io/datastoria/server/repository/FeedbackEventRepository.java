@@ -1,5 +1,7 @@
 package io.datastoria.server.repository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import io.datastoria.server.domain.FeedbackEvent;
@@ -22,4 +24,6 @@ public interface FeedbackEventRepository {
    */
   Optional<FeedbackEvent> find(
       String tenantId, String userId, String source, String sessionId, String messageId);
+
+  List<FeedbackEvent> findForReport(String tenantId, String source, Instant createdAfter);
 }

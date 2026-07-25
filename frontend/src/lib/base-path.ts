@@ -25,8 +25,4 @@ export class BasePath {
     }
     return pathname === basePath || pathname.startsWith(`${basePath}/`);
   }
-
-  static getAuthBasePath(): string {
-    return BasePath.getURL("/api/auth");
-  }
 }

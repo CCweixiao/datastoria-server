@@ -1,5 +1,5 @@
 import type { Connection } from "@/lib/connection/connection";
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
+import { deleteUserState, listUserState, putUserState } from "@/lib/user-state-client";
 import type { Ace } from "ace-builds";
 import { builtinSnippet } from "./builtin-snippet";
 import type { Snippet } from "./snippet";
@@ -15,19 +15,12 @@ export class QuerySnippetManager {
   private snippetCompletionList: Ace.SnippetCompletion[];
   private listeners: Array<() => void> = [];
 
-  private getStorage() {
-    return StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("sql:snippet")
-      .withCompression(true);
-  }
-
-  private loadFromStorage(): void {
+  private async loadFromBackend(): Promise<void> {
     try {
-      const stored = this.getStorage().getAsJSON<Record<string, Snippet>>(() => ({}));
+      const stored = await listUserState<Snippet>("sql-snippet");
       this.snippets.clear();
-      for (const [k, v] of Object.entries(stored)) {
-        this.snippets.set(k, v);
+      for (const entry of stored) {
+        this.snippets.set(entry.key, entry.value);
       }
     } catch {
       this.snippets.clear();
@@ -39,8 +32,7 @@ export class QuerySnippetManager {
   constructor() {
     this.snippets = new Map<string, Snippet>();
     this.snippetCompletionList = [];
-    this.loadFromStorage();
-    StorageManager.getInstance().subscribeToStorageProviderChange(() => this.loadFromStorage());
+    void this.loadFromBackend();
   }
 
   public subscribe(listener: () => void): () => void {
@@ -68,8 +60,9 @@ export class QuerySnippetManager {
 
   public addSnippet(caption: string, sql: string): void {
     this.snippets.set(caption, { caption: caption, sql: sql, builtin: false });
-    const snippetsObj = Object.fromEntries(this.snippets);
-    this.getStorage().setJSON(snippetsObj);
+    void putUserState("sql-snippet", caption, this.snippets.get(caption)!).catch((error) =>
+      console.error("Failed to save SQL snippet:", error)
+    );
     this.snippetCompletionList = this.toCompletion();
     this.notifyListeners();
   }
@@ -79,13 +72,17 @@ export class QuerySnippetManager {
    */
   public replaceSnippet(old: string, newCaption: string, sql: string): void {
     this.snippets.delete(old);
+    void deleteUserState("sql-snippet", old).catch((error) =>
+      console.error("Failed to delete old SQL snippet:", error)
+    );
     this.addSnippet(newCaption, sql);
   }
 
   public deleteSnippet(caption: string): void {
     this.snippets.delete(caption);
-    const snippetsObj = Object.fromEntries(this.snippets);
-    this.getStorage().setJSON(snippetsObj);
+    void deleteUserState("sql-snippet", caption).catch((error) =>
+      console.error("Failed to delete SQL snippet:", error)
+    );
     this.snippetCompletionList = this.toCompletion();
     this.notifyListeners();
   }

@@ -14,8 +14,6 @@ export interface AgentContext {
 }
 
 export type MessageRole = "user" | "assistant" | "system" | "data" | "tool";
-export type SessionRepositoryType = "local" | "remote";
-
 export type MessagePartType = "text" | "file" | "tool-call" | "tool-result";
 
 export interface TextPart {

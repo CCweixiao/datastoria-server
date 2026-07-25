@@ -3,6 +3,7 @@ import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highl
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { parseErrorLocation, type ErrorLocation } from "@/lib/clickhouse/clickhouse-error-parser";
+import { listUserState, putUserState } from "@/lib/user-state-client";
 import { cn } from "@/lib/utils";
 import { AlertCircleIcon, SparklesIcon, X } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -10,12 +11,25 @@ import type { QueryErrorDisplay } from "../query-view-model";
 import { QueryErrorAIExplanation } from "./query-error-ai-explanation";
 import { AutoExplainState, getAutoExplainState } from "./query-error-auto-explain-config";
 
-const LS_DISMISS_AI_SETUP_KEY = "datastoria:query-response-error-view:dismiss-ai-setup-suggestion";
+const AI_SETUP_STATE_NAMESPACE = "ui-preference";
+const AI_SETUP_STATE_KEY = "dismiss-ai-setup-suggestion";
 
 const AISetupSuggestionBanner = memo(function AISetupSuggestionBanner() {
-  const [dismissed, setDismissed] = useState(
-    () => localStorage.getItem(LS_DISMISS_AI_SETUP_KEY) === "true"
-  );
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void listUserState<boolean>(AI_SETUP_STATE_NAMESPACE)
+      .then((entries) => {
+        if (active) {
+          setDismissed(entries.find((entry) => entry.key === AI_SETUP_STATE_KEY)?.value === true);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (dismissed) return null;
 
@@ -40,8 +54,8 @@ const AISetupSuggestionBanner = memo(function AISetupSuggestionBanner() {
           size="sm"
           aria-label="Never show this suggestion again"
           onClick={() => {
-            localStorage.setItem(LS_DISMISS_AI_SETUP_KEY, "true");
             setDismissed(true);
+            void putUserState(AI_SETUP_STATE_NAMESPACE, AI_SETUP_STATE_KEY, true);
           }}
           className="h-7 text-muted-foreground text-xs"
         >

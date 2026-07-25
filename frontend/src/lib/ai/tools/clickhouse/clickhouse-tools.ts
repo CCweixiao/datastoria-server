@@ -1,31 +1,10 @@
 /**
  * ClickHouse tools.
  *
- * The same agent-facing tool schemas can execute in the browser or on the server. Browser
- * execution is handled by ChatFactory.onToolCall. Server execution is created by
- * createServerClickHouseTools when a ClickHouseConnection is provided in the chat request.
+ * Frontend-only schemas used to type and render tool events emitted by the Java AgentScope runtime.
  */
-import { Connection } from "@/lib/connection/connection";
-import { tool, type Tool } from "ai";
+import { tool } from "ai";
 import * as z from "zod";
-import {
-  getClickHouseConnectionValidationError,
-  type ClickHouseConnection,
-} from "./clickhouse-connection";
-import { ClickHouseToolExecutors } from "./clickhouse-tool-executors";
-import type { EvidenceContext } from "./collect-sql-optimization-evidence";
-import { type RcaEvidenceInput, type RcaEvidenceOutput } from "./rca/evidence-collector-common";
-import { type SearchQueryLogInput, type SearchQueryLogOutput } from "./search-query-log";
-import {
-  type GetClusterStatusInput,
-  type GetClusterStatusOutput,
-} from "./status/collect-cluster-status";
-
-export {
-  getClickHouseConnectionValidationError,
-  hasClickHouseConnection,
-  type ClickHouseConnection,
-} from "./clickhouse-connection";
 
 export type ValidateSqlToolInput = {
   sql: string;
@@ -166,7 +145,7 @@ export const ClickHouseTools = {
         })
         .optional(),
     }),
-    outputSchema: z.custom<EvidenceContext>(),
+    outputSchema: z.record(z.string(), z.unknown()),
   }),
   search_query_log: tool({
     description:
@@ -255,7 +234,7 @@ export const ClickHouseTools = {
         .describe(
           "Validated query_log predicates. Defaults still apply unless you override type/query_kind/is_initial_query."
         ),
-    }) satisfies z.ZodType<SearchQueryLogInput>,
+    }),
     outputSchema: z.object({
       success: z.boolean(),
       mode: z.enum(["patterns", "executions"]),
@@ -273,7 +252,7 @@ export const ClickHouseTools = {
       rowCount: z.number(),
       rows: z.array(z.record(z.string(), z.any())),
       message: z.string().optional(),
-    }) satisfies z.ZodType<SearchQueryLogOutput>,
+    }),
   }),
   collect_cluster_status: tool({
     description:
@@ -383,7 +362,7 @@ export const ClickHouseTools = {
         })
         .optional()
         .describe("Time-window options (used when mode is 'windowed')."),
-    }) as z.ZodType<GetClusterStatusInput>,
+    }),
     outputSchema: z.object({
       success: z.boolean(),
       status_analysis_mode: z.enum(["snapshot", "windowed"]),
@@ -438,7 +417,7 @@ export const ClickHouseTools = {
         .optional(),
       generated_at: z.string(),
       error: z.string().optional(),
-    }) as z.ZodType<GetClusterStatusOutput>,
+    }),
   }),
   collect_rca_evidence: tool({
     description:
@@ -514,7 +493,7 @@ export const ClickHouseTools = {
         })
         .optional()
         .describe("Optional prior status output to reduce redundant probes."),
-    }) as z.ZodType<RcaEvidenceInput>,
+    }),
     outputSchema: z.object({
       schema_version: z.literal(1),
       success: z.boolean(),
@@ -606,7 +585,7 @@ export const ClickHouseTools = {
       ),
       generated_at: z.string(),
       error: z.string().optional(),
-    }) as z.ZodType<RcaEvidenceOutput>,
+    }),
   }),
 };
 
@@ -622,48 +601,3 @@ export const CLICKHOUSE_TOOL_NAMES = {
 } as const;
 
 export type ClickHouseToolName = (typeof CLICKHOUSE_TOOL_NAMES)[keyof typeof CLICKHOUSE_TOOL_NAMES];
-type ServerClickHouseTools = Record<ClickHouseToolName, Tool>;
-
-export function createServerClickHouseTools(config: ClickHouseConnection): ServerClickHouseTools {
-  const validationError = getClickHouseConnectionValidationError(config);
-  if (validationError) {
-    throw new Error(validationError);
-  }
-
-  const connection = Connection.create({
-    name: `${config.user}@${config.url}`,
-    url: config.url,
-    user: config.user,
-    password: config.password,
-    cluster: config.cluster ?? "",
-    editable: false,
-  });
-
-  const bind = (toolName: ClickHouseToolName): Tool => {
-    const clickHouseTool = ClickHouseTools[toolName] as {
-      description?: string;
-      inputSchema: Tool["inputSchema"];
-    };
-
-    const executableTool = {
-      description: clickHouseTool.description,
-      inputSchema: clickHouseTool.inputSchema,
-      execute: (input: unknown) => ClickHouseToolExecutors[toolName](input as never, connection),
-    };
-
-    return tool(executableTool as unknown as Parameters<typeof tool>[0]) as Tool;
-  };
-
-  return {
-    explore_schema: bind(CLICKHOUSE_TOOL_NAMES.EXPLORE_SCHEMA),
-    get_tables: bind(CLICKHOUSE_TOOL_NAMES.GET_TABLES),
-    execute_sql: bind(CLICKHOUSE_TOOL_NAMES.EXECUTE_SQL),
-    validate_sql: bind(CLICKHOUSE_TOOL_NAMES.VALIDATE_SQL),
-    collect_sql_optimization_evidence: bind(
-      CLICKHOUSE_TOOL_NAMES.COLLECT_SQL_OPTIMIZATION_EVIDENCE
-    ),
-    search_query_log: bind(CLICKHOUSE_TOOL_NAMES.SEARCH_QUERY_LOG),
-    collect_cluster_status: bind(CLICKHOUSE_TOOL_NAMES.COLLECT_CLUSTER_STATUS),
-    collect_rca_evidence: bind(CLICKHOUSE_TOOL_NAMES.COLLECT_RCA_EVIDENCE),
-  };
-}

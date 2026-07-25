@@ -26,6 +26,15 @@ export class QueryHistoryManager {
   constructor(storage: QueryHistoryStorage = new QueryHistoryLocalStorage()) {
     this.storage = storage;
     this.entries = normalizeQueryHistory(this.storage.load());
+    if (this.storage.hydrate) {
+      void this.storage
+        .hydrate()
+        .then((entries) => {
+          this.entries = normalizeQueryHistory(entries);
+          notifyQueryHistoryUpdated();
+        })
+        .catch((error) => console.error("Failed to hydrate query history:", error));
+    }
   }
 
   list(): QueryHistoryEntry[] {

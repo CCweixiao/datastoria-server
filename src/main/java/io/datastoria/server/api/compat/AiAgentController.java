@@ -41,7 +41,7 @@ import reactor.core.publisher.Mono;
  * (dispose + interrupt).
  */
 @RestController
-@RequestMapping("/api/ai/agent")
+@RequestMapping({"/api/ai/agent", "/api/ai/chat", "/api/ai/chat/v2"})
 public class AiAgentController {
 
   private final ChatRunService service;

@@ -130,6 +130,24 @@ class AiAgentControllerTest {
   }
 
   @Test
+  void legacyChatPathsAreImplementedDirectlyBySpring() {
+    for (String path : List.of("/api/ai/chat", "/api/ai/chat/v2")) {
+      webTestClient
+          .post()
+          .uri(path)
+          .header("x-datastoria-user-email", USER)
+          .contentType(MediaType.APPLICATION_JSON)
+          .bodyValue("{\"apiKey\":\"must-not-reach-the-browser\"}")
+          .exchange()
+          .expectStatus()
+          .isBadRequest()
+          .expectBody()
+          .jsonPath("$.code")
+          .isEqualTo("CLIENT_SECRET_NOT_ALLOWED");
+    }
+  }
+
+  @Test
   void terminalRunReplaysExactFramesAfterLastEventId() {
     String body = streamBody("sess-1", "mdl-1", "hello");
     String original = postStream(body, "idem-replay");

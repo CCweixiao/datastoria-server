@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { StageStatus } from "./clickhouse-tool-types";
+
+type StageStatus = "started" | "success" | "failed" | "skipped";
 
 /**
  * Progress Stage - Represents a single stage in the tool execution

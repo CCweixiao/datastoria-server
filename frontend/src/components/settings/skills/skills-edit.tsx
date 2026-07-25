@@ -2,7 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SkillCatalogItem } from "@/lib/ai/skills/skill-types";
-import { BasePath } from "@/lib/base-path";
+import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { useCallback, useEffect, useState } from "react";
 import { SkillsCard } from "./skills-card";
 import { SkillsDetailView } from "./skills-detail-view";
@@ -17,7 +17,7 @@ export function SkillsEdit({ initialSkillId }: { initialSkillId?: string }) {
     setLoading(true);
     setError(null);
 
-    fetch(BasePath.getURL("/api/ai/skills"))
+    fetch(backendApiUrl("/api/ai/skills"), { headers: backendApiHeaders() })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<SkillCatalogItem[]>;

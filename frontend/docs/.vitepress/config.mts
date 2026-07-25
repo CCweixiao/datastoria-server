@@ -417,7 +417,6 @@ export default defineConfig({
             { text: 'Ask AI for Help', link: '/manual/02-ai-features/ask-ai-for-help' },
             { text: 'Slash Commands', link: '/manual/02-ai-features/slash-commands' },
             { text: 'Agent Skills', link: '/manual/02-ai-features/skills' },
-            { text: 'GitHub Copilot Integration', link: '/manual/02-ai-features/github-copilot' },
           ]
         },
         {

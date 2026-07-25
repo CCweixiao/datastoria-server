@@ -1,7 +1,7 @@
 "use client";
 
 import type { CommandDetail } from "@/lib/ai/commands/command-manager";
-import { BasePath } from "@/lib/base-path";
+import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 interface AgentCommandContextValue {
@@ -25,7 +25,10 @@ export function AgentCommandProvider({ children }: { children: React.ReactNode }
 
     setLoading(true);
 
-    fetch(BasePath.getURL("/api/ai/commands"), { signal: controller.signal })
+    fetch(backendApiUrl("/api/ai/commands"), {
+      signal: controller.signal,
+      headers: backendApiHeaders(),
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);

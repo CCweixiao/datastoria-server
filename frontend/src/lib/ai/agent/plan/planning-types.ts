@@ -1,5 +1,6 @@
-import type { Intent } from "@/lib/ai/agent/plan/sub-agent-registry";
 import type { LanguageModelUsage } from "ai";
+
+export type Intent = "generator" | "optimizer" | "visualizer" | "general";
 
 /**
  * The output of the "tool"

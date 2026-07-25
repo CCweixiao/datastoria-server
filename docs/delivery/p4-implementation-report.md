@@ -1,8 +1,8 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1–P4.7（均已通过 review）**
-> 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
+> 本次交付：**P4.1–P4.8（均已通过 review）**
+> 分支：`codex/backend-only-migration`
 > 基线 master：`a540e8b`
 > 状态：P4.1–P4.8 已实现并完成本地 review；可在开始 P5 前进行前后端联调。
 
@@ -1103,73 +1103,81 @@ review 发现并修复以下边界问题：
 验证：P4.7 专项 17/17、前端全量 82 files / 436 tests 全通过；typecheck、ESLint、Prettier
 均通过。**P4.7 review 通过，可开始 P4.8。**
 
-# P4.8：真实 Provider、事件重放与联调收口
+# P4.8：真实 Provider、事件重放与后端唯一数据源收口
 
-## P4.8-1. Review 结论
+## P4.8-1. Review 与修复结论
 
-P4.8 已把 P4 的最小 Harness 从 fake-only 测试链补齐为可联调的生产链：
+P4.8 已完成，并在原有真实 Provider、事件录制/重放基础上完成破坏式后端收口：
 
-1. **真实 provider**：引入 AgentScope 官方
-   `agentscope-extensions-model-openai:2.0.0`，生产 `ModelAdapterProvider` 支持 OpenAI 及
-   OpenAI-compatible Chat Completions endpoint。模型级 secret 优先于 provider 级 secret，
-   且只通过服务端 `SecretService.decrypt` 解析；浏览器请求仍拒绝任何 credential 字段。
-2. **多轮与刷新回放**：运行前从 `ds_chat_message` 按顺序重建 user/assistant 纯文本历史，
-   排除本轮已落库的 user message；成功终态与 assistant message 在同一事务中完成。
-3. **断线续传**：V6 新增 `ds_agent_event`，逐帧保存实际发送的 AI SDK SSE 字节。客户端使用相同
-   `Idempotency-Key` 并携带 `Last-Event-ID: N` 时，从第 `N+1` 帧继续，不重新调用模型、不创建新
-   run。Node gateway 原样转发 `Last-Event-ID`。
-4. **标题隔离**：标题生成是独立、确定性的 provisional service；`generateTitle:false` 生效，
-   标题异常不影响主回答。
-5. **流完成边界**：run 终态和 assistant message 持久化完成后才向下游发送 terminal event，
-   因而收到 `finish`/`[DONE]` 后立即刷新可读。
-6. **稳定性**：新增 100 次 fresh stream 字节稳定性测试；assistant message 使用独立 ULID，
-   不覆盖用户 message。
+1. **真实 Provider**：AgentScope Java 的生产 `ModelAdapterProvider` 支持 OpenAI 与
+   OpenAI-compatible Chat Completions。模型级 secret 优先于 provider 级 secret，只能由 Java
+   服务端解密；浏览器提交 `apiKey`、`secret` 等字段仍返回
+   `CLIENT_SECRET_NOT_ALLOWED`。
+2. **事件重放**：V6 `ds_agent_event` 保存实际发送的 AI SDK SSE 帧。相同
+   `Idempotency-Key` 携带 `Last-Event-ID` 时从下一帧恢复，不重复调用模型或创建 run；查询受
+   tenant、user 与 run 归属约束。
+3. **直接 Spring API**：前端直接调用 Java 的 `/api/ai/agent`、兼容别名
+   `/api/ai/chat`、`/api/ai/chat/v2`、session、feedback、models、providers、skills、
+   connections 与 user-state API。`frontend/src/app/api` 已无文件，不再存在 Next API route、
+   Node gateway 或 Node 端业务 repository。
+4. **后端唯一数据源**：系统模型、provider、加密凭据、用户设置、连接、Skill、RCA 模板及各类
+   UI 业务状态均由 Java API 和数据库提供。新增 SQLite/MySQL V7–V10：
+   `ds_clickhouse_connection`、`ds_agent_skill`/resource、`ds_user_state`、
+   `ds_rca_template`；首次读取时系统模型与系统设置会物化到数据库。
+5. **前端去持久化/去执行**：生产代码不再使用 `localStorage`、`sessionStorage`、
+   `indexedDB` 或 cookie 保存业务数据；删除前端 LLM provider、Agent 编排、Skill 磁盘/数据库
+   provider、ClickHouse 执行器和服务端 session repository。前端只保留展示、交互和协议类型。
+6. **AgentScope 工具接入**：`execute_sql`、`get_tables`、`explore_schema`、
+   `validate_sql`、SQL 优化证据、query log、cluster status 与 RCA evidence 均注册为 Java
+   AgentScope 工具，按 run 的后端连接权限执行。
+7. **ClickHouse 后端执行**：连接凭据使用 envelope encryption；URL 禁止内嵌账号密码；用户和
+   tenant 隔离。浏览器查询通过 Java 流式转发，避免 WebClient 默认 256 KiB 聚合上限，并保留
+   `Content-Type` 与 `X-ClickHouse-*` 响应头；连接失败/超时返回去敏的 502/504。
+8. **运行边界**：run 终态与 assistant message 落库后才发送 terminal event；标题生成失败不
+   影响回答；取消向模型流传播；100 次 fresh stream 字节稳定性测试保留。
 
-## P4.8-2. 数据库与兼容契约
+## P4.8-2. 真实联调证据
 
-- SQLite/MySQL 均新增 V6 `ds_agent_event(id, tenant_id, run_id, sequence, frame_text,
-  created_at)`；`(tenant_id, run_id, sequence)` 唯一，run/session 删除时级联清理。
-- 重放查询同时受 tenant、user、idempotency key 约束；跨租户或跨用户不能读取事件。
-- 普通请求的 AI SDK SSE 字节格式未改变。`Last-Event-ID` 是已成功消费的 frame sequence，
-  `0` 表示从头重放。
-- 活跃 run 的重复提交仍返回 409；终态 run 只有显式携带 `Last-Event-ID` 才进入重放路径。
+在与开发者当前 3000/8080 进程隔离的 13000/18080 端口上完成：
 
-## P4.8-3. 前后端联调入口（P5 前即可开始）
+- Java 使用持久 SQLite 启动、停止并再次启动后，3 项系统设置、4 个系统模型与
+  `P4 E2E Playground` ClickHouse 连接仍能从数据库读取。
+- Java 对 `https://play.clickhouse.com` 执行
+  `SELECT 1 AS p4_e2e FORMAT JSON`，返回 `p4_e2e=1`，响应为 chunked 流并带真实
+  `X-ClickHouse-Query-Id`、`X-ClickHouse-Summary` 等头。
+- 浏览器打开 `http://localhost:13000` 后显示
+  `P4 E2E Playground`、8 个数据库和 96 张表，证明链路为
+  **浏览器 → Spring Boot → 数据库连接配置 → 真实 ClickHouse**。
+- Playground 的只读 `play` 用户对部分 `system.*` 表权限不足，因此 dashboard 中相应卡片显示
+  ClickHouse 497；这属于远端账号授权限制，schema、版本、表数、容量和允许的指标均已正常显示。
 
-1. 在设置页创建 OpenAI/OpenAI-compatible provider，将 API key 保存为服务端 secret，并创建
-   enabled model；请求只传 `modelConfigId`，不传 API key。
-2. 启动 Java：
+## P4.8-3. P5 前联调方式
 
-   ```bash
-   export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
-   ./mvnw spring-boot:run
-   ```
+```bash
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+./mvnw spring-boot:run
 
-3. 启动前端 gateway：
+cd frontend
+NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
+NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
+npm run dev
+```
 
-   ```bash
-   cd frontend
-   CHAT_BACKEND=java \
-   SESSION_BACKEND=java \
-   NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
-   npm run dev
-   ```
+设置页保存 provider API key 和模型，连接页保存 ClickHouse 连接。浏览器请求只携带配置 ID/连接
+ID，不携带 secret。对话联调应验证两轮历史、刷新后的 assistant message，以及相同幂等键配合
+`Last-Event-ID` 的剩余帧重放。当前架构不再提供切回 Node backend 的开关；回滚应使用 Git/部署
+版本回滚，并保留数据库备份。
 
-4. 联调验收：发送两轮纯文本对话；确认浏览器网络请求没有 API key；第二轮模型收到历史；
-   `[DONE]` 后刷新能看到 assistant message；用相同幂等键和 `Last-Event-ID` 验证剩余帧重放。
-5. 回滚只需将 `CHAT_BACKEND` 切回 Node；不删除 Java run/message/event 数据。
+## P4.8-4. 最终回归与限制
 
-## P4.8-4. 测试与限制
+- Java：`./mvnw spotless:check test`，**293/293** 通过；SQLite V1–V10 全部迁移。
+- 前端：Prettier、TypeScript、ESLint 均通过；Vitest **55 files / 291 tests** 通过；
+  `next build --webpack` 成功，产物路由仅包含页面路由，无 `/api/*`。
+- 静态审计：前端无 Next request/response/Auth、无后端选择开关、无生产 browser storage 调用，
+  不包含 provider SDK 或 ClickHouse 执行实现。
+- 本机没有可用 Docker，`SchemaParityTest` 实际执行 **0** 项；MySQL V7–V10 仍需由有 Docker
+  的 CI 环境执行，不能视作本机已验证。
+- 未配置可消费的真实 LLM key，因此真实付费模型 smoke 未执行；真实 provider 构造、服务端解密
+  和优先级由自动化测试覆盖。
 
-- P4.8 recorder/controller/runtime 专项（含多轮、落库、重放、100 次流稳定性）已通过；Java
-  `clean verify` 全量 283/283，Spotless 232 个 Java 文件及 `pom.xml` 通过。
-- `OpenAiModelAdapterProviderTest` 验证模型级 secret 优先、服务端解密、官方 streaming model
-  构造及不支持 provider 的 fail-fast。
-- Node gateway 测试验证真实字节透传、取消传播、凭据拒绝、稳定幂等键及
-  `Last-Event-ID` 转发；前端全量 82 files / 437 tests，typecheck、ESLint、Prettier 通过。
-- 真实 provider smoke 是显式联网验收，不进入常规 CI，也不读取开发者环境变量作为“伪通过”；
-  本地无可用测试 key 时记录为未执行，而不是 skipped-as-success。
-- 本机无 Docker 时 MySQL `SchemaParityTest` 执行 0 项；SQLite V1–V6 全部执行，MySQL V6 由
-  Docker/CI 补验。
-
-**P4.8 完成后停止；不自动开始 P5。当前分支已具备 P5 前前后端联调条件。**
+**P4.8 已完成并停止；不自动开始 P5。前后端联调已经可以在 P5 开始前进行。**

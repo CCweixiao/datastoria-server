@@ -3,12 +3,11 @@ import {
   normalizeReasoningLevel,
   type ReasoningLevel,
 } from "@/lib/ai/reasoning-levels";
-import type { LocalStorage } from "@/lib/storage/local-storage-provider";
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
+import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 
 export type AgentMode = "v2" | "legacy";
 
-const STORAGE_KEY = "settings:ai:agent";
+const CONFIG_KEY = "settings.ai.agent";
 export const AGENT_CONFIG_UPDATED_EVENT = "AGENT_CONFIG_UPDATED";
 
 // See clickhouse-error-code.ts
@@ -67,23 +66,23 @@ export type AgentConfiguration = {
 
 export class AgentConfigurationManager {
   private static configuration: AgentConfiguration | null = null;
+  private static hydration: Promise<AgentConfiguration> | null = null;
 
-  private static getStorage(): LocalStorage {
-    return StorageManager.getInstance().getStorageProvider().subStorage(STORAGE_KEY);
+  private static defaults(): AgentConfiguration {
+    return {
+      mode: "v2",
+      pruneValidateSql: true,
+      outputReasoning: true,
+      reasoningLevel: DEFAULT_REASONING_LEVEL,
+      autoExplainClickHouseErrors: true,
+      autoExplainBlacklist: DEFAULT_AUTO_EXPLAIN_BLACKLIST,
+      aiResponseLanguage: DEFAULT_AI_RESPONSE_LANGUAGE,
+    };
   }
 
   public static getConfiguration(): AgentConfiguration {
     if (!this.configuration) {
-      const storage = this.getStorage();
-      const stored = storage.getAsJSON<AgentConfiguration>(() => ({
-        mode: "v2",
-        pruneValidateSql: true,
-        outputReasoning: true,
-        reasoningLevel: DEFAULT_REASONING_LEVEL,
-        autoExplainClickHouseErrors: true,
-        autoExplainBlacklist: DEFAULT_AUTO_EXPLAIN_BLACKLIST,
-        aiResponseLanguage: DEFAULT_AI_RESPONSE_LANGUAGE,
-      }));
+      const stored = this.defaults();
       this.configuration = {
         ...stored,
         reasoningLevel: normalizeReasoningLevel(stored.reasoningLevel),
@@ -93,6 +92,36 @@ export class AgentConfigurationManager {
       };
     }
     return this.configuration!;
+  }
+
+  public static hydrate(): Promise<AgentConfiguration> {
+    if (!this.hydration) {
+      this.hydration = fetch(backendApiUrl("/api/me/ai/preferences"), {
+        headers: backendApiHeaders(),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load agent preferences: ${response.status}`);
+          }
+          const payload = (await response.json()) as { entries?: Record<string, string> };
+          const stored = payload.entries?.[CONFIG_KEY];
+          const parsed = stored ? (JSON.parse(stored) as AgentConfiguration) : this.defaults();
+          this.configuration = {
+            ...this.defaults(),
+            ...parsed,
+            reasoningLevel: normalizeReasoningLevel(parsed.reasoningLevel),
+            aiResponseLanguage: normalizeAIResponseLanguage(
+              parsed.aiResponseLanguage ?? parsed.sqlReviewLanguage ?? parsed.autoExplainLanguage
+            ),
+          };
+          return this.configuration;
+        })
+        .catch((error) => {
+          this.hydration = null;
+          throw error;
+        });
+    }
+    return this.hydration;
   }
 
   public static setConfiguration(cfg: AgentConfiguration) {
@@ -107,7 +136,18 @@ export class AgentConfigurationManager {
       aiResponseLanguage: normalizeAIResponseLanguage(cfg.aiResponseLanguage),
     };
     this.configuration = normalized;
-    this.getStorage().setJSON(normalized);
+    void fetch(backendApiUrl("/api/me/ai/preferences"), {
+      method: "PUT",
+      headers: backendApiHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        configKey: CONFIG_KEY,
+        valueJson: JSON.stringify(normalized),
+      }),
+    }).then((response) => {
+      if (!response.ok) {
+        console.error(`Failed to persist agent preferences: ${response.status}`);
+      }
+    });
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(AGENT_CONFIG_UPDATED_EVENT));
     }

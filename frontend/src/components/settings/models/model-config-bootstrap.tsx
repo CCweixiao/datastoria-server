@@ -1,13 +1,9 @@
 "use client";
 
-import { useAppStorage } from "@/components/app-storage-provider";
+import { AgentConfigurationManager } from "@/components/settings/agent/agent-manager";
 import { ModelManager } from "@/components/settings/models/model-manager";
-import {
-  getAiConfigurationGateway,
-  isJavaConfigurationBackend,
-} from "@/lib/ai/configuration/configuration-gateway";
+import { getAiConfigurationGateway } from "@/lib/ai/configuration/configuration-gateway";
 import { fetchAvailableModels } from "@/lib/ai/llm/available-models-client";
-import { PROVIDER_GITHUB_COPILOT } from "@/lib/ai/llm/provider-ids";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 interface ModelConfigBootstrapContextValue {
@@ -26,24 +22,29 @@ let bootstrapCatalog:
     }
   | undefined;
 
-async function bootstrapModelCatalog(copilotToken: string | undefined): Promise<boolean> {
+async function bootstrapModelCatalog(): Promise<boolean> {
   const manager = ModelManager.getInstance();
 
   try {
-    const { systemModels, githubModels } = await fetchAvailableModels({
-      githubToken: copilotToken,
-    });
+    const [{ systemModels }] = await Promise.all([
+      fetchAvailableModels(),
+      AgentConfigurationManager.hydrate(),
+    ]);
+    // The catalog call materializes missing tenant built-ins. Load providers afterwards so the
+    // credential state always corresponds to the returned models on a brand-new database.
+    const providers = await getAiConfigurationGateway().listProviders();
 
     manager.setSystemModels(systemModels, false);
-    manager.setDynamicModelsForProvider(PROVIDER_GITHUB_COPILOT, githubModels, true);
-    if (isJavaConfigurationBackend()) {
-      const selectedModelId = await getAiConfigurationGateway().getModelPreference();
-      manager.setServerSelectedModel(selectedModelId);
-      manager.purgeBrowserModelSecrets();
-    }
-    if (copilotToken && githubModels.length > 0) {
-      manager.updateProviderSetting(PROVIDER_GITHUB_COPILOT, { authError: undefined });
-    }
+    manager.setProviderSettings(
+      providers.map((provider) => ({
+        provider: provider.providerKey,
+        providerId: provider.id,
+        credentialConfigured: provider.credentialConfigured,
+        maskedHint: provider.maskedHint,
+      }))
+    );
+    const selectedModelId = await getAiConfigurationGateway().getModelPreference();
+    manager.setServerSelectedModel(selectedModelId);
     return true;
   } catch (error) {
     console.error("Failed to bootstrap model catalog:", error);
@@ -51,18 +52,11 @@ async function bootstrapModelCatalog(copilotToken: string | undefined): Promise<
   }
 }
 
-function getBootstrapCatalogPromise(storageUserId: string | undefined): Promise<void> {
-  const providerSettings = ModelManager.getInstance().getProviderSettings();
-  const copilotSetting = providerSettings.find(
-    (provider) => provider.provider === PROVIDER_GITHUB_COPILOT
-  );
-  const key = JSON.stringify({
-    storageUserId,
-    copilotToken: copilotSetting?.apiKey ?? "",
-  });
+function getBootstrapCatalogPromise(): Promise<void> {
+  const key = "spring";
 
   if (!bootstrapCatalog || bootstrapCatalog.key !== key) {
-    const promise = bootstrapModelCatalog(copilotSetting?.apiKey).then((success) => {
+    const promise = bootstrapModelCatalog().then((success) => {
       if (!success && bootstrapCatalog?.key === key) {
         bootstrapCatalog = undefined;
       }
@@ -83,19 +77,14 @@ export function useModelConfigBootstrap(): ModelConfigBootstrapContextValue {
 }
 
 export function ModelConfigBootstrap({ children }: { children: ReactNode }) {
-  const { isStorageReady, storageUserId } = useAppStorage();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!isStorageReady) {
-      return;
-    }
-
     let cancelled = false;
     setIsReady(false);
 
     void (async () => {
-      await getBootstrapCatalogPromise(storageUserId);
+      await getBootstrapCatalogPromise();
       if (!cancelled) {
         setIsReady(true);
       }
@@ -104,7 +93,7 @@ export function ModelConfigBootstrap({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isStorageReady, storageUserId]);
+  }, []);
 
   return (
     <ModelConfigBootstrapContext.Provider value={{ isReady }}>

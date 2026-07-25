@@ -186,8 +186,15 @@ export function AgentEdit() {
   const [dropdownContainer, setDropdownContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    const currentMode = AgentConfigurationManager.getConfiguration();
-    setConfiguration(currentMode);
+    let cancelled = false;
+    void AgentConfigurationManager.hydrate()
+      .then((current) => {
+        if (!cancelled) setConfiguration(current);
+      })
+      .catch((error) => console.error("Failed to load agent configuration:", error));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

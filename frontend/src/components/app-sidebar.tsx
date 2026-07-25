@@ -7,14 +7,6 @@ import { openConnectionSelectorDialog } from "@/components/connection/connection
 import { openReleaseNotes } from "@/components/release-note/release-notes-view";
 import { SYSTEM_TABLE_REGISTRY } from "@/components/system-table-tab/system-table-registry";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -31,8 +23,6 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { UserProfileImage } from "@/components/user-profile-image";
-import { BasePath } from "@/lib/base-path";
 import {
   BookOpen,
   ChevronRight,
@@ -40,13 +30,11 @@ import {
   HelpCircle,
   History,
   LayoutDashboard,
-  LogOut,
   ScrollText,
   Settings,
   Sparkles,
   Terminal,
 } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
 import React, { useCallback, useEffect, useState } from "react";
 import { DashboardList } from "./dashboard-tab/dashboard-list";
 import { showSettingsDialog } from "./settings/settings-dialog";
@@ -302,7 +290,6 @@ function DashboardsSidebarMenuItem() {
 
 export function AppSidebar() {
   const { isConnectionAvailable } = useConnection();
-  const { data: session } = useSession();
   const { open: openChatPanel, setActiveSidebarTab, setDisplayMode } = useChatPanel();
   const [activeTabType, setActiveTabType] = useState<TabType | null>(null);
 
@@ -374,11 +361,6 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          {session?.user && (
-            <SidebarMenuItem>
-              <UserNavButton user={session.user} />
-            </SidebarMenuItem>
-          )}
           <SidebarMenuItem>
             <GitHubButton />
           </SidebarMenuItem>
@@ -475,42 +457,5 @@ function GitHubButton() {
       <GitHubIcon className="h-5 w-5" />
       <span>View on GitHub</span>
     </SidebarMenuButton>
-  );
-}
-
-function UserNavButton({
-  user,
-}: {
-  user: { name?: string | null; email?: string | null; image?: string | null };
-}) {
-  const { isMobile } = useSidebar();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuButton>
-          <UserProfileImage user={user} className="h-5 w-5" />
-          <span>Account</span>
-        </SidebarMenuButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56" align="end" side={isMobile ? "top" : "right"}>
-        <DropdownMenuLabel className="p-0 font-normal">
-          <div className="flex items-center gap-2 px-2 py-1.5 text-left text-sm">
-            <UserProfileImage user={user} className="h-8 w-8" />
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-semibold">{user.name}</span>
-              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
-            </div>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() => signOut({ callbackUrl: BasePath.getURL("/login") })}
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

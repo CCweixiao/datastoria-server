@@ -7,6 +7,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import io.agentscope.core.skill.AgentSkill;
+import io.agentscope.core.tool.Tool;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
 import io.datastoria.server.agent.testing.FakeModelAdapter;
@@ -69,6 +71,34 @@ class HarnessAgentFactoryTest {
   }
 
   @Test
+  void exposesDatabaseSkillsAndServerToolsAtTheModelBoundary() {
+    FakeStreamModel model = FakeStreamModel.builder().text("ok").finish(1, 1).build();
+    HarnessAgentFactory factory = new HarnessAgentFactory();
+    AgentSkill skill =
+        AgentSkill.builder()
+            .name("diagnose")
+            .description("Diagnose ClickHouse")
+            .skillContent("Use evidence.")
+            .source("datastoria-database")
+            .build();
+
+    RunnableAgent agent =
+        factory.create(
+            ctx("run-tools"),
+            new FakeModelAdapter(model),
+            AgentRuntimeConfig.minimal("sys"),
+            new AgentRunCapabilities(List.of(skill), new TestTools()),
+            List.of(),
+            "hi");
+
+    agent.streamEvents().collectList().block();
+
+    assertThat(model.lastToolCount())
+        .as("AgentScope receives the skill loader and server tool schemas")
+        .isGreaterThanOrEqualTo(2);
+  }
+
+  @Test
   void interruptAndCloseDoNotThrow() {
     FakeStreamModel model = FakeStreamModel.builder().text("x").finish(1, 1).build();
     HarnessAgentFactory factory = new HarnessAgentFactory();
@@ -80,5 +110,12 @@ class HarnessAgentFactoryTest {
     agent.interrupt();
     agent.close();
     // No exception thrown == pass.
+  }
+
+  static final class TestTools {
+    @Tool(name = "server_test_tool", description = "Server-side test tool", readOnly = true)
+    public String run() {
+      return "ok";
+    }
   }
 }

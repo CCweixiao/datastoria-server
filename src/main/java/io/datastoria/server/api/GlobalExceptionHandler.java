@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.reactive.resource.NoResourceFoundException;
+import org.springframework.web.server.MethodNotAllowedException;
 
 import io.datastoria.server.api.error.ClientSecretNotAllowedException;
 import io.datastoria.server.api.error.FeedbackTargetNotFoundException;
@@ -174,6 +176,28 @@ public class GlobalExceptionHandler {
       IllegalArgumentException ex) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(problems.forStatus(400, "INVALID_REQUEST", "Invalid request", safeMessage(ex)));
+  }
+
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleMissingStaticResource(
+      NoResourceFoundException ex) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(
+            problems.forStatus(
+                404, "NOT_FOUND", "Resource not found", "The requested resource does not exist."));
+  }
+
+  @ExceptionHandler(MethodNotAllowedException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleMethodNotAllowed(
+      MethodNotAllowedException ex) {
+    return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+        .allow(ex.getSupportedMethods().toArray(org.springframework.http.HttpMethod[]::new))
+        .body(
+            problems.forStatus(
+                405,
+                "METHOD_NOT_ALLOWED",
+                "Method not allowed",
+                "The requested HTTP method is not supported for this resource."));
   }
 
   @ExceptionHandler(Exception.class)

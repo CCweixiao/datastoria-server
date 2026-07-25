@@ -9,7 +9,6 @@ import {
 } from "@/components/chat/session/session-connection-id";
 import { SessionManager } from "@/components/chat/session/session-manager";
 import { useConnection } from "@/components/connection/connection-context";
-import { getRuntimeConfig } from "@/components/runtime-config-provider";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
@@ -18,7 +17,6 @@ import type { Connection } from "@/lib/connection/connection";
 import { toastManager } from "@/lib/toast";
 import type { Chat } from "@ai-sdk/react";
 import { Download, Loader2, Maximize2, Minimize2, Plus, Share2, Square, X } from "lucide-react";
-import { useSession } from "next-auth/react";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
@@ -158,9 +156,7 @@ const ChatHeader = React.memo(
     const [title, setTitle] = useState<string | undefined>(initialTitle);
     const isShareUnavailable = !canShare;
     const shareTitle = isShareUnavailable
-      ? getRuntimeConfig().sessionRepositoryType === "remote"
-        ? "Sharing is unavailable for this session"
-        : "Sharing is not supported because this deployment stores chat sessions in your browser."
+      ? "Sharing is unavailable for this session"
       : "Copy share link";
 
     // Reset title when chat ID changes
@@ -302,7 +298,6 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
   const chatConnectionId = getSessionRepositoryConnectionId(connection);
   const [loadedChatConnectionId, setLoadedChatConnectionId] = useState(chatConnectionId);
   const [loadedChatIsDraft, setLoadedChatIsDraft] = useState(false);
-  const { data: authSession } = useSession();
   const createDraftSession = useCallback(
     () => ({
       id: uuidv7(),
@@ -529,7 +524,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     const storedMessages = await SessionManager.getMessages(chat.id, { shareCode });
     const title =
       (storedSession?.title?.trim() || chatTitle?.trim() || "New Chat").trim() || "New Chat";
-    const userLabel = authSession?.user?.email?.trim() || "You";
+    const userLabel = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL?.trim() || "You";
     const markdown = buildSessionMarkdown(title, storedMessages, userLabel);
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -541,7 +536,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-  }, [authSession?.user?.email, chat?.id, chatTitle, getSessionShareCode]);
+  }, [chat?.id, chatTitle, getSessionShareCode]);
 
   const handleShareSession = useCallback(async () => {
     if (!chat?.id || isSharing) {
@@ -679,10 +674,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     );
   }
 
-  const canShare =
-    getRuntimeConfig().sessionRepositoryType === "remote" &&
-    !loadedChatIsDraft &&
-    !getSessionShareCode(chat.id);
+  const canShare = !loadedChatIsDraft && !getSessionShareCode(chat.id);
 
   return (
     <SqlExecutionProvider value={{ executionMode: "inline" }}>

@@ -2,7 +2,6 @@
  * @vitest-environment jsdom
  */
 
-import { RuntimeConfigProvider } from "@/components/runtime-config-provider";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,19 +64,7 @@ describe("SkillsEdit", () => {
     const fetchMock = vi.mocked(fetch);
 
     await act(async () => {
-      root.render(
-        <RuntimeConfigProvider
-          value={{
-            connectionProviderEnabled: false,
-            sessionRepositoryType: "local",
-            allowEditSkill: true,
-            autoSelectAvailable: false,
-            codeAnalysisEnabled: false,
-          }}
-        >
-          <SkillsEdit />
-        </RuntimeConfigProvider>
-      );
+      root.render(<SkillsEdit />);
     });
 
     const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));

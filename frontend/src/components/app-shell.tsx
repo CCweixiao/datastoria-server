@@ -1,7 +1,6 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { AppStorageProvider } from "@/components/app-storage-provider";
 import { ChatPanelProvider } from "@/components/chat/view/use-chat-panel";
 import { ConnectionProvider } from "@/components/connection/connection-context";
 import { MainPage } from "@/components/main-page";
@@ -20,32 +19,30 @@ interface AppShellProps {
 
 export function AppShell({ initialSessionId, initialSessionShareCode }: AppShellProps) {
   return (
-    <AppStorageProvider>
-      <ModelConfigBootstrap>
-        <ThemeProvider defaultTheme="dark">
-          <ConnectionProvider>
-            <ChatPanelProvider
-              initialSessionId={initialSessionId}
-              initialSessionShareCode={initialSessionShareCode}
-            >
-              <ReleaseDetectorProvider>
-                <ToastProvider />
-                <DialogProvider />
-                <SidebarProvider open={false}>
-                  <AppSidebar />
-                  <SidebarInset className="min-w-0 flex flex-col overflow-x-hidden h-screen">
-                    <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
-                      <ErrorBoundary>
-                        <MainPage />
-                      </ErrorBoundary>
-                    </div>
-                  </SidebarInset>
-                </SidebarProvider>
-              </ReleaseDetectorProvider>
-            </ChatPanelProvider>
-          </ConnectionProvider>
-        </ThemeProvider>
-      </ModelConfigBootstrap>
-    </AppStorageProvider>
+    <ModelConfigBootstrap>
+      <ThemeProvider defaultTheme="dark">
+        <ConnectionProvider>
+          <ChatPanelProvider
+            initialSessionId={initialSessionId}
+            initialSessionShareCode={initialSessionShareCode}
+          >
+            <ReleaseDetectorProvider>
+              <ToastProvider />
+              <DialogProvider />
+              <SidebarProvider open={false}>
+                <AppSidebar />
+                <SidebarInset className="min-w-0 flex flex-col overflow-x-hidden h-screen">
+                  <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
+                    <ErrorBoundary>
+                      <MainPage />
+                    </ErrorBoundary>
+                  </div>
+                </SidebarInset>
+              </SidebarProvider>
+            </ReleaseDetectorProvider>
+          </ChatPanelProvider>
+        </ConnectionProvider>
+      </ThemeProvider>
+    </ModelConfigBootstrap>
   );
 }

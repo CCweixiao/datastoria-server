@@ -93,6 +93,7 @@ describe("Connection query context parameters", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
     const connection = Connection.create({
+      id: "connection-1",
       name: "test",
       url: "http://localhost:8123",
       user: "default",
@@ -104,11 +105,13 @@ describe("Connection query context parameters", () => {
     await connection.query("SELECT 1").response;
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const fetchUrl = fetchMock.mock.calls[0][0] as string;
-    const url = new URL(fetchUrl);
-    expect(url.searchParams.get("max_execution_time")).toBe("60");
-    expect(url.searchParams.get("output_format_pretty_row_numbers")).toBe("true");
-    expect(url.searchParams.get("default_format")).toBe("JSONCompactEachRow");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://127.0.0.1:8080/api/connections/connection-1/query"
+    );
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.parameters.max_execution_time).toBe(60);
+    expect(body.parameters.output_format_pretty_row_numbers).toBe(true);
+    expect(body.parameters.default_format).toBe("JSONCompactEachRow");
   });
 
   it("keeps request params as highest precedence over query context", async () => {
@@ -116,6 +119,7 @@ describe("Connection query context parameters", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
     const connection = Connection.create({
+      id: "connection-2",
       name: "test",
       url: "http://localhost:8123?max_execution_time=5",
       user: "default",
@@ -129,10 +133,9 @@ describe("Connection query context parameters", () => {
       default_format: "JSON",
     }).response;
 
-    const fetchUrl = fetchMock.mock.calls[0][0] as string;
-    const url = new URL(fetchUrl);
-    expect(url.searchParams.get("max_execution_time")).toBe("10");
-    expect(url.searchParams.get("default_format")).toBe("JSON");
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.parameters.max_execution_time).toBe(10);
+    expect(body.parameters.default_format).toBe("JSON");
   });
 
   it("adds query context key-values for queryRawResponse()", async () => {
@@ -140,6 +143,7 @@ describe("Connection query context parameters", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("stream", { status: 200 }));
     const connection = Connection.create({
+      id: "connection-3",
       name: "test",
       url: "http://localhost:8123",
       user: "default",
@@ -150,9 +154,8 @@ describe("Connection query context parameters", () => {
 
     await connection.queryRawResponse("SELECT 1").response;
 
-    const fetchUrl = fetchMock.mock.calls[0][0] as string;
-    const url = new URL(fetchUrl);
-    expect(url.searchParams.get("max_execution_time")).toBe("60");
-    expect(url.searchParams.get("output_format_pretty_row_numbers")).toBe("true");
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.parameters.max_execution_time).toBe(60);
+    expect(body.parameters.output_format_pretty_row_numbers).toBe(true);
   });
 });

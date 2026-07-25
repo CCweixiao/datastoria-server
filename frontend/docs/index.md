@@ -54,7 +54,7 @@ features:
     details: Monitor and manage multiple ClickHouse clusters from a unified interface. Real-time metrics, system log introspection, and comprehensive schema exploration.
   - icon: 🔒
     title: Privacy-First Architecture
-    details: SQL executes directly from your browser to ClickHouse, and AI-generated visualizations render in the browser from generated SQL and chart specs. Your credentials and query results stay under your control.
+    details: Spring Boot owns ClickHouse and model credentials, executes SQL, and streams sanitized results to the browser. Secrets are encrypted and never returned to frontend code.
   - icon: 📊
     title: Intelligent Visualization
     details: Ask for charts in plain language and DataStoria generates both the SQL and the visualization spec for time series, bar, pie, and table views in seconds.

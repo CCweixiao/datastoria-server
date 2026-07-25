@@ -1,7 +1,6 @@
 import { Connection, type ConnectionMetadata } from "@/lib/connection/connection";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 interface ConnectionContextType {
@@ -49,29 +48,25 @@ export function ConnectionProvider({
 
   // Mount effect - load connection on client side
   useEffect(() => {
-    setIsInitialized(true);
-
-    const lastUsedConnection = ConnectionManager.getInstance().getLastSelectedOrFirst();
-    if (lastUsedConnection) {
-      setPendingConfig(lastUsedConnection);
-      if (createConnectionFromPending) {
-        setConnection(Connection.create(lastUsedConnection));
-        setIsConnectionAvailable(true);
+    let cancelled = false;
+    void (async () => {
+      const manager = ConnectionManager.getInstance();
+      await manager.ready();
+      if (cancelled) return;
+      setIsInitialized(true);
+      const lastUsedConnection = manager.getLastSelectedOrFirst();
+      if (lastUsedConnection) {
+        setPendingConfig(lastUsedConnection);
+        if (createConnectionFromPending) {
+          setConnection(Connection.create(lastUsedConnection));
+          setIsConnectionAvailable(true);
+        }
       }
-      // Otherwise MainPage will handle initialization from pendingConfig
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [createConnectionFromPending]);
-
-  // When storage provider changes (e.g. session loads and we switch from <default> to user bucket),
-  // re-read the initial connection so we show saved connections instead of always showing the wizard.
-  useEffect(() => {
-    const unsubscribe = StorageManager.getInstance().subscribeToStorageProviderChange(() => {
-      if (connection !== null) return; // Keep current connection when switching storage
-      const next = ConnectionManager.getInstance().getLastSelectedOrFirst();
-      setPendingConfig(next ?? null);
-    });
-    return unsubscribe;
-  }, [connection]);
 
   const switchConnection = useCallback((config: ConnectionConfig | null) => {
     const manager = ConnectionManager.getInstance();

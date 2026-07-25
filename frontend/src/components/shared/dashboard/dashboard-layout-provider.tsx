@@ -44,7 +44,7 @@ export function DashboardLayoutProvider({
     return saved ?? defaultLayouts;
   });
 
-  // Debounce save to localStorage
+  // Debounce saves to the backend.
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onLayoutChange = useCallback(

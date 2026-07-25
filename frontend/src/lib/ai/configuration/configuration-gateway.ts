@@ -1,24 +1,29 @@
 import type { AvailableModelsResponse } from "@/lib/ai/llm/available-models-client";
 import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
-import { BasePath } from "@/lib/base-path";
 
-export type ConfigurationBackend = "node" | "java";
 export type ServerModelProps = ModelProps & { configId?: string };
+export interface ServerProvider {
+  id: string;
+  providerKey: string;
+  displayName: string;
+  credentialConfigured: boolean;
+  maskedHint?: string | null;
+}
 
 export interface AiConfigurationGateway {
-  listAvailableModels(tokens?: { githubToken?: string }): Promise<AvailableModelsResponse>;
+  listAvailableModels(): Promise<AvailableModelsResponse>;
+  listProviders(): Promise<ServerProvider[]>;
   getModelPreference(): Promise<string | undefined>;
   setModelPreference(model: ServerModelProps): Promise<void>;
   saveProviderCredential(provider: string, credential: string): Promise<void>;
   clearProviderCredential(provider: string): Promise<void>;
-}
-
-function backend(): ConfigurationBackend {
-  return process.env.NEXT_PUBLIC_DATASTORIA_CONFIG_BACKEND === "java" ? "java" : "node";
+  setModelEnabled(model: ServerModelProps, enabled: boolean): Promise<void>;
 }
 
 function javaUrl(path: string): string {
-  const base = (process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "").replace(/\/+$/, "");
+  const base = (
+    process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+  ).replace(/\/+$/, "");
   return `${base}${path}`;
 }
 
@@ -34,37 +39,7 @@ async function checkedJson<T>(response: Response, operation: string): Promise<T>
   return (await response.json()) as T;
 }
 
-class NodeConfigurationGateway implements AiConfigurationGateway {
-  async listAvailableModels(tokens?: { githubToken?: string }): Promise<AvailableModelsResponse> {
-    const body = tokens?.githubToken ? { github: { token: tokens.githubToken } } : {};
-    return checkedJson(
-      await fetch(BasePath.getURL("/api/ai/models/available"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      "Load available models"
-    );
-  }
-
-  async getModelPreference(): Promise<string | undefined> {
-    return undefined;
-  }
-
-  async setModelPreference(): Promise<void> {
-    // Node mode retains the existing local ModelManager persistence.
-  }
-
-  async saveProviderCredential(): Promise<void> {
-    throw new Error("Server credential storage is only available with the Java backend");
-  }
-
-  async clearProviderCredential(): Promise<void> {
-    throw new Error("Server credential storage is only available with the Java backend");
-  }
-}
-
-class JavaConfigurationGateway implements AiConfigurationGateway {
+class SpringConfigurationGateway implements AiConfigurationGateway {
   private providerKey(provider: string): string {
     return provider
       .toLowerCase()
@@ -103,6 +78,13 @@ class JavaConfigurationGateway implements AiConfigurationGateway {
         body: "{}",
       }),
       "Load Java model catalog"
+    );
+  }
+
+  async listProviders(): Promise<ServerProvider[]> {
+    return checkedJson(
+      await fetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
+      "Load providers"
     );
   }
 
@@ -160,15 +142,52 @@ class JavaConfigurationGateway implements AiConfigurationGateway {
       throw new Error(`Clear provider credential failed: ${response.status}`);
     }
   }
+
+  async setModelEnabled(model: ServerModelProps, enabled: boolean): Promise<void> {
+    if (!model.configId) {
+      throw new Error("The server model is missing configId");
+    }
+    const currentResponse = await fetch(javaUrl(`/api/admin/ai/models/${model.configId}`), {
+      headers: identityHeaders(),
+    });
+    const current = await checkedJson<{
+      displayName: string;
+      description?: string | null;
+      source: string;
+      isFree: boolean;
+      capabilitiesJson?: string | null;
+      generationDefaultsJson?: string | null;
+      revision: number;
+    }>(currentResponse, "Load model");
+    await checkedJson(
+      await fetch(javaUrl(`/api/admin/ai/models/${model.configId}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"${current.revision}"`,
+          ...identityHeaders(),
+        },
+        body: JSON.stringify({
+          displayName: current.displayName,
+          description: current.description ?? null,
+          source: current.source,
+          enabled,
+          isFree: current.isFree,
+          capabilitiesJson: current.capabilitiesJson ?? null,
+          generationDefaultsJson: current.generationDefaultsJson ?? null,
+        }),
+      }),
+      "Update model"
+    );
+  }
 }
 
-const gateway: AiConfigurationGateway =
-  backend() === "java" ? new JavaConfigurationGateway() : new NodeConfigurationGateway();
+const gateway: AiConfigurationGateway = new SpringConfigurationGateway();
 
 export function getAiConfigurationGateway(): AiConfigurationGateway {
   return gateway;
 }
 
 export function isJavaConfigurationBackend(): boolean {
-  return backend() === "java";
+  return true;
 }

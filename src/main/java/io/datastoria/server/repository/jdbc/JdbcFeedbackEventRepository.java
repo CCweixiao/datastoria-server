@@ -1,6 +1,7 @@
 package io.datastoria.server.repository.jdbc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -97,5 +98,26 @@ public class JdbcFeedbackEventRepository implements FeedbackEventRepository {
         .param("messageId", messageId)
         .query(MAPPER)
         .optional();
+  }
+
+  @Override
+  public List<FeedbackEvent> findForReport(String tenantId, String source, Instant createdAfter) {
+    StringBuilder sql =
+        new StringBuilder("SELECT * FROM ds_feedback_event WHERE tenant_id = :tenantId");
+    if (source != null) {
+      sql.append(" AND source = :source");
+    }
+    if (createdAfter != null) {
+      sql.append(" AND created_at >= :createdAfter");
+    }
+    sql.append(" ORDER BY created_at DESC");
+    JdbcClient.StatementSpec statement = jdbc.sql(sql.toString()).param("tenantId", tenantId);
+    if (source != null) {
+      statement = statement.param("source", source);
+    }
+    if (createdAfter != null) {
+      statement = statement.param("createdAfter", SqlTimestamps.toParamMillis(createdAfter));
+    }
+    return statement.query(MAPPER).list();
   }
 }

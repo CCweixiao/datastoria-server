@@ -1,27 +1,15 @@
-import { getRuntimeConfig } from "@/components/runtime-config-provider";
 import {
   AgentConfigurationManager,
   normalizeAIResponseLanguage,
 } from "@/components/settings/agent/agent-manager";
 import { ModelManager } from "@/components/settings/models/model-manager";
 import type { PlanToolOutput } from "@/lib/ai/agent/plan/planning-types";
-import type { AgentContext, AppUIMessage, Message, MessageMetadata } from "@/lib/ai/ai-types";
-import { sanitizeMessageForPersistence } from "@/lib/ai/session/serialization";
+import type { AgentContext, AppUIMessage, Message } from "@/lib/ai/ai-types";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
-import {
-  getClickHouseConnectionValidationError,
-  type ClickHouseConnection,
-} from "@/lib/ai/tools/clickhouse/clickhouse-connection";
-import { ClickHouseToolExecutors } from "@/lib/ai/tools/clickhouse/clickhouse-tool-executors";
-import type {
-  StageStatus,
-  ToolProgressCallback,
-} from "@/lib/ai/tools/clickhouse/clickhouse-tool-types";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
-import { BasePath } from "@/lib/base-path";
-import { Connection, type QueryResponse } from "@/lib/connection/connection";
+import { Connection } from "@/lib/connection/connection";
 import { Chat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { v7 as uuidv7 } from "uuid";
@@ -33,11 +21,6 @@ import {
 } from "./session/session-connection-id";
 import { SessionManager } from "./session/session-manager";
 
-type AbortableQueryResult<TResponse extends QueryResponse | Response> = {
-  response: Promise<TResponse>;
-  abortController: AbortController;
-};
-type ClickHouseExecutorName = keyof typeof ClickHouseToolExecutors;
 const PROVISIONAL_SESSION_TITLE_WORDS = 8;
 
 type ChatFactoryCreateOptions = {
@@ -50,9 +33,7 @@ type ChatFactoryCreateOptions = {
   ephemeral?: boolean;
   initialMessages: AppUIMessage[];
   model?: {
-    provider: string;
-    modelId: string;
-    apiKey?: string;
+    configId?: string;
   };
   shareCode?: string;
 };
@@ -83,11 +64,8 @@ type SendMessagesRequestPayloadArgs = {
   messageId: string | undefined;
   body: unknown;
   requestContext?: DatabaseContext;
-  clickHouseConnection?: ClickHouseConnection;
   currentModel?: {
-    provider: string;
-    modelId: string;
-    apiKey?: string;
+    configId?: string;
   };
   generateTitle: boolean;
   ephemeral?: boolean;
@@ -143,26 +121,6 @@ function buildProvisionalSessionTitle(text: string): string | undefined {
   return title || undefined;
 }
 
-/**
- * Create a progress callback for tool execution
- * Updates the progress store with stage informationÒ
- */
-function createToolProgressCallback(
-  toolCallId: string,
-  toolName: string,
-  progressStore: ReturnType<typeof useToolProgressStore.getState>
-): ToolProgressCallback {
-  return (stage: string, progress: number, status: StageStatus, error?: string) => {
-    progressStore.updateProgress(toolCallId, {
-      toolName,
-      stage,
-      progress,
-      stageStatus: status, // This will add to stages history
-      stageError: error,
-    });
-  };
-}
-
 function newUniqueSessionId(): string {
   return uuidv7().replace(/-/g, "");
 }
@@ -175,7 +133,6 @@ export function buildSendMessagesRequestPayload({
   messageId,
   body,
   requestContext,
-  clickHouseConnection,
   currentModel,
   generateTitle,
   ephemeral,
@@ -202,9 +159,8 @@ export function buildSendMessagesRequestPayload({
         outputReasoning,
         reasoningLevel,
       },
-      ...(clickHouseConnection ? { connection: clickHouseConnection } : {}),
       ...(requestContext ? { context: requestContext } : {}),
-      ...(currentModel ? { model: currentModel } : {}),
+      ...(currentModel?.configId ? { modelConfigId: currentModel.configId } : {}),
     };
   }
 
@@ -219,38 +175,16 @@ export function buildSendMessagesRequestPayload({
       outputReasoning,
       reasoningLevel,
     },
-    ...(clickHouseConnection ? { connection: clickHouseConnection } : {}),
     generateTitle,
     ...(requestContext ? { context: requestContext } : {}),
     ...(currentModel ? { model: currentModel } : {}),
   };
 }
 
-function buildClickHouseConnectionPayload(
-  connection: Connection | null
-): ClickHouseConnection | undefined {
-  if (!connection || typeof connection.password !== "string") {
-    return undefined;
-  }
-
-  const payload: ClickHouseConnection = {
-    url: connection.url,
-    user: connection.user,
-    password: connection.password,
-    ...(connection.cluster ? { cluster: connection.cluster } : {}),
-  };
-
-  return getClickHouseConnectionValidationError(payload) ? undefined : payload;
-}
-
 function buildChatRequestHeaders(
   headers: HeadersInit | undefined,
   shareCode: string | undefined
 ): HeadersInit | undefined {
-  if (!shareCode) {
-    return headers;
-  }
-
   const normalizedHeaders =
     headers instanceof Headers
       ? Object.fromEntries(headers.entries())
@@ -258,87 +192,23 @@ function buildChatRequestHeaders(
         ? Object.fromEntries(headers)
         : (headers ?? {});
 
+  const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
   return {
     ...normalizedHeaders,
-    [SESSION_SHARE_CODE_HEADER]: shareCode,
+    ...(identity ? { "x-datastoria-user-email": identity } : {}),
+    ...(shareCode ? { [SESSION_SHARE_CODE_HEADER]: shareCode } : {}),
   };
 }
 
 export class ChatFactory {
-  private static readonly clientToolAbortControllers = new Map<string, Set<AbortController>>();
-
-  private static trackAbortController(sessionId: string, abortController: AbortController): void {
-    const controllers =
-      this.clientToolAbortControllers.get(sessionId) ?? new Set<AbortController>();
-    controllers.add(abortController);
-    this.clientToolAbortControllers.set(sessionId, controllers);
-
-    abortController.signal.addEventListener(
-      "abort",
-      () => {
-        const currentControllers = this.clientToolAbortControllers.get(sessionId);
-        currentControllers?.delete(abortController);
-        if (currentControllers && currentControllers.size === 0) {
-          this.clientToolAbortControllers.delete(sessionId);
-        }
-      },
-      { once: true }
-    );
-  }
-
-  private static untrackAbortController(sessionId: string, abortController: AbortController): void {
-    const controllers = this.clientToolAbortControllers.get(sessionId);
-    controllers?.delete(abortController);
-    if (controllers && controllers.size === 0) {
-      this.clientToolAbortControllers.delete(sessionId);
-    }
-  }
-
-  private static trackAbortableResult<TResponse extends QueryResponse | Response>(
-    sessionId: string,
-    result: AbortableQueryResult<TResponse>
-  ): AbortableQueryResult<TResponse> {
-    ChatFactory.trackAbortController(sessionId, result.abortController);
-    void result.response.finally(() => {
-      ChatFactory.untrackAbortController(sessionId, result.abortController);
-    });
-    return result;
-  }
-
-  private static createClientToolConnection(sessionId: string, connection: Connection): Connection {
-    const wrappedConnection = Object.create(connection) as Connection;
-
-    wrappedConnection.query = (sql, params, headers) =>
-      ChatFactory.trackAbortableResult(sessionId, connection.query(sql, params, headers));
-    wrappedConnection.queryOnNode = (sql, params, headers) =>
-      ChatFactory.trackAbortableResult(sessionId, connection.queryOnNode(sql, params, headers));
-    wrappedConnection.queryRawResponse = (sql, params, headers) =>
-      ChatFactory.trackAbortableResult(
-        sessionId,
-        connection.queryRawResponse(sql, params, headers)
-      );
-
-    return wrappedConnection;
-  }
-
-  static stopClientTools(sessionId: string): void {
-    const controllers = this.clientToolAbortControllers.get(sessionId);
-    if (!controllers) {
-      return;
-    }
-
-    for (const controller of [...controllers]) {
-      controller.abort();
-    }
-    this.clientToolAbortControllers.delete(sessionId);
+  static stopClientTools(_sessionId: string): void {
+    // Tool execution is server-side; retained as a UI cancellation hook.
   }
 
   /**
    * Get the current model configuration based on user settings
    */
-  private static getCurrentModelConfig():
-    | { provider: string; modelId: string; apiKey?: string }
-    | undefined {
+  private static getCurrentModelConfig(): { configId?: string } | undefined {
     const modelManager = ModelManager.getInstance();
     const selectedModel = modelManager.getSelectedModel();
 
@@ -349,25 +219,7 @@ export class ChatFactory {
       return undefined;
     }
 
-    const { provider, modelId } = selectedModel;
-    const providerSettings = modelManager.getProviderSettings();
-    const providerSetting = providerSettings.find((p) => p.provider === provider);
-    if (providerSetting?.apiKey) {
-      return {
-        provider,
-        modelId,
-        apiKey: providerSetting.apiKey,
-      };
-    }
-
-    const model = modelManager
-      .getAllModels()
-      .find((candidate) => candidate.provider === provider && candidate.modelId === modelId);
-    if (model?.source === "system") {
-      return { provider, modelId };
-    }
-
-    return undefined;
+    return { configId: (selectedModel as { configId?: string }).configId };
   }
 
   /**
@@ -391,54 +243,6 @@ export class ChatFactory {
         sessionId,
         historicalMessages,
       }) => {
-        const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
-        if (chatPersistenceMode === "remote") {
-          let provisionalTitle: string | undefined;
-          if (
-            historicalMessages.length === 0 &&
-            messages.length === 1 &&
-            messages[0]?.role === "user"
-          ) {
-            provisionalTitle = buildProvisionalSessionTitle(extractTextFromMessage(messages[0]));
-            if (provisionalTitle) {
-              ChatUIContext.updateTitle(provisionalTitle);
-            }
-          }
-
-          await SessionManager.touchSessionById(sessionId, connectionId, provisionalTitle, {
-            shareCode: options.shareCode,
-          });
-          return;
-        }
-
-        const userMessagesToSave = messages
-          .filter((msg) => msg.role === "user")
-          .map((msg) => {
-            const metadataCreatedAt =
-              typeof msg.metadata?.createdAt === "number"
-                ? new Date(msg.metadata.createdAt)
-                : undefined;
-            const createdAt =
-              metadataCreatedAt && !Number.isNaN(metadataCreatedAt.getTime())
-                ? metadataCreatedAt
-                : new Date();
-            const updatedAt = new Date();
-
-            return {
-              id: msg.id,
-              chatId: sessionId,
-              role: msg.role,
-              parts: sanitizeMessageForPersistence(msg).parts ?? [],
-              metadata: msg.metadata,
-              createdAt,
-              updatedAt,
-            } as Message;
-          });
-
-        if (userMessagesToSave.length === 0) {
-          return;
-        }
-
         let provisionalTitle: string | undefined;
         if (
           historicalMessages.length === 0 &&
@@ -451,15 +255,11 @@ export class ChatFactory {
           }
         }
 
-        await SessionManager.saveMessages(sessionId, userMessagesToSave);
         await SessionManager.touchSessionById(sessionId, connectionId, provisionalTitle, {
           shareCode: options.shareCode,
         });
       },
       onFinish: async ({ message, connectionId, sessionId }) => {
-        const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
-        const now = new Date();
-
         let title: string | undefined;
         if (message.metadata?.title && typeof message.metadata.title.text === "string") {
           title = message.metadata.title.text;
@@ -475,20 +275,6 @@ export class ChatFactory {
             title = output.title;
             ChatUIContext.updateTitle(title);
           }
-        }
-
-        if (chatPersistenceMode === "local") {
-          const sanitizedMessage = sanitizeMessageForPersistence(message);
-          const messageToSave: Message = {
-            id: sanitizedMessage.id,
-            role: sanitizedMessage.role,
-            parts: sanitizedMessage.parts as Message["parts"],
-            metadata: sanitizedMessage.metadata as MessageMetadata,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          await SessionManager.saveMessage(sessionId, messageToSave);
         }
 
         await SessionManager.touchSessionById(sessionId, connectionId, title, {
@@ -516,9 +302,6 @@ export class ChatFactory {
     const modelConfig = options.model;
     const connection = options.connection ?? null;
     const connectionId = options.connectionId ?? getSessionRepositoryConnectionId(connection);
-    const clientToolConnection = connection
-      ? ChatFactory.createClientToolConnection(sessionId, connection)
-      : null;
 
     // Create Chat instance
     const chat = new Chat<AppUIMessage>({
@@ -530,8 +313,10 @@ export class ChatFactory {
 
       transport: new DefaultChatTransport({
         fetch: async (_input, init) => {
-          const mode = AgentConfigurationManager.getConfiguration().mode;
-          const endpoint = BasePath.getURL(mode === "v2" ? "/api/ai/agent" : "/api/ai/chat");
+          const javaApiBase = (
+            process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+          ).replace(/\/+$/, "");
+          const endpoint = `${javaApiBase}/api/ai/agent`;
           return fetch(endpoint, init);
         },
 
@@ -555,16 +340,11 @@ export class ChatFactory {
           });
 
           const requestContext = options.context ?? ChatContext.build();
-          const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
           const agentConfiguration = AgentConfigurationManager.getConfiguration();
           const agentContext = buildAgentContextWithResponseLanguage(
             options.agentContext,
             agentConfiguration.aiResponseLanguage
           );
-          const clickHouseConnection =
-            agentConfiguration.mode === "v2"
-              ? buildClickHouseConnectionPayload(connection)
-              : undefined;
           return {
             body: buildSendMessagesRequestPayload({
               sessionId,
@@ -574,7 +354,6 @@ export class ChatFactory {
               messageId,
               body,
               requestContext,
-              clickHouseConnection,
               currentModel,
               generateTitle: options.generateTitle,
               ephemeral: options.ephemeral,
@@ -582,7 +361,7 @@ export class ChatFactory {
               outputReasoning: agentConfiguration.outputReasoning ?? true,
               reasoningLevel: agentConfiguration.reasoningLevel,
               agentContext,
-              chatPersistenceMode,
+              chatPersistenceMode: "remote",
             }),
             headers: buildChatRequestHeaders(headers, options.shareCode),
             credentials,
@@ -611,49 +390,10 @@ export class ChatFactory {
           return;
         }
 
-        if (!(toolName in ClickHouseToolExecutors)) {
-          console.error(`Unknown tool: ${toolName}`);
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output: { error: `Unknown tool: ${toolName}` } as never,
-          });
-          return;
-        }
-
-        const executor = ClickHouseToolExecutors[toolName as ClickHouseExecutorName];
-
-        try {
-          if (!clientToolConnection) {
-            throw new Error(
-              "No ClickHouse cluster is connected. Connect a cluster to use ClickHouse tools."
-            );
-          }
-
-          // Create progress callback for all tools (tools that don't use it will simply ignore it)
-          const progressCallback = createToolProgressCallback(
-            toolCallId,
-            toolName,
-            useToolProgressStore.getState()
-          );
-
-          const output = await executor(input as never, clientToolConnection, progressCallback);
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output: output as never,
-          });
-        } catch (error) {
-          console.error(`Error executing tool ${toolName}:`, error);
-
-          chat.addToolOutput({
-            tool: toolName as never,
-            toolCallId,
-            output: {
-              error: error instanceof Error ? error.message : "Unknown error occurred",
-            } as never,
-          });
-        }
+        console.error(`Unexpected client-side tool request: ${toolName}`, {
+          toolCallId,
+          input,
+        });
       },
 
       onFinish: options.onFinish

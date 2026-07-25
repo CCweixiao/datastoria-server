@@ -3,7 +3,11 @@ import { BasePath } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 
 export function getProviderLogoUrl(provider: string): string | undefined {
-  const logo = PROVIDERS[provider]?.logo;
+  const normalized = provider.trim().toLowerCase();
+  const definition = Object.entries(PROVIDERS).find(
+    ([name]) => name.toLowerCase() === normalized
+  )?.[1];
+  const logo = definition?.logo;
   return logo ? BasePath.getURL(`/provider-logos/${logo}`) : undefined;
 }
 

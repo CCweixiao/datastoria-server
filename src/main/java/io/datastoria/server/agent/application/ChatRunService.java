@@ -12,7 +12,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunStatus;
+import io.datastoria.server.agent.runtime.AgentRunCapabilities;
 import io.datastoria.server.agent.runtime.AgentRuntimeConfig;
+import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
 import io.datastoria.server.api.compat.AgentChatRequest;
@@ -31,9 +33,11 @@ import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AgentDefinitionRepository;
 import io.datastoria.server.repository.AgentRevisionRepository;
 import io.datastoria.server.repository.AgentRunRepository;
+import io.datastoria.server.repository.AgentSkillRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.ChatSessionRepository;
 import io.datastoria.server.repository.ModelRepository;
+import io.datastoria.server.service.ClickHouseConnectionService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -74,6 +78,8 @@ public class ChatRunService {
   private final ModelRepository modelRepository;
   private final AgentDefinitionRepository agentDefinitionRepository;
   private final AgentRevisionRepository agentRevisionRepository;
+  private final AgentSkillRepository skillRepository;
+  private final ClickHouseConnectionService clickHouseConnectionService;
   private final ModelAdapterProvider modelAdapterProvider;
   private final RunLifecycleRecorder lifecycleRecorder;
   private final Scheduler jdbcScheduler;
@@ -87,6 +93,8 @@ public class ChatRunService {
       ModelRepository modelRepository,
       AgentDefinitionRepository agentDefinitionRepository,
       AgentRevisionRepository agentRevisionRepository,
+      AgentSkillRepository skillRepository,
+      ClickHouseConnectionService clickHouseConnectionService,
       ModelAdapterProvider modelAdapterProvider,
       RunLifecycleRecorder lifecycleRecorder,
       ObjectMapper mapper,
@@ -98,6 +106,8 @@ public class ChatRunService {
     this.modelRepository = modelRepository;
     this.agentDefinitionRepository = agentDefinitionRepository;
     this.agentRevisionRepository = agentRevisionRepository;
+    this.skillRepository = skillRepository;
+    this.clickHouseConnectionService = clickHouseConnectionService;
     this.modelAdapterProvider = modelAdapterProvider;
     this.lifecycleRecorder = lifecycleRecorder;
     this.mapper = mapper;
@@ -238,8 +248,39 @@ public class ChatRunService {
     }
 
     RunRequest runRequest =
-        new RunRequest(context, adapter, agent.config(), loadHistory(req, tenant), req.userText());
+        new RunRequest(
+            context,
+            adapter,
+            agent.config(),
+            resolveCapabilities(req, identity),
+            loadHistory(req, tenant),
+            req.userText());
     return new PreparedRun(runId, runRequest);
+  }
+
+  private AgentRunCapabilities resolveCapabilities(AgentChatRequest req, Identity identity) {
+    java.util.List<io.agentscope.core.skill.AgentSkill> skills =
+        skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
+            .map(
+                skill -> {
+                  java.util.Map<String, String> resources =
+                      skillRepository.findResources(skill.tenantId(), skill.id()).stream()
+                          .collect(
+                              java.util.stream.Collectors.toMap(
+                                  io.datastoria.server.domain.AgentSkillResource::path,
+                                  io.datastoria.server.domain.AgentSkillResource::content));
+                  return io.agentscope.core.skill.AgentSkill.builder()
+                      .name(skill.id())
+                      .description(skill.id())
+                      .skillContent(skill.content())
+                      .resources(resources)
+                      .source("datastoria-database")
+                      .build();
+                })
+            .toList();
+    return new AgentRunCapabilities(
+        skills,
+        new ClickHouseAgentTools(clickHouseConnectionService, req.connectionId(), identity));
   }
 
   private java.util.List<ChatTurn> loadHistory(AgentChatRequest req, String tenant) {

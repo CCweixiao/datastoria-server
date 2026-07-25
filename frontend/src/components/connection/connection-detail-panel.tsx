@@ -3,8 +3,7 @@
 import { Button } from "@/components/ui/button";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, Pencil } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 
 interface ConnectionDetailPanelProps {
   conn: ConnectionConfig | null;
@@ -17,15 +16,6 @@ interface ConnectionDetailContentProps {
 }
 
 export function ConnectionDetailContent({ conn, className }: ConnectionDetailContentProps) {
-  const [showPassword, setShowPassword] = useState(false);
-  const connectionFingerprint = conn
-    ? `${conn.name}|${conn.url}|${conn.user}|${conn.cluster}|${conn.editable}`
-    : "";
-
-  useEffect(() => {
-    setShowPassword(false);
-  }, [connectionFingerprint]);
-
   if (!conn) {
     return null;
   }
@@ -50,22 +40,7 @@ export function ConnectionDetailContent({ conn, className }: ConnectionDetailCon
 
         <div>
           <div className="text-xs text-muted-foreground">Password</div>
-          <div className="flex items-center gap-2">
-            {conn.password && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 p-0"
-                onClick={() => setShowPassword((s) => !s)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="!h-3 !w-3" /> : <Eye className="!h-3 !w-3" />}
-              </Button>
-            )}
-            <div className="text-xs break-all">
-              {conn.password ? (showPassword ? conn.password : "••••••") : "No password"}
-            </div>
-          </div>
+          <div className="text-xs">Stored securely on the server</div>
         </div>
 
         <div>

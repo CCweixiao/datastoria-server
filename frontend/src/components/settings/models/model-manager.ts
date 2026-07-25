@@ -3,9 +3,7 @@ import {
   isJavaConfigurationBackend,
   type ServerModelProps,
 } from "@/lib/ai/configuration/configuration-gateway";
-import { MODELS, type ModelProps } from "@/lib/ai/llm/llm-provider-factory";
-import { PROVIDER_GITHUB_COPILOT } from "@/lib/ai/llm/provider-ids";
-import { StorageManager } from "@/lib/storage/storage-provider-manager";
+import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
 
 export interface ModelSetting {
   modelId: string;
@@ -16,11 +14,9 @@ export interface ModelSetting {
 
 export interface ProviderSetting {
   provider: string;
-  apiKey: string;
-  refreshToken?: string;
-  accessTokenExpiresAt?: number;
-  refreshTokenExpiresAt?: number;
-  authError?: string;
+  providerId: string;
+  credentialConfigured: boolean;
+  maskedHint?: string | null;
 }
 
 export const MODEL_CONFIG_UPDATED_EVENT = "MODEL_CONFIG_UPDATED";
@@ -38,65 +34,17 @@ If you have your API keys, you can configure your models in the settings.`,
     };
   }
 
-  private get modelSettingsStorage() {
-    return StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("settings:ai:model-settings");
-  }
-
-  private get providerSettingsStorage() {
-    return StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("settings:ai:provider-settings");
-  }
-
-  private get selectedModelStorage() {
-    return StorageManager.getInstance()
-      .getStorageProvider()
-      .subStorage("settings:ai:selected-model-id");
-  }
-
-  /**
-   * Dynamically registered models (e.g., from Copilot API)
-   */
-  private dynamicModels: ModelProps[] = [];
   private systemModels: ModelProps[] = [];
   private systemModelsHydrated = false;
   private serverSelectedModel: ModelProps | undefined;
+  private modelSettings: ModelSetting[] = [];
+  private providerSettings: ProviderSetting[] = [];
 
   public static getInstance(): ModelManager {
     if (!ModelManager.instance) {
       ModelManager.instance = new ModelManager();
     }
     return ModelManager.instance;
-  }
-
-  /**
-   * Set dynamic models and notify listeners
-   */
-  public setDynamicModels(models: ModelProps[]): void {
-    this.dynamicModels = models;
-    this.notify();
-  }
-
-  public setDynamicModelsForProvider(
-    provider: string,
-    models: ModelProps[],
-    notifyWhenUnchanged = false
-  ): void {
-    const nextModels = [
-      ...this.dynamicModels.filter((model) => model.provider !== provider),
-      ...models,
-    ];
-    if (JSON.stringify(this.dynamicModels) === JSON.stringify(nextModels)) {
-      if (notifyWhenUnchanged) {
-        this.notify();
-      }
-      return;
-    }
-
-    this.dynamicModels = nextModels;
-    this.notify();
   }
 
   public setSystemModels(models: ModelProps[], notify = true): void {
@@ -122,26 +70,10 @@ If you have your API keys, you can configure your models in the settings.`,
   }
 
   /**
-   * Get all registered models (static + dynamic)
+   * Get the server-provided model catalog.
    */
   public getAllModels(): ModelProps[] {
-    const merged = new Map<string, { model: ModelProps; index: number }>();
-    [...MODELS, ...this.systemModels, ...this.dynamicModels].forEach((model, index) => {
-      merged.set(`${model.provider}:${model.modelId}`, { model, index });
-    });
-    const indexed = [...merged.values()];
-    indexed.sort((a, b) => {
-      const aIsCopilot = a.model.provider === PROVIDER_GITHUB_COPILOT;
-      const bIsCopilot = b.model.provider === PROVIDER_GITHUB_COPILOT;
-      if (aIsCopilot && bIsCopilot) {
-        return a.model.modelId.localeCompare(b.model.modelId);
-      }
-      if (aIsCopilot !== bIsCopilot) {
-        return aIsCopilot ? -1 : 1;
-      }
-      return a.index - b.index;
-    });
-    return indexed.map((entry) => entry.model);
+    return [...this.systemModels];
   }
 
   /**
@@ -154,74 +86,26 @@ If you have your API keys, you can configure your models in the settings.`,
   }
 
   /**
-   * Get the currently selected model configuration from localStorage
+   * Get the model selected in the backend preference.
    * @returns The selected model configuration or undefined
    */
   public getSelectedModel(): ModelProps | undefined {
-    if (isJavaConfigurationBackend()) {
-      return this.serverSelectedModel;
-    }
-    const stored = this.selectedModelStorage.getString();
-    if (!stored) return undefined;
-
-    let selection: { provider: string; modelId: string } | undefined;
-
-    try {
-      // Try to parse as JSON (new format)
-      const parsed = JSON.parse(stored);
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        "provider" in parsed &&
-        "modelId" in parsed
-      ) {
-        selection = parsed as { provider: string; modelId: string };
-      }
-    } catch {
-      // Ignore parsing error, treat as legacy string format
-    }
-
-    if (!selection) {
-      // Legacy format: stored value is just modelId string
-      // Try to find the provider for this modelId
-      const legacyMatch = this.getAllModels().find((model) => model.modelId === stored);
-      if (!legacyMatch) {
-        return undefined;
-      }
-
-      selection = {
-        provider: legacyMatch.provider,
-        modelId: legacyMatch.modelId,
-      };
-    }
-
-    if (selection.provider === "System" && selection.modelId === "Auto") {
-      return ModelManager.createAutoModel();
-    }
-
-    return this.getAllModels().find(
-      (model) => model.provider === selection.provider && model.modelId === selection.modelId
-    );
+    return this.serverSelectedModel;
   }
 
   /**
-   * Save the selected model configuration to localStorage
+   * Save the selected model configuration to the backend.
    * @param model - The model configuration to select
    */
   public setSelectedModel(model: { provider: string; modelId: string }): void {
-    if (isJavaConfigurationBackend()) {
-      const selected = this.getAllModels().find(
-        (candidate) => candidate.provider === model.provider && candidate.modelId === model.modelId
-      ) as ServerModelProps | undefined;
-      if (!selected) return;
-      this.serverSelectedModel = selected;
-      void getAiConfigurationGateway()
-        .setModelPreference(selected)
-        .catch((error) => console.error("Failed to persist server model preference:", error));
-      this.notify();
-      return;
-    }
-    this.selectedModelStorage.setString(JSON.stringify(model));
+    const selected = this.getAllModels().find(
+      (candidate) => candidate.provider === model.provider && candidate.modelId === model.modelId
+    ) as ServerModelProps | undefined;
+    if (!selected) return;
+    this.serverSelectedModel = selected;
+    void getAiConfigurationGateway()
+      .setModelPreference(selected)
+      .catch((error) => console.error("Failed to persist server model preference:", error));
     this.notify();
   }
 
@@ -233,43 +117,37 @@ If you have your API keys, you can configure your models in the settings.`,
     this.notify();
   }
 
-  public purgeBrowserModelSecrets(): void {
-    if (!isJavaConfigurationBackend()) return;
-    this.providerSettingsStorage.remove();
-    this.selectedModelStorage.remove();
-  }
-
   /**
-   * Get all model settings from localStorage
+   * Get the current server-derived model settings cache.
    * @returns Array of model settings
    */
   public getModelSettings(): ModelSetting[] {
-    return this.modelSettingsStorage.getAsJSON<ModelSetting[]>(() => []);
+    return this.modelSettings;
   }
 
   /**
-   * Save model settings to localStorage
+   * Update the in-memory view cache. Persistence is performed through backend model APIs.
    * @param settings - Array of model settings to save
    */
   public setModelSettings(settings: ModelSetting[]): void {
-    this.modelSettingsStorage.setJSON(settings);
+    this.modelSettings = settings;
     this.notify();
   }
 
   /**
-   * Get all provider settings from localStorage
+   * Get transient provider UI state. Credentials are never stored in the browser.
    * @returns Array of provider settings
    */
   public getProviderSettings(): ProviderSetting[] {
-    return this.providerSettingsStorage.getAsJSON<ProviderSetting[]>(() => []);
+    return this.providerSettings;
   }
 
   /**
-   * Save provider settings to localStorage
+   * Update transient provider UI state only.
    * @param settings - Array of provider settings to save
    */
   public setProviderSettings(settings: ProviderSetting[]): void {
-    this.providerSettingsStorage.setJSON(settings);
+    this.providerSettings = settings.map((setting) => ({ ...setting }));
     this.notify();
   }
 
@@ -320,7 +198,7 @@ If you have your API keys, you can configure your models in the settings.`,
    */
   public updateProviderSetting(
     provider: string,
-    updates: Partial<Omit<ProviderSetting, "provider">>
+    updates: Partial<Omit<ProviderSetting, "provider" | "providerId">>
   ): void {
     const settings = this.getProviderSettings();
     const index = settings.findIndex((s) => s.provider === provider);
@@ -331,7 +209,8 @@ If you have your API keys, you can configure your models in the settings.`,
       // If provider doesn't exist, create a new one
       settings.push({
         provider,
-        apiKey: "",
+        providerId: "",
+        credentialConfigured: false,
         ...updates,
       });
     }
@@ -352,10 +231,9 @@ If you have your API keys, you can configure your models in the settings.`,
   /**
    * Get all available models that are enabled and have an API key configured.
    * Includes a special 'Auto' model representing the server-side default if available.
-   * @param autoSelectAvailable - Whether server-side auto-select is available. If false or undefined, the "System (Auto)" model will not be included.
    * @returns Array of available models
    */
-  public getAvailableModels(autoSelectAvailable?: boolean): ModelProps[] {
+  public getAvailableModels(): ModelProps[] {
     const modelSettings = this.getModelSettings();
     const providerSettings = this.getProviderSettings();
 
@@ -367,25 +245,13 @@ If you have your API keys, you can configure your models in the settings.`,
       if (setting ? setting.disabled : model.disabled) return [];
 
       const providerSetting = providerSettings.find((p) => p.provider === model.provider);
-
-      if (model.source === "system") {
-        const effectiveSource: ModelProps["source"] = providerSetting?.apiKey ? "user" : "system";
-        return [
-          {
-            ...model,
-            source: effectiveSource,
-          },
-        ];
-      }
-
-      // Filter out models whose provider doesn't have an API key
-      if (!providerSetting?.apiKey) return [];
+      if (!providerSetting?.credentialConfigured) return [];
 
       return [model];
     });
 
-    // Add the special 'Auto' model at the beginning only if auto-select is available
-    if (autoSelectAvailable) {
+    // Auto is useful only when at least one credential-backed server model can be selected.
+    if (userModels.some((model) => model.autoSelectable !== false)) {
       return [ModelManager.createAutoModel(), ...userModels];
     }
 

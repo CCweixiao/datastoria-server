@@ -81,6 +81,7 @@ public final class AgentRunService {
                   request.context(),
                   request.modelAdapter(),
                   request.config(),
+                  request.capabilities(),
                   request.history(),
                   request.userText());
           String runId = request.context().runId();
