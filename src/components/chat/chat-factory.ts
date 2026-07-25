@@ -1,0 +1,673 @@
+import { getRuntimeConfig } from "@/components/runtime-config-provider";
+import {
+  AgentConfigurationManager,
+  normalizeAIResponseLanguage,
+} from "@/components/settings/agent/agent-manager";
+import { ModelManager } from "@/components/settings/models/model-manager";
+import type { PlanToolOutput } from "@/lib/ai/agent/plan/planning-types";
+import type { AgentContext, AppUIMessage, Message, MessageMetadata } from "@/lib/ai/ai-types";
+import { sanitizeMessageForPersistence } from "@/lib/ai/session/serialization";
+import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
+import {
+  getClickHouseConnectionValidationError,
+  type ClickHouseConnection,
+} from "@/lib/ai/tools/clickhouse/clickhouse-connection";
+import { ClickHouseToolExecutors } from "@/lib/ai/tools/clickhouse/clickhouse-tool-executors";
+import type {
+  StageStatus,
+  ToolProgressCallback,
+} from "@/lib/ai/tools/clickhouse/clickhouse-tool-types";
+import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
+import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
+import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
+import { BasePath } from "@/lib/base-path";
+import { Connection, type QueryResponse } from "@/lib/connection/connection";
+import { Chat } from "@ai-sdk/react";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { v7 as uuidv7 } from "uuid";
+import { ChatContext, type DatabaseContext } from "./chat-context";
+import { ChatUIContext } from "./chat-ui-context";
+import {
+  getSessionRepositoryConnectionId,
+  toSessionRepositoryConnectionId,
+} from "./session/session-connection-id";
+import { SessionManager } from "./session/session-manager";
+
+type AbortableQueryResult<TResponse extends QueryResponse | Response> = {
+  response: Promise<TResponse>;
+  abortController: AbortController;
+};
+type ClickHouseExecutorName = keyof typeof ClickHouseToolExecutors;
+const PROVISIONAL_SESSION_TITLE_WORDS = 8;
+
+type ChatFactoryCreateOptions = {
+  sessionId?: string;
+  connectionId?: string;
+  connection?: Connection | null;
+  apiEndpoint?: string;
+  context?: DatabaseContext;
+  agentContext?: Partial<AgentContext>;
+  ephemeral?: boolean;
+  initialMessages: AppUIMessage[];
+  model?: {
+    provider: string;
+    modelId: string;
+    apiKey?: string;
+  };
+  shareCode?: string;
+};
+type PrepareSendMessagesRequestArgs = {
+  sessionId: string;
+  connection: Connection | null;
+  connectionId: string;
+  historicalMessages: AppUIMessage[];
+  messages: AppUIMessage[];
+};
+type FinishMessageArgs = {
+  sessionId: string;
+  connection: Connection | null;
+  connectionId: string;
+  message: AppUIMessage;
+};
+type CreateInternalOptions = ChatFactoryCreateOptions & {
+  initialMessages: AppUIMessage[];
+  generateTitle: boolean;
+  onPrepareSendMessagesRequest?: (args: PrepareSendMessagesRequestArgs) => Promise<void> | void;
+  onFinish?: (args: FinishMessageArgs) => Promise<void> | void;
+};
+type SendMessagesRequestPayloadArgs = {
+  sessionId: string;
+  connectionId: string;
+  messages: AppUIMessage[];
+  trigger: unknown;
+  messageId: string | undefined;
+  body: unknown;
+  requestContext?: DatabaseContext;
+  clickHouseConnection?: ClickHouseConnection;
+  currentModel?: {
+    provider: string;
+    modelId: string;
+    apiKey?: string;
+  };
+  generateTitle: boolean;
+  ephemeral?: boolean;
+  pruneValidateSql: boolean;
+  outputReasoning?: boolean;
+  reasoningLevel?: AgentContext["reasoningLevel"];
+  agentContext?: Partial<AgentContext>;
+  chatPersistenceMode: "local" | "remote";
+};
+
+export function buildAgentContextWithResponseLanguage(
+  agentContext: Partial<AgentContext> | undefined,
+  configuredLanguage: string | undefined
+): Partial<AgentContext> | undefined {
+  const responseLanguage = normalizeAIResponseLanguage(configuredLanguage);
+  const configuredAgentContext =
+    responseLanguage === "en" ? undefined : ({ responseLanguage } satisfies Partial<AgentContext>);
+
+  return configuredAgentContext || agentContext
+    ? {
+        ...configuredAgentContext,
+        ...(agentContext ?? {}),
+      }
+    : undefined;
+}
+
+function extractTextFromMessage(
+  message: Pick<Message, "parts"> | Pick<AppUIMessage, "parts">
+): string {
+  return message.parts
+    .filter(
+      (
+        part
+      ): part is {
+        type: "text";
+        text: string;
+      } => part.type === "text" && typeof part.text === "string"
+    )
+    .map((part) => part.text.trim())
+    .filter((text) => text.length > 0)
+    .join(" ")
+    .trim();
+}
+
+function buildProvisionalSessionTitle(text: string): string | undefined {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return undefined;
+  }
+
+  const truncatedWords = words.slice(0, PROVISIONAL_SESSION_TITLE_WORDS);
+  const title = truncatedWords.join(" ").trim();
+  return title || undefined;
+}
+
+/**
+ * Create a progress callback for tool execution
+ * Updates the progress store with stage informationÒ
+ */
+function createToolProgressCallback(
+  toolCallId: string,
+  toolName: string,
+  progressStore: ReturnType<typeof useToolProgressStore.getState>
+): ToolProgressCallback {
+  return (stage: string, progress: number, status: StageStatus, error?: string) => {
+    progressStore.updateProgress(toolCallId, {
+      toolName,
+      stage,
+      progress,
+      stageStatus: status, // This will add to stages history
+      stageError: error,
+    });
+  };
+}
+
+function newUniqueSessionId(): string {
+  return uuidv7().replace(/-/g, "");
+}
+
+export function buildSendMessagesRequestPayload({
+  sessionId,
+  connectionId,
+  messages,
+  trigger,
+  messageId,
+  body,
+  requestContext,
+  clickHouseConnection,
+  currentModel,
+  generateTitle,
+  ephemeral,
+  pruneValidateSql,
+  outputReasoning = true,
+  reasoningLevel,
+  agentContext,
+  chatPersistenceMode,
+}: SendMessagesRequestPayloadArgs): Record<string, unknown> {
+  if (chatPersistenceMode === "remote") {
+    const lastMessage = messages[messages.length - 1];
+    const continuation = lastAssistantMessageIsCompleteWithToolCalls({ messages });
+
+    return {
+      sessionId,
+      connectionId: toSessionRepositoryConnectionId(connectionId),
+      message: lastMessage,
+      ...(continuation ? { continuation: true } : {}),
+      ...(!continuation ? { generateTitle } : {}),
+      ...(ephemeral ? { ephemeral: true } : {}),
+      agentContext: {
+        ...(agentContext ?? {}),
+        pruneValidateSql,
+        outputReasoning,
+        reasoningLevel,
+      },
+      ...(clickHouseConnection ? { connection: clickHouseConnection } : {}),
+      ...(requestContext ? { context: requestContext } : {}),
+      ...(currentModel ? { model: currentModel } : {}),
+    };
+  }
+
+  return {
+    ...(typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {}),
+    messages,
+    trigger,
+    messageId,
+    agentContext: {
+      ...(agentContext ?? {}),
+      pruneValidateSql,
+      outputReasoning,
+      reasoningLevel,
+    },
+    ...(clickHouseConnection ? { connection: clickHouseConnection } : {}),
+    generateTitle,
+    ...(requestContext ? { context: requestContext } : {}),
+    ...(currentModel ? { model: currentModel } : {}),
+  };
+}
+
+function buildClickHouseConnectionPayload(
+  connection: Connection | null
+): ClickHouseConnection | undefined {
+  if (!connection || typeof connection.password !== "string") {
+    return undefined;
+  }
+
+  const payload: ClickHouseConnection = {
+    url: connection.url,
+    user: connection.user,
+    password: connection.password,
+    ...(connection.cluster ? { cluster: connection.cluster } : {}),
+  };
+
+  return getClickHouseConnectionValidationError(payload) ? undefined : payload;
+}
+
+function buildChatRequestHeaders(
+  headers: HeadersInit | undefined,
+  shareCode: string | undefined
+): HeadersInit | undefined {
+  if (!shareCode) {
+    return headers;
+  }
+
+  const normalizedHeaders =
+    headers instanceof Headers
+      ? Object.fromEntries(headers.entries())
+      : Array.isArray(headers)
+        ? Object.fromEntries(headers)
+        : (headers ?? {});
+
+  return {
+    ...normalizedHeaders,
+    [SESSION_SHARE_CODE_HEADER]: shareCode,
+  };
+}
+
+export class ChatFactory {
+  private static readonly clientToolAbortControllers = new Map<string, Set<AbortController>>();
+
+  private static trackAbortController(sessionId: string, abortController: AbortController): void {
+    const controllers =
+      this.clientToolAbortControllers.get(sessionId) ?? new Set<AbortController>();
+    controllers.add(abortController);
+    this.clientToolAbortControllers.set(sessionId, controllers);
+
+    abortController.signal.addEventListener(
+      "abort",
+      () => {
+        const currentControllers = this.clientToolAbortControllers.get(sessionId);
+        currentControllers?.delete(abortController);
+        if (currentControllers && currentControllers.size === 0) {
+          this.clientToolAbortControllers.delete(sessionId);
+        }
+      },
+      { once: true }
+    );
+  }
+
+  private static untrackAbortController(sessionId: string, abortController: AbortController): void {
+    const controllers = this.clientToolAbortControllers.get(sessionId);
+    controllers?.delete(abortController);
+    if (controllers && controllers.size === 0) {
+      this.clientToolAbortControllers.delete(sessionId);
+    }
+  }
+
+  private static trackAbortableResult<TResponse extends QueryResponse | Response>(
+    sessionId: string,
+    result: AbortableQueryResult<TResponse>
+  ): AbortableQueryResult<TResponse> {
+    ChatFactory.trackAbortController(sessionId, result.abortController);
+    void result.response.finally(() => {
+      ChatFactory.untrackAbortController(sessionId, result.abortController);
+    });
+    return result;
+  }
+
+  private static createClientToolConnection(sessionId: string, connection: Connection): Connection {
+    const wrappedConnection = Object.create(connection) as Connection;
+
+    wrappedConnection.query = (sql, params, headers) =>
+      ChatFactory.trackAbortableResult(sessionId, connection.query(sql, params, headers));
+    wrappedConnection.queryOnNode = (sql, params, headers) =>
+      ChatFactory.trackAbortableResult(sessionId, connection.queryOnNode(sql, params, headers));
+    wrappedConnection.queryRawResponse = (sql, params, headers) =>
+      ChatFactory.trackAbortableResult(
+        sessionId,
+        connection.queryRawResponse(sql, params, headers)
+      );
+
+    return wrappedConnection;
+  }
+
+  static stopClientTools(sessionId: string): void {
+    const controllers = this.clientToolAbortControllers.get(sessionId);
+    if (!controllers) {
+      return;
+    }
+
+    for (const controller of [...controllers]) {
+      controller.abort();
+    }
+    this.clientToolAbortControllers.delete(sessionId);
+  }
+
+  /**
+   * Get the current model configuration based on user settings
+   */
+  private static getCurrentModelConfig():
+    | { provider: string; modelId: string; apiKey?: string }
+    | undefined {
+    const modelManager = ModelManager.getInstance();
+    const selectedModel = modelManager.getSelectedModel();
+
+    if (
+      !selectedModel ||
+      (selectedModel.provider === "System" && selectedModel.modelId === "Auto")
+    ) {
+      return undefined;
+    }
+
+    const { provider, modelId } = selectedModel;
+    const providerSettings = modelManager.getProviderSettings();
+    const providerSetting = providerSettings.find((p) => p.provider === provider);
+    if (providerSetting?.apiKey) {
+      return {
+        provider,
+        modelId,
+        apiKey: providerSetting.apiKey,
+      };
+    }
+
+    const model = modelManager
+      .getAllModels()
+      .find((candidate) => candidate.provider === provider && candidate.modelId === modelId);
+    if (model?.source === "system") {
+      return { provider, modelId };
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Create or retrieve a persisted chat instance
+   */
+  static async create(options: ChatFactoryCreateOptions): Promise<Chat<AppUIMessage>> {
+    const sessionId = options.sessionId || newUniqueSessionId();
+    const historicalMessages = options.initialMessages;
+
+    // A full chat session should start with a clean tool-progress timeline.
+    useToolProgressStore.getState().clearAllProgress();
+
+    return ChatFactory.createInternal({
+      ...options,
+      sessionId,
+      initialMessages: historicalMessages,
+      generateTitle: true,
+      onPrepareSendMessagesRequest: async ({
+        messages,
+        connectionId,
+        sessionId,
+        historicalMessages,
+      }) => {
+        const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
+        if (chatPersistenceMode === "remote") {
+          let provisionalTitle: string | undefined;
+          if (
+            historicalMessages.length === 0 &&
+            messages.length === 1 &&
+            messages[0]?.role === "user"
+          ) {
+            provisionalTitle = buildProvisionalSessionTitle(extractTextFromMessage(messages[0]));
+            if (provisionalTitle) {
+              ChatUIContext.updateTitle(provisionalTitle);
+            }
+          }
+
+          await SessionManager.touchSessionById(sessionId, connectionId, provisionalTitle, {
+            shareCode: options.shareCode,
+          });
+          return;
+        }
+
+        const userMessagesToSave = messages
+          .filter((msg) => msg.role === "user")
+          .map((msg) => {
+            const metadataCreatedAt =
+              typeof msg.metadata?.createdAt === "number"
+                ? new Date(msg.metadata.createdAt)
+                : undefined;
+            const createdAt =
+              metadataCreatedAt && !Number.isNaN(metadataCreatedAt.getTime())
+                ? metadataCreatedAt
+                : new Date();
+            const updatedAt = new Date();
+
+            return {
+              id: msg.id,
+              chatId: sessionId,
+              role: msg.role,
+              parts: sanitizeMessageForPersistence(msg).parts ?? [],
+              metadata: msg.metadata,
+              createdAt,
+              updatedAt,
+            } as Message;
+          });
+
+        if (userMessagesToSave.length === 0) {
+          return;
+        }
+
+        let provisionalTitle: string | undefined;
+        if (
+          historicalMessages.length === 0 &&
+          messages.length === 1 &&
+          messages[0]?.role === "user"
+        ) {
+          provisionalTitle = buildProvisionalSessionTitle(extractTextFromMessage(messages[0]));
+          if (provisionalTitle) {
+            ChatUIContext.updateTitle(provisionalTitle);
+          }
+        }
+
+        await SessionManager.saveMessages(sessionId, userMessagesToSave);
+        await SessionManager.touchSessionById(sessionId, connectionId, provisionalTitle, {
+          shareCode: options.shareCode,
+        });
+      },
+      onFinish: async ({ message, connectionId, sessionId }) => {
+        const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
+        const now = new Date();
+
+        let title: string | undefined;
+        if (message.metadata?.title && typeof message.metadata.title.text === "string") {
+          title = message.metadata.title.text;
+          ChatUIContext.updateTitle(title);
+        } else if (
+          message.role === "assistant" &&
+          message.parts.length > 1 &&
+          message.parts[0].type === "dynamic-tool" &&
+          message.parts[0].toolName === SERVER_TOOL_NAMES.PLAN
+        ) {
+          const output = message.parts[0].output as PlanToolOutput;
+          if (output.title) {
+            title = output.title;
+            ChatUIContext.updateTitle(title);
+          }
+        }
+
+        if (chatPersistenceMode === "local") {
+          const sanitizedMessage = sanitizeMessageForPersistence(message);
+          const messageToSave: Message = {
+            id: sanitizedMessage.id,
+            role: sanitizedMessage.role,
+            parts: sanitizedMessage.parts as Message["parts"],
+            metadata: sanitizedMessage.metadata as MessageMetadata,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          await SessionManager.saveMessage(sessionId, messageToSave);
+        }
+
+        await SessionManager.touchSessionById(sessionId, connectionId, title, {
+          shareCode: options.shareCode,
+        });
+      },
+    });
+  }
+
+  /**
+   * Create an ephemeral chat instance for one-off UI surfaces.
+   * Does not load history, persist messages, or request a generated title.
+   */
+  static async createEphemeral(options: ChatFactoryCreateOptions): Promise<Chat<AppUIMessage>> {
+    return ChatFactory.createInternal({
+      ...options,
+      ephemeral: true,
+      initialMessages: options.initialMessages,
+      generateTitle: false,
+    });
+  }
+
+  private static async createInternal(options: CreateInternalOptions): Promise<Chat<AppUIMessage>> {
+    const sessionId = options.sessionId || newUniqueSessionId();
+    const modelConfig = options.model;
+    const connection = options.connection ?? null;
+    const connectionId = options.connectionId ?? getSessionRepositoryConnectionId(connection);
+    const clientToolConnection = connection
+      ? ChatFactory.createClientToolConnection(sessionId, connection)
+      : null;
+
+    // Create Chat instance
+    const chat = new Chat<AppUIMessage>({
+      id: sessionId,
+      generateId: newUniqueSessionId,
+
+      // Automatically send tool results back to the API when all tool calls are complete
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+
+      transport: new DefaultChatTransport({
+        fetch: async (_input, init) => {
+          const mode = AgentConfigurationManager.getConfiguration().mode;
+          const endpoint = BasePath.getURL(mode === "v2" ? "/api/ai/agent" : "/api/ai/chat");
+          return fetch(endpoint, init);
+        },
+
+        prepareSendMessagesRequest: async ({
+          messages,
+          trigger,
+          messageId,
+          body,
+          headers,
+          credentials,
+        }) => {
+          // Get current model config dynamically if not provided in options
+          const currentModel = modelConfig || ChatFactory.getCurrentModelConfig();
+
+          await options.onPrepareSendMessagesRequest?.({
+            sessionId,
+            connection,
+            connectionId,
+            historicalMessages: options.initialMessages,
+            messages: messages as AppUIMessage[],
+          });
+
+          const requestContext = options.context ?? ChatContext.build();
+          const chatPersistenceMode = getRuntimeConfig().sessionRepositoryType;
+          const agentConfiguration = AgentConfigurationManager.getConfiguration();
+          const agentContext = buildAgentContextWithResponseLanguage(
+            options.agentContext,
+            agentConfiguration.aiResponseLanguage
+          );
+          const clickHouseConnection =
+            agentConfiguration.mode === "v2"
+              ? buildClickHouseConnectionPayload(connection)
+              : undefined;
+          return {
+            body: buildSendMessagesRequestPayload({
+              sessionId,
+              connectionId,
+              messages: messages as AppUIMessage[],
+              trigger,
+              messageId,
+              body,
+              requestContext,
+              clickHouseConnection,
+              currentModel,
+              generateTitle: options.generateTitle,
+              ephemeral: options.ephemeral,
+              pruneValidateSql: agentConfiguration.pruneValidateSql ?? true,
+              outputReasoning: agentConfiguration.outputReasoning ?? true,
+              reasoningLevel: agentConfiguration.reasoningLevel,
+              agentContext,
+              chatPersistenceMode,
+            }),
+            headers: buildChatRequestHeaders(headers, options.shareCode),
+            credentials,
+          };
+        },
+      }),
+
+      messages: options.initialMessages,
+
+      onToolCall: async ({ toolCall }) => {
+        const { toolName, toolCallId, input } = toolCall;
+        if (
+          toolName === SERVER_TOOL_NAMES.GENERATE_SQL ||
+          toolName === SERVER_TOOL_NAMES.GENERATE_VISUALIZATION ||
+          toolName === SERVER_TOOL_NAMES.OPTIMIZE_SQL ||
+          toolName === SERVER_TOOL_NAMES.PLAN ||
+          toolName === SERVER_TOOL_NAMES.SKILL ||
+          toolName === SERVER_TOOL_NAMES.SKILL_RESOURCE ||
+          toolName === SERVER_TOOL_NAMES.SEARCH_FILE ||
+          toolName === SERVER_TOOL_NAMES.READ_FILE
+        ) {
+          return;
+        }
+
+        if (toolName === CLIENT_TOOL_NAMES.ASK_USER_QUESTION) {
+          return;
+        }
+
+        if (!(toolName in ClickHouseToolExecutors)) {
+          console.error(`Unknown tool: ${toolName}`);
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output: { error: `Unknown tool: ${toolName}` } as never,
+          });
+          return;
+        }
+
+        const executor = ClickHouseToolExecutors[toolName as ClickHouseExecutorName];
+
+        try {
+          if (!clientToolConnection) {
+            throw new Error(
+              "No ClickHouse cluster is connected. Connect a cluster to use ClickHouse tools."
+            );
+          }
+
+          // Create progress callback for all tools (tools that don't use it will simply ignore it)
+          const progressCallback = createToolProgressCallback(
+            toolCallId,
+            toolName,
+            useToolProgressStore.getState()
+          );
+
+          const output = await executor(input as never, clientToolConnection, progressCallback);
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output: output as never,
+          });
+        } catch (error) {
+          console.error(`Error executing tool ${toolName}:`, error);
+
+          chat.addToolOutput({
+            tool: toolName as never,
+            toolCallId,
+            output: {
+              error: error instanceof Error ? error.message : "Unknown error occurred",
+            } as never,
+          });
+        }
+      },
+
+      onFinish: options.onFinish
+        ? async ({ message }) => {
+            await options.onFinish?.({
+              sessionId,
+              connection,
+              connectionId,
+              message: message as AppUIMessage,
+            });
+          }
+        : undefined,
+    });
+
+    return chat;
+  }
+}

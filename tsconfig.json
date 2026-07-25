@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "incremental": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@number-flow/react": [
+        "./external/number-flow/packages/react/src/index.tsx"
+      ],
+      "@vizlayer/core": [
+        "./external/vizlayer/packages/core/src/index.ts"
+      ],
+      "@vizlayer/react": [
+        "./external/vizlayer/packages/react/src/index.ts"
+      ],
+      "number-flow": [
+        "./external/number-flow/packages/number-flow/src/index.ts"
+      ],
+      "number-flow/group": [
+        "./external/number-flow/packages/number-flow/src/group.ts"
+      ],
+      "number-flow/lite": [
+        "./external/number-flow/packages/number-flow/src/lite.ts"
+      ],
+      "number-flow/plugins": [
+        "./external/number-flow/packages/number-flow/src/plugins/index.ts"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "src",
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "external/clickhouse/packages"
+  ]
+}

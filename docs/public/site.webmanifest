@@ -1,0 +1,25 @@
+{
+  "name": "DataStoria Documentation",
+  "short_name": "DataStoria Docs",
+  "description": "AI-powered ClickHouse management console documentation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "utilities",
+    "developer tools"
+  ],
+  "lang": "en-US",
+  "dir": "ltr"
+}

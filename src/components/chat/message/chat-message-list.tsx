@@ -1,0 +1,190 @@
+"use client";
+
+import { AppLogo } from "@/components/app-logo";
+import { TypingDots } from "@/components/ui/typing-dots";
+import type { AppUIMessage } from "@/lib/ai/ai-types";
+import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
+import * as React from "react";
+import { useDebouncedCallback } from "use-debounce";
+import { ChatMessage } from "./chat-message";
+import { RUNNING_TEXT_CLASS } from "./collapsible-part";
+
+interface ChatMessageListProps {
+  messages: AppUIMessage[];
+  isRunning: boolean;
+  error: Error | null;
+}
+
+const AUTO_SCROLL_THRESHOLD_PX = 16;
+
+function isNearBottom(element: HTMLDivElement) {
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <= AUTO_SCROLL_THRESHOLD_PX
+  );
+}
+
+function isAtTop(element: HTMLDivElement) {
+  return element.scrollTop <= 0;
+}
+
+function isAtBottom(element: HTMLDivElement) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
+}
+
+export const ChatMessageList = React.memo(
+  ({ messages, isRunning, error }: ChatMessageListProps) => {
+    const prevLastMessageKeyRef = React.useRef(
+      messages.length > 0 ? `${messages.length}:${messages[messages.length - 1].id}` : undefined
+    );
+    const shouldAutoScrollRef = React.useRef(true);
+    const lastScrollTopRef = React.useRef(0);
+    const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+    const scrollPlaceholderRef = React.useRef<HTMLDivElement>(null);
+
+    // Defer until after the DOM commits, but avoid extra nested frames that can
+    // cause visible edge flicker while the user is manually scrolling.
+    const scrollToBottom = useDebouncedCallback(() => {
+      requestAnimationFrame(() => {
+        if (scrollPlaceholderRef.current) {
+          scrollPlaceholderRef.current.scrollIntoView({ block: "end", behavior: "auto" });
+        } else if (scrollContainerRef.current) {
+          // Fallback to direct scroll if placeholder not available
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+
+        if (scrollContainerRef.current) {
+          lastScrollTopRef.current = scrollContainerRef.current.scrollTop;
+        }
+      });
+    }, 20);
+
+    const handleScroll = React.useCallback(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      const currentScrollTop = container.scrollTop;
+      const scrollingUp = currentScrollTop < lastScrollTopRef.current;
+      lastScrollTopRef.current = currentScrollTop;
+
+      if (!isRunning || !shouldAutoScrollRef.current) return;
+
+      if (scrollingUp && !isNearBottom(container)) {
+        shouldAutoScrollRef.current = false;
+      }
+    }, [isRunning]);
+
+    const handleWheel = React.useCallback((event: WheelEvent) => {
+      const container = event.currentTarget as HTMLDivElement | null;
+      if (!container) {
+        return;
+      }
+
+      const scrollingUp = event.deltaY < 0;
+      const scrollingDown = event.deltaY > 0;
+
+      if ((scrollingUp && isAtTop(container)) || (scrollingDown && isAtBottom(container))) {
+        event.preventDefault();
+      }
+    }, []);
+
+    React.useEffect(() => {
+      const container = scrollContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      container.addEventListener("wheel", handleWheel, { passive: false });
+      return () => {
+        container.removeEventListener("wheel", handleWheel);
+      };
+    }, [handleWheel]);
+
+    // Auto scroll when messages, streaming state, or error change
+    React.useEffect(() => {
+      if (messages.length === 0) return;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      lastScrollTopRef.current = container.scrollTop;
+
+      const lastMessageKey = `${messages.length}:${messages[messages.length - 1].id}`;
+      const isNewMessage = lastMessageKey !== prevLastMessageKeyRef.current;
+      prevLastMessageKeyRef.current = lastMessageKey;
+
+      if (isNewMessage) {
+        shouldAutoScrollRef.current = true;
+      }
+
+      if (!shouldAutoScrollRef.current) return;
+
+      scrollToBottom();
+    }, [messages, isRunning, error, scrollToBottom]);
+
+    return (
+      <div
+        ref={scrollContainerRef}
+        className="h-full w-full overflow-y-auto overflow-x-hidden overscroll-none"
+        onScroll={handleScroll}
+      >
+        <div className="flex flex-col">
+          {messages.map((message, index) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              isLoading={isRunning && index === messages.length - 1 && message.role === "assistant"}
+              isFirst={index === 0}
+              isLast={index === messages.length - 1}
+              isRunning={isRunning && index === messages.length - 1}
+            />
+          ))}
+
+          {/* Show loading indicator when waiting for assistant response */}
+          {isRunning && messages.length > 0 && messages[messages.length - 1].role === "user" && (
+            <div className={cn("mt-0")}>
+              <div className="flex gap-[1px]">
+                {/* Left color bar for assistant messages */}
+                <div className="self-stretch w-1 flex-shrink-0 bg-emerald-400 dark:bg-emerald-500" />
+
+                <div className="flex-1 flex flex-col min-w-0">
+                  {/* Profile and message row */}
+                  <div className="flex gap-[1px]">
+                    <div className="flex-shrink-0 w-[28px] flex justify-center">
+                      <div className="h-6 w-6 flex items-center justify-center">
+                        <AppLogo className="h-6 w-6" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-hidden min-w-0 text-sm pr-6">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span className={RUNNING_TEXT_CLASS}>Thinking</span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+                        <TypingDots />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mt-4 p-3 bg-destructive/10 border border-destructive rounded-lg flex items-start gap-2 mx-2">
+            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-destructive">Error</p>
+              <p className="text-sm text-destructive/80">{error.message}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Placeholder div at the bottom for scrolling */}
+        <div ref={scrollPlaceholderRef} className="h-1" />
+      </div>
+    );
+  }
+);
+
+ChatMessageList.displayName = "ChatMessageList";

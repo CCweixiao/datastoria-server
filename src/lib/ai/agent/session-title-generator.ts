@@ -1,0 +1,136 @@
+import { uiMessageToText } from "@/lib/ai/agent/plan/planning-prompt-builder";
+import type { InputModel } from "@/lib/ai/agent/plan/sub-agent-registry";
+import { LanguageModelProviderFactory } from "@/lib/ai/llm/llm-provider-factory";
+import { PROVIDER_OPENAI_CODEX } from "@/lib/ai/llm/provider-ids";
+import { generateObject } from "@/lib/ai/stream-utils";
+import type { OpenAIResponsesProviderOptions } from "@ai-sdk/openai";
+import { generateText, Output, streamText, type LanguageModelUsage, type UIMessage } from "ai";
+import { z } from "zod";
+import { PrivateSessionTitleGenerator } from "./session-title-generator-private";
+
+export type SessionTitleGenerationResponse = {
+  title?: string;
+  usage?: LanguageModelUsage;
+};
+
+const TITLE_MAX_LENGTH = 64;
+const TITLE_INPUT_MAX_LENGTH = 300;
+
+export class SessionTitleGenerator {
+  static resolveModel(modelConfig: InputModel): InputModel {
+    switch (modelConfig.provider) {
+      case "OpenAI":
+        return { ...modelConfig, modelId: "gpt-5-mini" };
+      case "Anthropic":
+        return { ...modelConfig, modelId: "claude-haiku-4-5" };
+      case "Google":
+        return { ...modelConfig, modelId: "gemini-2.5-flash" };
+      case PROVIDER_OPENAI_CODEX:
+        return { ...modelConfig, modelId: "gpt-5.4-mini" };
+      default:
+        return PrivateSessionTitleGenerator.resolveModel(modelConfig);
+    }
+  }
+
+  static async generate(
+    messages: UIMessage[],
+    modelConfig: InputModel
+  ): Promise<SessionTitleGenerationResponse | undefined> {
+    const titleModelConfig = SessionTitleGenerator.resolveModel(modelConfig);
+
+    let firstUserMessage: UIMessage | undefined;
+    for (const m of messages) {
+      if (m.role === "user") {
+        if (firstUserMessage) return undefined;
+        firstUserMessage = m;
+      } else if (m.role === "assistant") {
+        return undefined;
+      }
+    }
+    if (!firstUserMessage) return undefined;
+
+    const messageText = uiMessageToText(firstUserMessage).trim();
+    if (!messageText) return undefined;
+    const titleInput = messageText.slice(0, TITLE_INPUT_MAX_LENGTH);
+
+    try {
+      console.log("Generating chat title by using model:", titleModelConfig.modelId);
+      const model = LanguageModelProviderFactory.createModel(
+        titleModelConfig.provider,
+        titleModelConfig.modelId,
+        titleModelConfig.apiKey,
+        // For title generation, it may use some simpler models which are not included in the default provider list
+        // So we need to skip the verification of these models.
+        // It's the code maintainer to configure the models for title generation properly and correctly.
+        false
+      );
+
+      const temperature = LanguageModelProviderFactory.getDefaultTemperature(
+        titleModelConfig.modelId
+      );
+      const titleSystemPrompt = `You generate short chat session titles.
+Return JSON with exactly one field: "title".
+The title must be 3 to 10 words and at most ${TITLE_MAX_LENGTH} characters.
+Use plain words only. Do not include quotes, punctuation, emojis, or explanations.`;
+      const titleOutput = Output.object({
+        schema: z.object({
+          title: z.string().max(TITLE_MAX_LENGTH).describe("Short conversation title (3-10 words)"),
+        }),
+      });
+      const supportsStructuredOutputs = LanguageModelProviderFactory.supportsStructuredOutputs(
+        titleModelConfig.provider,
+        titleModelConfig.modelId
+      );
+      const { output, usage } = !supportsStructuredOutputs
+        ? await (async () => {
+            const result = await generateObject({
+              model,
+              system: titleSystemPrompt,
+              prompt: titleInput,
+              schema: z.object({
+                title: z
+                  .string()
+                  .max(TITLE_MAX_LENGTH)
+                  .describe("Short conversation title (3-10 words)"),
+              }),
+              temperature,
+              supportsStructuredOutputs: false,
+            });
+            return { output: result, usage: result.usage };
+          })()
+        : titleModelConfig.provider === PROVIDER_OPENAI_CODEX
+          ? await (async () => {
+              const result = streamText({
+                model,
+                system: titleSystemPrompt,
+                prompt: titleInput,
+                providerOptions: {
+                  openai: {
+                    instructions: titleSystemPrompt,
+                    // Keep chat state in DataStoria instead of creating stored OpenAI responses.
+                    store: false,
+                  } satisfies OpenAIResponsesProviderOptions,
+                },
+                output: titleOutput,
+              });
+              const [output, usage] = await Promise.all([result.output, result.usage]);
+              return { output, usage };
+            })()
+          : await generateText({
+              model,
+              system: titleSystemPrompt,
+              prompt: titleInput,
+              output: titleOutput,
+              temperature,
+            });
+
+      const title = output?.title?.trim();
+      const resolvedTitle =
+        title && title.length > 0 ? title.slice(0, TITLE_MAX_LENGTH) : undefined;
+      return { title: resolvedTitle, usage };
+    } catch (e) {
+      console.warn("Error generating chat title:", e);
+      return undefined;
+    }
+  }
+}

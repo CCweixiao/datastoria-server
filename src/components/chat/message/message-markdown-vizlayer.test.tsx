@@ -1,0 +1,411 @@
+/**
+ * @vitest-environment jsdom
+ */
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MessageMarkdownVizlayer } from "./message-markdown-vizlayer";
+
+const copyButtonSpy = vi.fn();
+const toChartSpecSpy = vi.fn();
+const parseVizlayerSpecSpy = vi.fn();
+const vizlayerDiagramSpy = vi.fn();
+const toastSpy = vi.fn();
+
+vi.mock("@/components/shared/dashboard/use-is-dark-theme", () => ({
+  default: () => false,
+}));
+
+vi.mock("@/lib/toast", () => ({
+  toastManager: {
+    show: (...args: unknown[]) => toastSpy(...args),
+  },
+}));
+
+vi.mock("@/components/ui/copy-button", () => ({
+  CopyButton: (props: unknown) => {
+    copyButtonSpy(props);
+    return null;
+  },
+}));
+
+vi.mock("@vizlayer/react", async () => {
+  const actual = await vi.importActual<typeof import("@vizlayer/react")>("@vizlayer/react");
+  const compatActual = actual as typeof actual & {
+    Vizlayer?: {
+      parse: (spec: string) => unknown;
+    };
+    VizlayerSpecParser?: {
+      parseVizlayerSpec: (spec: string) => unknown;
+    };
+  };
+  const vizlayer = compatActual.Vizlayer;
+  const vizlayerSpecParser = compatActual.VizlayerSpecParser;
+  const parse = vizlayer?.parse
+    ? (spec: string) => {
+        parseVizlayerSpecSpy(spec);
+        return vizlayer.parse(spec);
+      }
+    : vizlayerSpecParser?.parseVizlayerSpec
+      ? (spec: string) => {
+          parseVizlayerSpecSpy(spec);
+          return vizlayerSpecParser.parseVizlayerSpec(spec);
+        }
+      : (spec: string) => {
+          parseVizlayerSpecSpy(spec);
+
+          try {
+            const parsed = JSON.parse(spec) as unknown;
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              return {
+                ok: false as const,
+                error: "Vizlayer payload must be a JSON object.",
+              };
+            }
+
+            const maybeSpec = parsed as { kind?: unknown; document?: unknown };
+            if (
+              maybeSpec.kind !== "flowchart" &&
+              maybeSpec.kind !== "sequenceDiagram" &&
+              maybeSpec.kind !== "classDiagram"
+            ) {
+              return {
+                ok: false as const,
+                error:
+                  "Unified Vizlayer payloads must include `kind` set to `flowchart`, `sequenceDiagram`, or `classDiagram`.",
+              };
+            }
+
+            if (!maybeSpec.document || typeof maybeSpec.document !== "object") {
+              return {
+                ok: false as const,
+                error: "Unified Vizlayer payloads must include an object `document` field.",
+              };
+            }
+
+            return {
+              ok: true as const,
+              spec: maybeSpec as {
+                kind: "flowchart" | "sequenceDiagram" | "classDiagram";
+                document: Record<string, unknown>;
+              },
+            };
+          } catch {
+            return {
+              ok: false as const,
+              error: "Diagram is incomplete. Maybe it's still streaming?",
+            };
+          }
+        };
+
+  return {
+    ...actual,
+    VizlayerDiagram: (props: unknown) => {
+      vizlayerDiagramSpy(props);
+      return (
+        <svg data-testid="vizlayer-diagram" xmlns="http://www.w3.org/2000/svg">
+          <text>vizlayer-diagram</text>
+        </svg>
+      );
+    },
+    toChartSpec: (props: unknown) => toChartSpecSpy(props),
+    Vizlayer: { parse },
+    VizlayerSpecParser: { parseVizlayerSpec: parse },
+  };
+});
+
+describe("MessageMarkdownVizlayer", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    copyButtonSpy.mockReset();
+    toChartSpecSpy.mockReset();
+    parseVizlayerSpecSpy.mockReset();
+    vizlayerDiagramSpy.mockReset();
+    toastSpy.mockReset();
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+    Object.defineProperty(document, "webkitFullscreenElement", {
+      configurable: true,
+      writable: true,
+      value: null,
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("copies generated Mermaid text for unified vizlayer payloads", () => {
+    toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}' />
+      );
+    });
+
+    expect(parseVizlayerSpecSpy).toHaveBeenCalledWith(
+      '{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}'
+    );
+    expect(toChartSpecSpy).toHaveBeenCalledWith({
+      kind: "flowchart",
+      document: {
+        direction: "TD",
+        nodes: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      },
+    });
+    expect(copyButtonSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: "flowchart TD\n  a --> b",
+        title: "Copy Mermaid code",
+        "aria-label": "Copy Mermaid code",
+      })
+    );
+  });
+
+  it("parses unified vizlayer payloads and maps their kind", () => {
+    toChartSpecSpy.mockReturnValue("sequenceDiagram\nuser->>agent: request");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"sequenceDiagram","document":{"participants":[{"id":"user","label":"User"},{"id":"agent","label":"Agent"}],"messages":[{"from":"user","to":"agent","text":"request"}]}}' />
+      );
+    });
+
+    expect(toChartSpecSpy).toHaveBeenCalledWith({
+      kind: "sequenceDiagram",
+      document: {
+        participants: [
+          { id: "user", label: "User" },
+          { id: "agent", label: "Agent" },
+        ],
+        messages: [{ from: "user", to: "agent", text: "request" }],
+      },
+    });
+    expect(copyButtonSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: "sequenceDiagram\nuser->>agent: request",
+        title: "Copy Mermaid code",
+      })
+    );
+    expect(vizlayerDiagramSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "sequenceDiagram",
+        document: {
+          participants: [
+            { id: "user", label: "User" },
+            { id: "agent", label: "Agent" },
+          ],
+          messages: [{ from: "user", to: "agent", text: "request" }],
+        },
+      })
+    );
+  });
+
+  it("requests browser fullscreen from the fullscreen button", () => {
+    toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}' />
+      );
+    });
+
+    const fullscreenTarget = container.querySelector(
+      '[data-testid="vizlayer-diagram"]'
+    )?.parentElement;
+    expect(fullscreenTarget).not.toBeNull();
+    Object.defineProperty(fullscreenTarget as HTMLDivElement, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    const requestFullscreenSpy = vi.mocked(
+      (fullscreenTarget as HTMLDivElement & { requestFullscreen: () => Promise<void> })
+        .requestFullscreen
+    );
+
+    const expandTrigger = container.querySelector(
+      'button[aria-label="Open diagram in fullscreen"]'
+    );
+    expect(expandTrigger).not.toBeNull();
+
+    act(() => {
+      expandTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(requestFullscreenSpy).toHaveBeenCalledOnce();
+
+    requestFullscreenSpy.mockRestore();
+  });
+
+  it("falls back to prefixed fullscreen methods when standard APIs are unavailable", () => {
+    toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}' />
+      );
+    });
+
+    const fullscreenTarget = container.querySelector(
+      '[data-testid="vizlayer-diagram"]'
+    )?.parentElement;
+    expect(fullscreenTarget).not.toBeNull();
+    Object.defineProperty(fullscreenTarget as HTMLDivElement, "requestFullscreen", {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(fullscreenTarget as HTMLDivElement, "webkitRequestFullscreen", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    const webkitRequestFullscreenSpy = vi.mocked(
+      (
+        fullscreenTarget as HTMLDivElement & {
+          webkitRequestFullscreen: () => Promise<void>;
+        }
+      ).webkitRequestFullscreen
+    );
+
+    const expandTrigger = container.querySelector(
+      'button[aria-label="Open diagram in fullscreen"]'
+    );
+    expect(expandTrigger).not.toBeNull();
+
+    act(() => {
+      expandTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(webkitRequestFullscreenSpy).toHaveBeenCalledOnce();
+  });
+
+  it("downloads the rendered diagram as svg", () => {
+    toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
+    const createObjectURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:diagram");
+    const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}' />
+      );
+    });
+
+    const downloadButton = container.querySelector('button[aria-label="Download diagram as SVG"]');
+    expect(downloadButton).not.toBeNull();
+
+    act(() => {
+      downloadButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(createObjectURLSpy).toHaveBeenCalledOnce();
+    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:diagram");
+
+    createObjectURLSpy.mockRestore();
+    revokeObjectURLSpy.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it("keeps copying raw Vizlayer JSON when parsing fails", () => {
+    act(() => {
+      root.render(<MessageMarkdownVizlayer spec='{"kind":"flowchart"' />);
+    });
+
+    expect(parseVizlayerSpecSpy).toHaveBeenCalledWith('{"kind":"flowchart"');
+    expect(toChartSpecSpy).not.toHaveBeenCalled();
+    expect(copyButtonSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: '{"kind":"flowchart"',
+        title: "Copy Vizlayer JSON",
+        "aria-label": "Copy Vizlayer JSON",
+      })
+    );
+    expect(container.textContent).toMatch(
+      /Vizlayer payload is still streaming\.|Diagram is incomplete\. Maybe it's still streaming\?/
+    );
+    expect(container.textContent).toContain('{"kind":"flowchart"');
+  });
+
+  it("parses complete payloads with trailing whitespace after the closing brace", () => {
+    toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer
+          spec={
+            '{"kind":"flowchart","document":{"direction":"TD","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b"}]}}\n  '
+          }
+        />
+      );
+    });
+
+    expect(parseVizlayerSpecSpy).toHaveBeenCalledOnce();
+    expect(toChartSpecSpy).toHaveBeenCalledWith({
+      kind: "flowchart",
+      document: {
+        direction: "TD",
+        nodes: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      },
+    });
+  });
+
+  it("shows an error for unified vizlayer payloads without kind", () => {
+    act(() => {
+      root.render(<MessageMarkdownVizlayer spec='{"document":{"title":"Example"}}' />);
+    });
+
+    expect(toChartSpecSpy).not.toHaveBeenCalled();
+    expect(copyButtonSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: '{"document":{"title":"Example"}}',
+        title: "Copy Vizlayer JSON",
+      })
+    );
+    expect(container.textContent).toContain(
+      "Unified Vizlayer payloads must include `kind` set to `flowchart`, `sequenceDiagram`, or `classDiagram`."
+    );
+    expect(container.textContent).toContain('{"document":{"title":"Example"}}');
+  });
+
+  it("shows an error for flowchart-like objects without the unified envelope", () => {
+    act(() => {
+      root.render(<MessageMarkdownVizlayer spec='{"direction":"TD","nodes":[],"edges":[]}' />);
+    });
+
+    expect(toChartSpecSpy).not.toHaveBeenCalled();
+    expect(copyButtonSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: '{"direction":"TD","nodes":[],"edges":[]}',
+        title: "Copy Vizlayer JSON",
+      })
+    );
+    expect(container.textContent).toContain(
+      "Unified Vizlayer payloads must include `kind` set to `flowchart`, `sequenceDiagram`, or `classDiagram`."
+    );
+    expect(container.textContent).toContain('{"direction":"TD","nodes":[],"edges":[]}');
+  });
+});

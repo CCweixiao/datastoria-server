@@ -1,0 +1,334 @@
+import { getAuthenticatedUserEmail } from "@/auth";
+import type { DatabaseContext } from "@/components/chat/chat-context";
+import type { ServerDatabaseContext } from "@/lib/ai/agent/common-types";
+import { PlanningAgent } from "@/lib/ai/agent/plan/planning-agent";
+import type { PlannerMetadata } from "@/lib/ai/agent/plan/planning-types";
+import type { MessageMetadata } from "@/lib/ai/ai-types";
+import { resolveModelConfig } from "@/lib/ai/llm/llm-provider-factory";
+import { MentionContext } from "@/lib/ai/mention-context";
+import { normalizeUsage, sumTokenUsage } from "@/lib/ai/token-usage-utils";
+import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
+import { SseStreamer } from "@/lib/sse-streamer";
+import { APICallError } from "@ai-sdk/provider";
+import { convertToModelMessages, RetryError, type UIMessage } from "ai";
+
+// Force dynamic rendering (no static generation)
+export const dynamic = "force-dynamic";
+
+// Increase body size limit for this route to handle large tool results
+// This is needed when get_table_columns returns 1500+ columns (e.g. system.metric_log)
+export const maxDuration = 60; // 60 seconds timeout
+
+/** UI message with chat route metadata (planner, usage, routerUsage). */
+export type ChatUIMessage = UIMessage<MessageMetadata>;
+
+interface ChatRequest {
+  messages?: ChatUIMessage[];
+  context?: DatabaseContext;
+  model?: {
+    provider: string;
+    modelId: string;
+    apiKey?: string;
+  };
+}
+
+/**
+ * Extracts error message from response body.
+ * Tries to extract the raw message from metadata, falls back to error message.
+ */
+function extractErrorMessageFromLLMProvider(
+  responseBody: string | undefined,
+  fallbackMessage?: string
+): string | undefined {
+  if (!responseBody || typeof responseBody !== "string") {
+    return fallbackMessage;
+  }
+
+  try {
+    const parsed = JSON.parse(responseBody) as {
+      error?: {
+        metadata?: { raw?: string };
+        message?: string;
+      };
+
+      message?: string;
+    };
+
+    return (
+      parsed.error?.metadata?.raw || parsed.error?.message || parsed.message || fallbackMessage
+    );
+  } catch {
+    return responseBody;
+  }
+}
+
+/**
+ * Extracts a meaningful error message from various error types.
+ * Handles RetryError, APICallError, and standard Error instances.
+ */
+function extractErrorMessage(error: unknown): string {
+  const defaultMessage = "Sorry, I encountered an error. Please try again.";
+
+  // Handle RetryError (contains lastError with the actual API error)
+  if (RetryError.isInstance(error)) {
+    const lastError = error.lastError;
+    if (!lastError) {
+      return error.message || defaultMessage;
+    }
+
+    // Check if lastError is an APICallError-like object with statusCode 429
+    if (typeof lastError === "object" && "statusCode" in lastError && "responseBody" in lastError) {
+      return (
+        extractErrorMessageFromLLMProvider(
+          lastError.responseBody as string | undefined,
+          "message" in lastError && typeof lastError.message === "string"
+            ? lastError.message
+            : undefined
+        ) || defaultMessage
+      );
+    }
+
+    // For other errors, use the error message
+    if (
+      typeof lastError === "object" &&
+      "message" in lastError &&
+      typeof lastError.message === "string"
+    ) {
+      return lastError.message;
+    }
+
+    return error.message || defaultMessage;
+  }
+
+  // Handle direct APICallError
+  if (APICallError.isInstance(error)) {
+    return extractErrorMessageFromLLMProvider(error.responseBody, error.message) || defaultMessage;
+  }
+
+  // Fallback to error message for any Error instance
+  if (error instanceof Error) {
+    return error.message || defaultMessage;
+  }
+
+  // Handle string errors
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return defaultMessage;
+}
+
+function hasClickHouseClusterContext(context: ServerDatabaseContext): boolean {
+  return typeof context.clickHouseUser === "string" && context.clickHouseUser.length > 0;
+}
+
+/**
+ * POST /api/ai/chat
+ *
+ * This endpoint implements a Two-Step Dispatcher Pattern:
+ * 1. Intent Routing (Call 1): Identifies the user's goal (SQL gen, optimization, viz, etc.)
+ * 2. Expert Delegation (Call 2): Streams the response from a specialized sub-agent.
+ */
+export async function POST(req: Request) {
+  try {
+    const userEmail = getAuthenticatedUserEmail(req);
+
+    // Parse request body with size validation
+    let apiRequest: ChatRequest;
+    try {
+      const text = await req.text();
+      if (text.length > 10 * 1024 * 1024) {
+        // 10MB limit
+        return new Response(
+          "Request body too large. Please reduce the amount of data being sent.",
+          {
+            status: 413,
+            headers: { "Content-Type": "text/plain" },
+          }
+        );
+      }
+
+      apiRequest = JSON.parse(text) as ChatRequest;
+    } catch (error) {
+      console.error("Failed to parse request body:", error);
+      return new Response("Invalid JSON in request body", { status: 400 });
+    }
+
+    // Extract messages and context from request body
+    if (!Array.isArray(apiRequest.messages)) {
+      return new Response("Invalid request format: messages must be an array", { status: 400 });
+    }
+
+    // Add userEmail and mark whether ClickHouse-specific tools/context are available.
+    const context: ServerDatabaseContext = apiRequest.context
+      ? ({ ...apiRequest.context, userEmail } as ServerDatabaseContext)
+      : ({ userEmail } as ServerDatabaseContext);
+    context.clusterAvailable = hasClickHouseClusterContext(context);
+
+    // Get the appropriate model (mock or real based on USE_MOCK_LLM env var)
+    // Use provided model config if available, otherwise auto-select
+    let modelConfig: { provider: string; modelId: string; apiKey: string } | undefined;
+    try {
+      modelConfig = resolveModelConfig(apiRequest.model);
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 500 });
+    }
+
+    // Create a stream that sends early status updates then pipes the real stream
+    const responseStream = new ReadableStream({
+      async start(controller) {
+        const streamer = new SseStreamer(controller);
+        try {
+          const inputMessages = apiRequest.messages ?? [];
+
+          // 1. Plan the intent
+          const {
+            agent,
+            usage: plannerUsage,
+            messageId,
+          } = await PlanningAgent.plan(streamer, inputMessages, modelConfig);
+
+          // Remove any plan tool parts from UI messages before converting to model messages.
+          const prunedMessages = inputMessages.map((message) => {
+            const parts = Array.isArray(message.parts)
+              ? message.parts.filter((part) => {
+                  const candidate = part as { type?: unknown; toolName?: unknown };
+                  return !(
+                    candidate.type === "dynamic-tool" &&
+                    candidate.toolName === SERVER_TOOL_NAMES.PLAN
+                  );
+                })
+              : message.parts;
+            return { ...message, parts };
+          });
+
+          // 2. Delegate to Expert Sub-Agent
+          const modelMessages = await convertToModelMessages(MentionContext.inject(prunedMessages));
+          const subAgentResult = await agent.stream({
+            messages: modelMessages,
+            modelConfig,
+            context,
+          });
+
+          // Request usage: only when continuing an assistant (messageId in request); else 0 for new message
+          const msgs = apiRequest.messages ?? [];
+          let continuedAssistant: ChatUIMessage | undefined;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const m = msgs[i];
+            if (m.role === "assistant" && m.id === messageId) {
+              continuedAssistant = m;
+              break;
+            }
+          }
+          const requestUsage = continuedAssistant
+            ? normalizeUsage(continuedAssistant.metadata?.usage)
+            : undefined;
+
+          // 3. Convert to UI message stream
+          // We use sendStart: false and sendReasoning: false because we already handled that part
+          // Sub-agents all return streamText() result; assert shape for toUIMessageStream
+          type SubAgentStreamResult = {
+            toUIMessageStream: (opts?: object) => { getReader(): ReadableStreamDefaultReader };
+          };
+          const agentStream = (subAgentResult as SubAgentStreamResult).toUIMessageStream({
+            originalMessages: apiRequest.messages,
+            generateMessageId: () => messageId,
+
+            // Since we start the streaming above, DISABLE the internal start message
+            sendStart: false,
+
+            messageMetadata: ({
+              part,
+            }: {
+              part: { type?: string; totalUsage?: unknown; usage?: unknown };
+            }) => {
+              if (part.type === "finish") {
+                const responseUsage = normalizeUsage(
+                  (part.totalUsage ?? part.usage) as Record<string, unknown>
+                );
+                const usage = sumTokenUsage([
+                  requestUsage,
+                  responseUsage,
+                  plannerUsage
+                    ? normalizeUsage(plannerUsage as Record<string, unknown>)
+                    : undefined,
+                ]);
+                return {
+                  // Return the accumulative token usage for this message
+                  usage,
+
+                  // Mainly for development
+                  planner: { intent: agent.id, usage: plannerUsage } as PlannerMetadata,
+                  responseUsage,
+                } as MessageMetadata;
+              }
+            },
+            onError: (error: unknown) => {
+              console.error("Chat error:", error);
+              try {
+                return extractErrorMessage(error);
+              } catch (parseError) {
+                console.error("Error extracting error message:", parseError);
+                return "Sorry, I encountered an error. Please try again.";
+              }
+            },
+          });
+
+          const reader = agentStream.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            try {
+              streamer.streamObject(value);
+            } catch (e) {
+              // If the controller is closed (e.g. client disconnected), stop piping
+              if (e instanceof TypeError && e.message.includes("closed")) {
+                break;
+              }
+              throw e;
+            }
+          }
+        } catch (error) {
+          console.error("Chat API stream error:", error);
+          const errorMsg = extractErrorMessage(error);
+          try {
+            streamer.streamObject({ type: "error", errorText: errorMsg });
+          } catch {
+            // Ignore errors if controller is already closed
+          }
+        } finally {
+          try {
+            controller.close();
+          } catch {
+            // Ignore errors if already closed
+          }
+        }
+      },
+    });
+
+    return new Response(responseStream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (error) {
+    console.error("Chat API error:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+
+    return new Response(
+      JSON.stringify({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+        location: "API route handler",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+}
