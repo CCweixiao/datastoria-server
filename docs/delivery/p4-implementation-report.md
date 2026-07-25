@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4（均已通过 review）**
+> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4（已通过 review）+ P4.5（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1、P4.2、P4.3、P4.4 review 已通过；P4.5–P4.8 未开始。
+> 状态：P4.1–P4.4 review 已通过；**P4.5 已实现，待 review**；P4.6–P4.8 未开始。
 
 ---
 
@@ -619,3 +619,150 @@ docs/delivery/p4-implementation-report.md                                       
 - 语义 diff 规则按 stream-protocol §6；先纯文本/reasoning/usage/error/cancel fixture。
 
 **P4.4 review 已通过；不自动开始 P4.5。**
+
+---
+
+# P4.5 — AI SDK UI Message Stream Encoder（本次交付，待 review）
+
+## P4.5-0. 范围
+
+实现 AgentScope-free 的 `AiSdkStreamEncoder`，把 P4.2 的 `AgentRunEvent` **增量**编码为当前前端
+`@ai-sdk/react` 可消费的 AI SDK v6 UI Message Stream 字节帧。**不新增 Java chat HTTP endpoint、不接真实
+provider、不改前端 gateway**（P4.6/P4.7/P4.8）。encoder/controller/测试均不引用 `io.agentscope.*`。
+
+## P4.5-1. golden 来源
+
+- **事实依据**：`frontend/src/app/api/ai/agent/route.ts`（`result.toUIMessageStream(...)` →
+  `createUIMessageStreamResponse(...)`）+ `frontend/src/lib/ai/token-usage-utils.ts`（`normalizeUsage`/
+  `sumTokenUsage`）。
+- **fixture**：`docs/fixtures/stream/*.jsonl` + `schema.json`（chunk JSON Schema）。这些 fixture 是
+  **手工构造的规范样本**（`MANIFEST.md` 标注真实字节捕获 TBD）。P4.5 encoder 对齐它们的 **事件类型序列**，
+  并以 **实际前端行为** 为准处理字段差异（见 §4 差异记录）。
+
+## P4.5-2. 分层与组件
+
+```text
+agent.application.AiSdkStreamEncoder   (AgentScope-free)
+  encode(AgentRunEvent) -> List<"data: {json}\n\n">   (增量，按事件)
+  encode(Flux<AgentRunEvent>) -> Flux<String>          (concatMap 逐事件 + [DONE])
+  done() -> "data: [DONE]\n\n"
+```
+
+## P4.5-3. 事件 → 帧映射（冻结规则）
+
+| AgentRunEvent | AI SDK chunk | 备注 |
+| --- | --- | --- |
+| RunStarted | `start`{messageId} + `start-step` | 一次 run 一次 start+step |
+| ReasoningBlockStarted/Delta/Ended | `reasoning-start`/`-delta`/`-end` | 同 block 共享一个 part id（`rsn-<n>`） |
+| TextBlockStarted/Delta/Ended | `text-start`/`-delta`/`-end` | 同 block 共享 part id（`txt-<n>`） |
+| UsageReported | （缓冲，不立即出帧） | usage 进 `finish` 的 messageMetadata |
+| RunCompleted | `finish-step` + `finish`{finishReason="stop", messageMetadata.usage} | |
+| RunFailed | `error`{errorText = 固定 safe message} | 永不透传 provider/prompt/credential |
+| RunCancelled | `abort`{reason="client_disconnect"} | 见 §5 取消语义 |
+| 终止 | `data: [DONE]\n\n` | 流始终以此终止 |
+
+- **帧格式**：`"data: " + 紧凑 JSON + "\n\n"`；JSON 由 Jackson 序列化（正确转义 `"` `\` `\n` `\t` 与控制字符）。
+- **part id**：`txt-<n>` / `rsn-<n>`，block 内 start/delta/end 共享；值不参与语义 diff（协议 §6 忽略）。
+- **增量**：`encode(event)` 只返回当前事件的帧，无 lookahead；`encode(Flux)` 用 `concatMap` 逐事件出帧，
+  最后 `concatWith([DONE])`。UsageReported 的 usage 先缓冲、在 RunCompleted 的 `finish` 帧上携带（跨事件状态）。
+
+## P4.5-4. 关键差异记录（不静默选择）
+
+**`docs/fixtures/stream` 的 usage 字段名与实际 Node 行为不一致**：
+
+- fixture（`text-only.jsonl`/`reasoning.jsonl`/`usage-title.jsonl`）用 **已废弃** 的 `promptTokens`/
+  `completionTokens`/`totalTokens`。
+- 实际 Node A01（`token-usage-utils.ts` 的 `sumTokenUsage` 返回 AI SDK v6 `LanguageModelUsage`）输出
+  **`inputTokens`/`outputTokens`/`totalTokens` + `inputTokenDetails{...}` + `outputTokenDetails{...}`**。
+- 前端 `@ai-sdk/react` 消费的是 `inputTokens`/`outputTokens`。若 encoder 输出 `promptTokens`，前端无法识别。
+- **处理**：encoder 按 **实际前端行为** 输出 `inputTokens`/`outputTokens`/`totalTokens`（+ details）。
+  `goldenFixtureUsesDeprecatedUsageNaming` 测试显式断言 fixture 用 `promptTokens` 而 encoder 用 `inputTokens`，
+  锁定该差异。建议后续 contract runner 抓取真实字节后刷新 fixture（`MANIFEST.md` 已标注 TBD）。
+- usage 数值：`TokenUsage(inputTokens, outputTokens, cachedTokens, ...)` → `inputTokens`/`outputTokens`
+  直映，`cacheReadTokens=cachedTokens`，`noCacheTokens=max(0, input-cached)`，`totalTokens=input+output`。
+
+## P4.5-5. 取消语义（满足冻结约束）
+
+- `RunCancelled → abort{reason="client_disconnect"}`（匹配 `cancel.jsonl`）。
+- **不向已取消订阅强行写帧**：encoder 只在 `RunCancelled` **到达它时** 才产出 abort 帧。客户端断开时，
+  `AgentRunService` 的 Flux 已 dispose，encoder 的订阅终止、不再收到事件，故不会向已断开的客户端写帧
+  （reactive dispose 自然丢弃下游）。`RunCancelled` 经独立 cancellation observer 落库（P4.3），
+  不依赖 encoder。encoder 不实现 force-write 逻辑。
+
+## P4.5-6. 测试命令与结果
+
+```
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./mvnw -B -ntp spotless:apply clean verify
+```
+
+- 全量：`Tests run: 250, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.5 专项（`AiSdkStreamEncoderTest`，12 用例）：
+  `./mvnw test -Dtest=AiSdkStreamEncoderTest` → 12/12。
+- P4.1–P4.4 全部仍通过；未改任何前端文件、未改 `AgentRunService`/事件模型（冻结）。
+- 无真实网络、无 API key、无真实 provider。
+
+P4.5 测试覆盖：
+
+| 测试 | 不变量 |
+| --- | --- |
+| textOnly / reasoning 场景 | 精确帧序列 + 与 golden fixture 的 **type 序列一致**（语义 diff） |
+| reasoningPartIdSharedWithinBlock | block 内 start/delta/end 共享同一 id |
+| usageEmittedOnFinish | `finish.messageMetadata.usage` 为 AI SDK v6 `LanguageModelUsage` 形状（inputTokens/outputTokens/totalTokens/details） |
+| goldenFixtureUsesDeprecatedUsageNaming | **记录 fixture 的 promptTokens vs encoder 的 inputTokens 差异** |
+| error scenario | `start→start-step→error`（无 finish），errorText 为固定 safe 文本、不含 `sk-`/`apiKey` |
+| cancel scenario | `start→...→abort{client_disconnect}`，与 `cancel.jsonl` 一致 |
+| jsonSpecialCharactersEscaped | `"` `\` `\n` `\t` 经 Jackson 正确转义并可往返 |
+| eachTextDeltaItsOwnFrame | 增量：每事件只出自身帧、无 lookahead；usage 缓冲后在 finish 携带 |
+| encodeFlux + done | reactive `encode(Flux)` 逐事件出帧并以 `[DONE]` 终止 |
+
+## P4.5-7. 安全检查
+
+- **AgentScope 隔离**：encoder/controller/测试不引用 `io.agentscope.*`（仅消费 `AgentRunEvent`）。
+- **错误脱敏**：`error` 帧的 `errorText` 取自 `RunFailed.message`（P4.2 已固定 safeMessage）；测试断言不含
+  `sk-`/`apiKey`。encoder 不接触 provider 原始异常/prompt/credential。
+- **取消安全**：不向已取消订阅写帧（§5）。
+- 未新增端点、未改 DDL、未改前端、未改 P4.2–P4.4 运行时行为。
+
+## P4.5-8. MySQL / 前端测试
+
+- **MySQL 本机未执行**（无 Docker；`SchemaParityTest` Tests run: 0）。P4.5 无 DB 变更，不产生 MySQL 风险。
+- **前端**：P4.5 **未修改任何前端文件**（fixture 只读引用），故未运行前端测试。usage 字段名差异已记录，
+  待 contract runner 抓取真实字节后刷新 fixture。
+
+## P4.5-9. 回滚
+
+- 纯新增：`AiSdkStreamEncoder` + 其测试。无 DDL、无端点、无 bean 装配（encoder 为普通类，P4.6 才接入）。
+- 回滚 = 删除这两个文件 + 撤销报告 P4.5 段。无数据迁移、无前端影响。
+
+## P4.5-10. 已知风险（不阻断 P4.6）
+
+1. **fixture 为手工样本，非真实捕获**：`MANIFEST.md` 标注真实 SSE 字节捕获 TBD。P4.5 对齐了 type 序列与
+   usage 实际形状；待 contract runner（受控 provider 环境）抓字节后做最终 byte-for-byte 校验（仅协议要求的
+   `[DONE]`/`type` 顺序/`errorText` 存在性等做 byte 断言，其余语义 diff）。
+2. **`data:` vs `data: `（空格）**：protocol doc §3 写 `data: {json}`（带空格），AI SDK 实际可能用 `data:`。
+   encoder 按 doc 用 `data: `（带空格，标准 SSE）。语义 diff 解析 JSON 前剥离前缀，不受影响；真实字节
+   校验时确认。
+3. **title 注入未实现**：`usage-title.jsonl` 的 `messageMetadata.title` 由 Node route 的 TransformStream 注入
+   （独立 `SessionTitleGenerator`）；P4.5 encoder 无 title 事件源，`finish` 只带 usage。title 注入留 P4.6。
+4. **tool 事件未覆盖**：P4 model-boundary tool schema 为 0，不产生 tool 事件（tool-success/tool-error fixture
+   的 type 序列不在 P4.5 范围，留 P5+ 工具阶段）。
+5. **part id 格式**：`txt-<n>`/`rsn-<n>` 为 DataStoria 生成，值被语义 diff 忽略；AI SDK 实际 id 格式不同但等价。
+
+## P4.5-11. 修改文件
+
+```
+src/main/java/io/datastoria/server/agent/application/AiSdkStreamEncoder.java          (新增)
+src/test/java/io/datastoria/server/agent/application/AiSdkStreamEncoderTest.java      (新增)
+docs/delivery/p4-implementation-report.md                                             (追加 P4.5)
+```
+
+## P4.5-12. 下一阶段（P4.6）计划
+
+- A01 Java chat endpoint：`POST /api/ai/agent`，凭据服务端注入、`client_request_id` 幂等、JDBC 不阻塞 event loop。
+- 接线：`AgentRunService.start(...)` 的 `Flux<AgentRunEvent>` → `AiSdkStreamEncoder.encode(...)` → SSE 响应；
+  保留 P4.2 single-use/deferred/自动 binding；`X-Vercel-AI-UI-Message-Stream: v1` 等响应头按 stream-protocol §2。
+- run 创建于请求、completed/failed 落库（P4.3）、RunCancelled 经 observer 落库；`finish` 注入 title（独立 service）。
+
+**停在 P4.5 review，不自动开始 P4.6。**
+
