@@ -27,6 +27,7 @@ public class TestDbHelper {
     "ds_agent_definition",
     "ds_user_model_preference",
     "ds_model",
+    "ds_oauth_credential",
     "ds_secret",
     "ds_model_provider",
     "ds_config_entry",
