@@ -10,6 +10,8 @@ import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
+import io.agentscope.core.state.AgentStateStore;
+import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.datastoria.server.agent.application.ChatTurn;
@@ -39,6 +41,7 @@ public final class HarnessAgentFactory {
 
   private final Clock clock;
   private final AgentToolRegistry toolRegistry;
+  private final AgentStateStore stateStore;
 
   public HarnessAgentFactory() {
     this(Clock.systemUTC(), new AgentToolRegistry());
@@ -53,8 +56,14 @@ public final class HarnessAgentFactory {
   }
 
   public HarnessAgentFactory(Clock clock, AgentToolRegistry toolRegistry) {
+    this(clock, toolRegistry, new InMemoryAgentStateStore());
+  }
+
+  public HarnessAgentFactory(
+      Clock clock, AgentToolRegistry toolRegistry, AgentStateStore stateStore) {
     this.clock = clock;
     this.toolRegistry = toolRegistry;
+    this.stateStore = stateStore;
   }
 
   public RunnableAgent create(
@@ -90,6 +99,7 @@ public final class HarnessAgentFactory {
             .model(modelAdapter.modelFor(context))
             .toolkit(toolkit)
             .permissionContext(permissionContext)
+            .stateStore(stateStore)
             .maxIters(config.maxIters());
     if (!capabilities.skills().isEmpty()) {
       builder.skillRepository(new InMemoryAgentSkillRepository(capabilities.skills()));
@@ -103,7 +113,6 @@ public final class HarnessAgentFactory {
             .disableShellTool()
             .disableMemoryTools()
             .disableMemoryHooks()
-            .disableSessionPersistence()
             .disableWorkspaceContext()
             .disableAtPathExpansion()
             .disableSubagents()

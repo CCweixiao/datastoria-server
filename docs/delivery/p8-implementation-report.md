@@ -84,6 +84,11 @@ AgentScope 推理/工具循环测试已验证：
 - ASK 不执行工具，产生 approval event 且不产生 `RunCompleted`；
 - DENY 不执行工具，向 Agent 返回 denied tool result 后可继续结束。
 
+同时显式注入 factory-scoped `InMemoryAgentStateStore`，不再依赖 Harness 默认写入
+`~/.agentscope/state` 的文件 store。它支持同 JVM 内按 run 恢复且不会污染开发者目录；
+跨进程恢复仍由 DataStoria checkpoint 重建，不能把含 prompt 的 AgentScope 全量 state
+直接写入当前安全 checkpoint。
+
 ### P8.2 当前证据
 
 - pending action repository、HTTP controller、AgentScope event mapper、AI SDK encoder 专项：
