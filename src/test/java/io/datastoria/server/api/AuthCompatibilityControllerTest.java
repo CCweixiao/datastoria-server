@@ -56,4 +56,13 @@ class AuthCompatibilityControllerTest {
         .doesNotContain("must-not-leak");
     assertThat(session).containsKey("expires");
   }
+
+  @Test
+  void acceptsOnlyLocalCallbackPaths() {
+    assertThat(AuthCompatibilityController.safeCallback("/session/abc")).isEqualTo("/session/abc");
+    assertThat(AuthCompatibilityController.safeCallback("https://evil.example")).isEqualTo("/");
+    assertThat(AuthCompatibilityController.safeCallback("//evil.example")).isEqualTo("/");
+    assertThat(AuthCompatibilityController.safeCallback("/ok\r\nLocation: https://evil.example"))
+        .isEqualTo("/");
+  }
 }

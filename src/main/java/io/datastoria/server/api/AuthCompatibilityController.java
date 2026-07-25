@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
@@ -14,7 +15,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Mono;
 
@@ -23,6 +26,7 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/api/auth")
 public class AuthCompatibilityController {
 
+  public static final String CALLBACK_COOKIE = "DATASTORIA_AUTH_CALLBACK";
   private static final Map<String, String> PROVIDER_NAMES =
       Map.of("google", "Google", "github", "GitHub", "microsoft", "Microsoft Entra ID");
 
@@ -60,13 +64,43 @@ public class AuthCompatibilityController {
   }
 
   @GetMapping("/signin/{provider}")
-  public ResponseEntity<Void> signIn(@PathVariable String provider) {
+  public ResponseEntity<Void> signIn(
+      @PathVariable String provider,
+      @RequestParam(required = false) String callbackUrl,
+      ServerWebExchange exchange) {
+    ResponseEntity<Void> response = signIn(provider);
+    if (response.getStatusCode().is3xxRedirection()) {
+      exchange
+          .getResponse()
+          .addCookie(
+              ResponseCookie.from(CALLBACK_COOKIE, safeCallback(callbackUrl))
+                  .httpOnly(true)
+                  .sameSite("Lax")
+                  .path("/")
+                  .maxAge(java.time.Duration.ofMinutes(10))
+                  .build());
+    }
+    return response;
+  }
+
+  public ResponseEntity<Void> signIn(String provider) {
     if (!providers().containsKey(provider)) {
       return ResponseEntity.notFound().build();
     }
     return ResponseEntity.status(HttpStatus.FOUND)
         .location(URI.create("/oauth2/authorization/" + provider))
         .build();
+  }
+
+  public static String safeCallback(String callbackUrl) {
+    if (callbackUrl == null
+        || !callbackUrl.startsWith("/")
+        || callbackUrl.startsWith("//")
+        || callbackUrl.contains("\r")
+        || callbackUrl.contains("\n")) {
+      return "/";
+    }
+    return callbackUrl;
   }
 
   @GetMapping("/session")

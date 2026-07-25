@@ -35,8 +35,16 @@ export async function loadAuthSession(): Promise<AuthSession> {
   return (await response.json()) as AuthSession;
 }
 
-export function beginSignIn(provider: AuthProvider): void {
-  window.location.assign(backendApiUrl(provider.signinUrl));
+export function beginSignIn(provider: AuthProvider, callbackUrl = "/"): void {
+  window.location.assign(buildSignInUrl(provider, callbackUrl));
+}
+
+export function buildSignInUrl(provider: AuthProvider, callbackUrl = "/"): string {
+  const url = new URL(backendApiUrl(provider.signinUrl));
+  const safeCallback =
+    callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/";
+  url.searchParams.set("callbackUrl", safeCallback);
+  return url.toString();
 }
 
 export async function signOut(callbackUrl = "/login"): Promise<void> {

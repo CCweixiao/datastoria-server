@@ -5,11 +5,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
 import org.springframework.security.web.server.authentication.RedirectServerAuthenticationSuccessHandler;
+
+import io.datastoria.server.api.AuthCompatibilityController;
 
 /**
  * OAuth2/OIDC-backed production security. Development identity headers are never consulted in this
@@ -49,7 +52,35 @@ public class ProductionSecurityConfig {
         .oauth2Login(
             login ->
                 login.authenticationSuccessHandler(
-                    new RedirectServerAuthenticationSuccessHandler(successUrl)))
+                    (exchange, authentication) -> {
+                      var cookie =
+                          exchange
+                              .getExchange()
+                              .getRequest()
+                              .getCookies()
+                              .getFirst(AuthCompatibilityController.CALLBACK_COOKIE);
+                      String target =
+                          cookie == null
+                              ? successUrl
+                              : java.net
+                                  .URI
+                                  .create(successUrl)
+                                  .resolve(
+                                      AuthCompatibilityController.safeCallback(cookie.getValue()))
+                                  .toString();
+                      exchange
+                          .getExchange()
+                          .getResponse()
+                          .addCookie(
+                              ResponseCookie.from(AuthCompatibilityController.CALLBACK_COOKIE, "")
+                                  .httpOnly(true)
+                                  .sameSite("Lax")
+                                  .path("/")
+                                  .maxAge(java.time.Duration.ZERO)
+                                  .build());
+                      return new RedirectServerAuthenticationSuccessHandler(target)
+                          .onAuthenticationSuccess(exchange, authentication);
+                    }))
         .logout(
             logout ->
                 logout

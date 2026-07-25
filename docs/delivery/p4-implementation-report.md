@@ -1261,3 +1261,32 @@ P4.8 的 Codex、图片、多轮工具历史和 request-scoped 模型选项已�
 最终回归：Java 17 `spotless:check test` **344 tests / 0 failure / 0 error**；前端
 TypeScript、Vitest **57 files / 297 tests**、`next build --webpack` 全部通过。构建路由仅包含
 页面，不包含 `/api/*`。
+
+## P4.8-8. 页面与 A01 语义差异复核（2026-07-26）
+
+以原仓库的用户可见组件和 A01 分支重新对比后，修复了路径清单测试无法发现的差异：
+
+1. 聊天文件链接仍生成 `/code-viewer`，但迁移时页面及其 Next 文件读取实现被整体删除，点击会
+   404。现恢复纯前端代码查看页，并新增 Spring `GET /api/code/file`/`files` 只读包装；路径必须
+   位于配置的 repository root，限制 400 行/100 KiB，拒绝绝对路径、穿越和 symlink escape。
+2. Spring OAuth 登录恢复 `callbackUrl`。signin 只接受本地相对路径，使用短时 HttpOnly
+   SameSite cookie 跨 OAuth round-trip 保存，认证成功后解析到配置的前端 origin，并清除 cookie；
+   外部 URL、protocol-relative URL 与 CRLF 均回退首页。
+3. A01 `ephemeral:true` 原先仍要求先创建 session，导致 SQL 错误解释等 one-off chat 返回 404。
+   Java 现在创建临时 FK anchor、不加载历史、不生成标题，并在 SSE 正常结束、取消或启动失败后
+   删除 session/run/message/event，不污染聊天历史。
+4. Java 默认 AgentScope prompt 从通用 “helpful assistant” 恢复为原 ClickHouse
+   orchestrator workflow，明确 Think、按需加载 Skill、工具失败后重试、时间范围复用与 markdown
+   输出规则。
+5. 新增 always-on `MigrationSetParityTest`：即使本机没有 Docker，也强制 SQLite/MySQL 保持相同
+   V1–V14 版本集合和建表集合；真实 MySQL DDL/runtime parity 仍由已有 Testcontainers gate 承担。
+6. 恢复原 A01 的历史消息压缩语义：默认从历史 assistant turn 移除全部 `validate_sql`
+   call/result；`agentContext.pruneValidateSql:false` 可显式关闭。恢复执行使用 checkpoint 的活动
+   工具上下文，不会误删待恢复调用。
+7. `context` 中的 cluster name、server version、ClickHouse user 经长度与换行清洗后加入
+   AgentScope system prompt，并与 request runtime options 一起持久化，使 JVM 重启后的
+   checkpoint resume 仍使用相同诊断上下文。临时 session 的内存跟踪键也改为
+   tenant/user/session 三元组，避免跨租户同名 session 相互清理。
+
+本轮回归：Java 17 `spotless:check test` **351 tests / 0 failure / 0 error**；前端
+TypeScript、Vitest **58 files / 299 tests** 和包含 `/code-viewer` 的生产构建全部通过。

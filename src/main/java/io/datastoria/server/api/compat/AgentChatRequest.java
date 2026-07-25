@@ -13,7 +13,9 @@ import com.fasterxml.jackson.databind.JsonNode;
  * model.modelId} (server resolves the tenant model config), {@code agentId} (optional; resolves the
  * published agent revision), {@code clientRequestId}/{@code Idempotency-Key} header (idempotency).
  * {@code agentContext} controls response language and reasoning at the server-owned model boundary.
- * {@code generateTitle}/{@code ephemeral} are accepted for wire compatibility.
+ * Safe diagnostic fields from {@code context} are added to the server-owned system prompt. {@code
+ * generateTitle} controls the independent model title call; {@code ephemeral} creates a temporary
+ * session FK anchor that is removed when the one-off stream closes.
  *
  * <p><b>Forbidden</b> (rejected before this record is built): {@code model.apiKey}, {@code
  * connection.password}, any top-level {@code apiKey}. Legacy client-side {@code continuation:true}
@@ -31,7 +33,8 @@ public record AgentChatRequest(
     boolean continuation,
     boolean generateTitle,
     boolean ephemeral,
-    JsonNode agentContext) {
+    JsonNode agentContext,
+    JsonNode context) {
 
   /** The {@code message.id} (used as the SSE {@code start.messageId}); null when absent. */
   public String messageId() {

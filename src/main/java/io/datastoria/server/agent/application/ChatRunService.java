@@ -85,7 +85,25 @@ import reactor.core.scheduler.Scheduler;
 public class ChatRunService {
 
   /** Fallback system prompt when no published agent revision is referenced. */
-  static final String DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant.";
+  static final String DEFAULT_SYSTEM_PROMPT =
+      """
+      You are a ClickHouse Expert with access to specialized skills and tools.
+
+      ## Workflow
+
+      1. Think first: Plan each step in your thinking block before acting.
+      2. Load skills: Before any domain-specific task or specialized-tool workflow, load the
+         relevant skill. Use the available skill names and descriptions to choose the best match,
+         and if the message names a skill explicitly, load it immediately.
+      3. Execute: Use execute_sql without a skill only for trivial one-off checks such as SELECT 1.
+      4. Retry: On tool error, consult the loaded skill instructions, fix, and retry. Do not give
+         up after one failure.
+      5. Time context: Reuse the most recent explicit time range from the conversation. Default to
+         the last 60 minutes only when none exists.
+      6. Output: Respond in markdown. Follow the loaded skill's output instructions exactly. Use
+         the user's language for explanatory prose, headings, and visible reasoning summaries
+         unless a response language policy below says otherwise.
+      """;
 
   /**
    * Sentinel {@code agent_revision_id} for runs that use the built-in default prompt (no DB agent
@@ -118,6 +136,8 @@ public class ChatRunService {
   private final CheckpointStore checkpointStore;
   private final PendingActionCheckpointCodec pendingCheckpointCodec;
   private final String repositoryRoot;
+  private final java.util.Set<String> ephemeralSessions =
+      java.util.concurrent.ConcurrentHashMap.newKeySet();
 
   public ChatRunService(
       AgentRunService agentRunService,
@@ -191,12 +211,13 @@ public class ChatRunService {
                       rc.messageId(),
                       rc.modelConfigId());
               return lifecycleRecorder.tap(ctx, events);
-            });
+            })
+        .onErrorResume(failure -> cleanupEphemeral(req, identity).then(Mono.error(failure)));
   }
 
   /** Generates an optional first-turn title with the selected server-side model and credential. */
   public Mono<String> generateTitle(AgentChatRequest req, Identity identity) {
-    if (!req.generateTitle() || req.userText().isBlank()) {
+    if (req.ephemeral() || !req.generateTitle() || req.userText().isBlank()) {
       return Mono.empty();
     }
     return Mono.fromCallable(
@@ -236,6 +257,25 @@ public class ChatRunService {
                     : titleGenerator.generate(request.adapter(), request.context(), req.userText()))
         .timeout(java.time.Duration.ofSeconds(8))
         .onErrorResume(ignored -> Mono.empty());
+  }
+
+  /** Removes the temporary FK anchor created for an ephemeral chat after its SSE stream closes. */
+  public Mono<Void> cleanupEphemeral(AgentChatRequest req, Identity identity) {
+    if (!req.ephemeral()) {
+      return Mono.empty();
+    }
+    return Mono.defer(
+        () -> {
+          if (!ephemeralSessions.remove(ephemeralSessionKey(req, identity))) {
+            return Mono.empty();
+          }
+          return Mono.fromRunnable(
+                  () ->
+                      sessionRepository.delete(
+                          req.sessionId(), identity.tenantId(), identity.userId()))
+              .subscribeOn(jdbcScheduler)
+              .then();
+        });
   }
 
   /** Restores a permission-paused run and returns its continuation event stream. */
@@ -378,22 +418,28 @@ public class ChatRunService {
       base = AgentRuntimeConfig.minimal(revision.systemPrompt());
     }
     try {
-      return AgentContextOptions.apply(
-          base, run.inputSnapshotJson() == null ? null : mapper.readTree(run.inputSnapshotJson()));
+      JsonNode snapshot =
+          run.inputSnapshotJson() == null ? null : mapper.readTree(run.inputSnapshotJson());
+      AgentRuntimeConfig configured = AgentContextOptions.apply(base, snapshot);
+      return applyDatabaseContext(configured, snapshot == null ? null : snapshot.path("context"));
     } catch (Exception ignored) {
       return base;
     }
   }
 
-  private String runtimeOptionsSnapshot(JsonNode context) {
-    if (context == null || !context.isObject()) {
-      return "{}";
-    }
+  private String runtimeOptionsSnapshot(JsonNode context, JsonNode databaseContext) {
     var safe = mapper.createObjectNode();
-    for (String key : java.util.List.of("responseLanguage", "reasoningLevel", "outputReasoning")) {
-      if (context.has(key)) {
-        safe.set(key, context.get(key));
+    if (context != null && context.isObject()) {
+      for (String key :
+          java.util.List.of("responseLanguage", "reasoningLevel", "outputReasoning")) {
+        if (context.has(key)) {
+          safe.set(key, context.get(key));
+        }
       }
+    }
+    JsonNode safeDatabaseContext = sanitizedDatabaseContext(databaseContext);
+    if (safeDatabaseContext.size() > 0) {
+      safe.set("context", safeDatabaseContext);
     }
     return safe.toString();
   }
@@ -469,11 +515,34 @@ public class ChatRunService {
     if (req.continuation()) {
       throw PlainTextException.badRequest("continuation runs are not supported yet");
     }
-    // Validate session ownership (tenant + user). Sessions are created via the A03 endpoint first.
+    // Normal chats require A04 first. Ephemeral one-off surfaces receive a temporary FK anchor that
+    // is removed after the response stream closes and never appears as durable history.
     ChatSession session =
         sessionRepository
             .findById(req.sessionId(), tenant, user)
-            .orElseThrow(() -> new NotFoundException("ChatSession", req.sessionId()));
+            .orElseGet(
+                () -> {
+                  if (!req.ephemeral()) {
+                    throw new NotFoundException("ChatSession", req.sessionId());
+                  }
+                  if (req.connectionId() == null || req.connectionId().isBlank()) {
+                    throw PlainTextException.badRequest("connectionId is required");
+                  }
+                  Instant createdAt = Instant.now();
+                  ChatSession temporary =
+                      sessionRepository.save(
+                          new ChatSession(
+                              req.sessionId(),
+                              tenant,
+                              user,
+                              req.connectionId(),
+                              null,
+                              0L,
+                              createdAt,
+                              createdAt));
+                  ephemeralSessions.add(ephemeralSessionKey(req, identity));
+                  return temporary;
+                });
     runRepository.findBySession(tenant, session.id()).stream()
         .filter(run -> !run.status().isTerminal())
         .findFirst()
@@ -553,7 +622,7 @@ public class ChatRunService {
             idempotencyKey,
             idempotencyKey,
             req.connectionId(),
-            runtimeOptionsSnapshot(req.agentContext()),
+            runtimeOptionsSnapshot(req.agentContext(), req.context()),
             null,
             null,
             null,
@@ -581,9 +650,10 @@ public class ChatRunService {
         new RunRequest(
             context,
             adapter,
-            AgentContextOptions.apply(agent.config(), req.agentContext()),
+            applyDatabaseContext(
+                AgentContextOptions.apply(agent.config(), req.agentContext()), req.context()),
             resolvedCapabilities.capabilities(),
-            loadHistory(req, tenant),
+            req.ephemeral() ? java.util.List.of() : loadHistory(req, tenant),
             enrichedUserText(req, tenant),
             currentAttachments);
     return new PreparedRun(runId, runRequest);
@@ -662,11 +732,21 @@ public class ChatRunService {
   }
 
   private java.util.List<ChatTurn> loadHistory(AgentChatRequest req, String tenant) {
-    return loadPersistedHistory(req.sessionId(), tenant, req.messageId());
+    JsonNode agentContext = req.agentContext();
+    boolean pruneValidateSql =
+        agentContext == null
+            || !agentContext.has("pruneValidateSql")
+            || agentContext.path("pruneValidateSql").asBoolean(true);
+    return loadPersistedHistory(req.sessionId(), tenant, req.messageId(), pruneValidateSql);
   }
 
   private java.util.List<ChatTurn> loadPersistedHistory(
       String sessionId, String tenant, String excludedMessageId) {
+    return loadPersistedHistory(sessionId, tenant, excludedMessageId, false);
+  }
+
+  private java.util.List<ChatTurn> loadPersistedHistory(
+      String sessionId, String tenant, String excludedMessageId, boolean pruneValidateSql) {
     MentionContextFormatter mentions = new MentionContextFormatter();
     java.util.List<ChatTurn> turns = new java.util.ArrayList<>();
     for (ChatMessage message : messageRepository.findBySession(sessionId, tenant)) {
@@ -683,7 +763,9 @@ public class ChatRunService {
       java.util.List<ChatAttachment> messageAttachments =
           "user".equals(message.role()) ? attachments(parts(message)) : java.util.List.of();
       java.util.List<ChatToolExchange> messageTools =
-          "assistant".equals(message.role()) ? toolExchanges(parts(message)) : java.util.List.of();
+          "assistant".equals(message.role())
+              ? toolExchanges(parts(message), pruneValidateSql)
+              : java.util.List.of();
       if (!text.isBlank() || !messageAttachments.isEmpty() || !messageTools.isEmpty()) {
         turns.add(new ChatTurn(message.role(), text, messageAttachments, messageTools));
       }
@@ -744,7 +826,7 @@ public class ChatRunService {
     }
   }
 
-  private java.util.List<ChatToolExchange> toolExchanges(JsonNode parts) {
+  private java.util.List<ChatToolExchange> toolExchanges(JsonNode parts, boolean pruneValidateSql) {
     if (parts == null || !parts.isArray()) {
       return java.util.List.of();
     }
@@ -756,6 +838,9 @@ public class ChatRunService {
       }
       String callId = part.path("toolCallId").asText("");
       String toolName = part.path("toolName").asText("");
+      if (pruneValidateSql && "validate_sql".equals(toolName)) {
+        continue;
+      }
       if (callId.isBlank() || toolName.isBlank() || !part.has("input")) {
         continue;
       }
@@ -776,6 +861,45 @@ public class ChatRunService {
               !"output-available".equals(state)));
     }
     return java.util.List.copyOf(exchanges);
+  }
+
+  private static String ephemeralSessionKey(AgentChatRequest req, Identity identity) {
+    return identity.tenantId() + '\u0000' + identity.userId() + '\u0000' + req.sessionId();
+  }
+
+  private AgentRuntimeConfig applyDatabaseContext(
+      AgentRuntimeConfig config, JsonNode databaseContext) {
+    JsonNode safe = sanitizedDatabaseContext(databaseContext);
+    if (safe.size() == 0) {
+      return config;
+    }
+    String facts =
+        "\n\n## Diagnosis Context\n"
+            + "Database context facts:\n"
+            + "- Cluster name: "
+            + safe.path("clusterName").asText("unknown")
+            + "\n- Server version: "
+            + safe.path("serverVersion").asText("unknown")
+            + "\n- ClickHouse user: "
+            + safe.path("clickHouseUser").asText("unknown")
+            + "\nUse these facts only when they materially change the answer. Do not infer missing values.";
+    return config.withRequestOptions(
+        config.systemPrompt() + facts, config.reasoningEffort(), config.outputReasoning());
+  }
+
+  private JsonNode sanitizedDatabaseContext(JsonNode databaseContext) {
+    var safe = mapper.createObjectNode();
+    if (databaseContext == null || !databaseContext.isObject()) {
+      return safe;
+    }
+    for (String key : java.util.List.of("clusterName", "serverVersion", "clickHouseUser")) {
+      String value =
+          databaseContext.path(key).asText("").replace('\r', ' ').replace('\n', ' ').trim();
+      if (!value.isBlank()) {
+        safe.put(key, value.substring(0, Math.min(value.length(), 255)));
+      }
+    }
+    return safe;
   }
 
   private java.util.List<ChatAttachment> attachments(JsonNode parts) {

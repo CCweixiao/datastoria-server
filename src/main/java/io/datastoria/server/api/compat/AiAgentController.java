@@ -95,11 +95,22 @@ public class AiAgentController {
               Mono<String> resolvedTitle = generatedTitle;
               return service.stream(req, identity)
                   .flatMap(
-                      events ->
-                          writeSse(
-                              exchange,
-                              replayService.encodeAndRecord(
-                                  identity.tenantId(), events, resolvedTitle, fallbackTitle)));
+                      events -> {
+                        Flux<String> frames =
+                            replayService.encodeAndRecord(
+                                identity.tenantId(), events, resolvedTitle, fallbackTitle);
+                        if (req.ephemeral()) {
+                          frames =
+                              frames
+                                  .concatWith(
+                                      service
+                                          .cleanupEphemeral(req, identity)
+                                          .thenMany(Flux.empty()))
+                                  .doOnCancel(
+                                      () -> service.cleanupEphemeral(req, identity).subscribe());
+                        }
+                        return writeSse(exchange, frames);
+                      });
             });
   }
 
@@ -178,7 +189,8 @@ public class AiAgentController {
         raw.path("continuation").asBoolean(false),
         raw.path("generateTitle").asBoolean(true),
         raw.path("ephemeral").asBoolean(false),
-        raw.get("agentContext"));
+        raw.get("agentContext"),
+        raw.get("context"));
   }
 
   private static String text(JsonNode raw, String field) {

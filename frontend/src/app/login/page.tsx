@@ -30,7 +30,11 @@ export default function LoginPage() {
             <Button
               className="w-full"
               key={provider.id}
-              onClick={() => beginSignIn(provider)}
+              onClick={() => {
+                const callbackUrl =
+                  new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
+                beginSignIn(provider, callbackUrl);
+              }}
             >
               Continue with {provider.name}
             </Button>
