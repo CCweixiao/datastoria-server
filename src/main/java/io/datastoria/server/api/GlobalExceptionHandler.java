@@ -3,16 +3,21 @@ package io.datastoria.server.api;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import io.datastoria.server.api.error.ClientSecretNotAllowedException;
+import io.datastoria.server.api.error.FeedbackTargetNotFoundException;
 import io.datastoria.server.api.error.NotFoundException;
+import io.datastoria.server.api.error.PlainTextException;
 import io.datastoria.server.api.error.ProviderOperationException;
 import io.datastoria.server.api.error.ResourceInUseException;
 import io.datastoria.server.api.error.RevisionConflictException;
+import io.datastoria.server.api.error.ShareNotFoundException;
+import io.datastoria.server.api.error.SharePermissionDeniedException;
 
 /**
  * Translates application exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail}
@@ -78,6 +83,59 @@ public class GlobalExceptionHandler {
                 "Client secret not allowed",
                 "API keys must be stored server-side. Remove the secret field from"
                     + " the request body."));
+  }
+
+  /**
+   * P3 compat exceptions that MUST be plain text to preserve Node wire compatibility
+   * ({@code Invalid limit}, {@code Invalid session share code}, {@code Not found}, etc.). See
+   * {@code docs/api/p3-openapi-extensions.yaml} {@code PlainTextError}.
+   */
+  @ExceptionHandler(PlainTextException.class)
+  public ResponseEntity<String> handlePlainText(PlainTextException ex) {
+    return ResponseEntity.status(ex.status())
+        .contentType(ex.contentType() != null ? ex.contentType() : MediaType.TEXT_PLAIN)
+        .body(ex.body());
+  }
+
+  /** P3 share-visitor attempting a write while {@code allow-write=false}; ADR-0001. */
+  @ExceptionHandler(SharePermissionDeniedException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleSharePermissionDenied(
+      SharePermissionDeniedException ex) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(
+            problems.forStatus(
+                403,
+                "SHARE_PERMISSION_DENIED",
+                "Share visitor may not mutate this session",
+                ex.getMessage() != null && !ex.getMessage().isBlank()
+                    ? ex.getMessage()
+                    : "Share codes are read-only by default; see ADR-0001."));
+  }
+
+  /** P3 revoke with no active share row; ADR-0001. */
+  @ExceptionHandler(ShareNotFoundException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleShareNotFound(
+      ShareNotFoundException ex) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(
+            problems.forStatus(
+                404,
+                "SHARE_NOT_FOUND",
+                "No active share for this session",
+                "The session has no active share to revoke."));
+  }
+
+  /** P3 feedback referencing a missing message; ADR-0003. */
+  @ExceptionHandler(FeedbackTargetNotFoundException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleFeedbackTargetNotFound(
+      FeedbackTargetNotFoundException ex) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(
+            problems.forStatus(
+                404,
+                "FEEDBACK_TARGET_NOT_FOUND",
+                "Referenced message does not exist",
+                "Feedback references a message that is not present in this session."));
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
