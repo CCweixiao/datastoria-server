@@ -136,6 +136,48 @@ public final class AiSdkStreamEncoder {
         frames.add(frame(partMarker("text-end", currentTextId)));
         currentTextId = null;
       }
+    } else if (event instanceof AgentRunEvent.ToolInputStarted e) {
+      ObjectNode chunk = mapper.createObjectNode();
+      chunk.put("type", "tool-input-start");
+      chunk.put("toolCallId", e.toolCallId());
+      chunk.put("toolName", e.toolName());
+      frames.add(frame(chunk));
+    } else if (event instanceof AgentRunEvent.ToolInputDelta e) {
+      ObjectNode chunk = mapper.createObjectNode();
+      chunk.put("type", "tool-input-delta");
+      chunk.put("toolCallId", e.toolCallId());
+      chunk.put("inputTextDelta", e.delta());
+      frames.add(frame(chunk));
+    } else if (event instanceof AgentRunEvent.ToolInputAvailable e) {
+      ObjectNode chunk = mapper.createObjectNode();
+      chunk.put("type", "tool-input-available");
+      chunk.put("toolCallId", e.toolCallId());
+      chunk.put("toolName", e.toolName());
+      chunk.set("input", parseJson(e.inputJson()));
+      frames.add(frame(chunk));
+    } else if (event instanceof AgentRunEvent.ToolOutputAvailable e) {
+      ObjectNode chunk = mapper.createObjectNode();
+      if (e.denied()) {
+        chunk.put("type", "tool-output-denied");
+        chunk.put("toolCallId", e.toolCallId());
+      } else if (e.error()) {
+        chunk.put("type", "tool-output-error");
+        chunk.put("toolCallId", e.toolCallId());
+        chunk.put("errorText", "Tool execution failed.");
+      } else {
+        chunk.put("type", "tool-output-available");
+        chunk.put("toolCallId", e.toolCallId());
+        chunk.set("output", parseJson(e.outputJson()));
+      }
+      frames.add(frame(chunk));
+    } else if (event instanceof AgentRunEvent.ToolApprovalRequired e) {
+      for (AgentRunEvent.ToolApproval approval : e.approvals()) {
+        ObjectNode chunk = mapper.createObjectNode();
+        chunk.put("type", "tool-approval-request");
+        chunk.put("approvalId", approval.actionId());
+        chunk.put("toolCallId", approval.toolCallId());
+        frames.add(frame(chunk));
+      }
     } else if (event instanceof AgentRunEvent.UsageReported e) {
       this.inputTokens += e.usage().inputTokens();
       this.outputTokens += e.usage().outputTokens();
@@ -213,6 +255,17 @@ public final class AiSdkStreamEncoder {
     node.put("id", id);
     node.put("delta", text);
     return node;
+  }
+
+  private com.fasterxml.jackson.databind.JsonNode parseJson(String value) {
+    if (value == null || value.isBlank()) {
+      return mapper.nullNode();
+    }
+    try {
+      return mapper.readTree(value);
+    } catch (JsonProcessingException ignored) {
+      return mapper.getNodeFactory().textNode(value);
+    }
   }
 
   /** Builds the AI SDK v6 {@code LanguageModelUsage}-shaped object (matches Node A01 output). */

@@ -14,6 +14,9 @@ public interface AgentPendingActionRepository {
 
   Optional<AgentPendingAction> find(String tenantId, String userId, String runId, String actionId);
 
+  Optional<AgentPendingAction> findByToolCall(
+      String tenantId, String userId, String runId, String toolCallId);
+
   List<AgentPendingAction> findPending(String tenantId, String userId, String runId);
 
   /**

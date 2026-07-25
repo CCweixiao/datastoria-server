@@ -64,8 +64,20 @@ public class AgentRunConfiguration {
   RunLifecycleRecorder runLifecycleRecorder(
       AgentRunRepository runRepository,
       io.datastoria.server.repository.ChatMessageRepository messageRepository,
+      io.datastoria.server.repository.AgentPendingActionRepository pendingActions,
+      CheckpointStore checkpoints,
+      PendingActionCheckpointCodec pendingCheckpointCodec,
+      com.fasterxml.jackson.databind.ObjectMapper mapper,
       TransactionTemplate transactions,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
-    return new RunLifecycleRecorder(runRepository, messageRepository, transactions, jdbcScheduler);
+    return new RunLifecycleRecorder(
+        runRepository,
+        messageRepository,
+        transactions,
+        jdbcScheduler,
+        mapper,
+        pendingActions,
+        checkpoints,
+        pendingCheckpointCodec);
   }
 }

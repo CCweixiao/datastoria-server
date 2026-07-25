@@ -10,11 +10,17 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 
+import io.datastoria.server.agent.domain.AgentPendingAction;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunStatus;
+import io.datastoria.server.agent.domain.CheckpointType;
+import io.datastoria.server.agent.domain.PendingActionCheckpoint;
+import io.datastoria.server.agent.domain.PendingActionStatus;
+import io.datastoria.server.agent.domain.PendingActionType;
 import io.datastoria.server.agent.domain.RunFailureCode;
 import io.datastoria.server.agent.domain.RunTransition;
 import io.datastoria.server.domain.ChatMessage;
+import io.datastoria.server.repository.AgentPendingActionRepository;
 import io.datastoria.server.repository.AgentRunRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
 
@@ -56,6 +62,9 @@ public final class RunLifecycleRecorder {
   private final TransactionOperations transactions;
   private final Scheduler jdbcScheduler;
   private final ObjectMapper mapper;
+  private final AgentPendingActionRepository pendingActions;
+  private final CheckpointStore checkpoints;
+  private final PendingActionCheckpointCodec pendingCheckpointCodec;
 
   public RunLifecycleRecorder(
       AgentRunRepository runRepository, ChatMessageRepository messageRepository) {
@@ -64,7 +73,10 @@ public final class RunLifecycleRecorder {
         messageRepository,
         TransactionOperations.withoutTransaction(),
         Schedulers.boundedElastic(),
-        new ObjectMapper());
+        new ObjectMapper(),
+        null,
+        null,
+        null);
   }
 
   public RunLifecycleRecorder(
@@ -76,7 +88,10 @@ public final class RunLifecycleRecorder {
         messageRepository,
         TransactionOperations.withoutTransaction(),
         jdbcScheduler,
-        new ObjectMapper());
+        new ObjectMapper(),
+        null,
+        null,
+        null);
   }
 
   public RunLifecycleRecorder(
@@ -84,7 +99,15 @@ public final class RunLifecycleRecorder {
       ChatMessageRepository messageRepository,
       TransactionOperations transactions,
       Scheduler jdbcScheduler) {
-    this(runRepository, messageRepository, transactions, jdbcScheduler, new ObjectMapper());
+    this(
+        runRepository,
+        messageRepository,
+        transactions,
+        jdbcScheduler,
+        new ObjectMapper(),
+        null,
+        null,
+        null);
   }
 
   public RunLifecycleRecorder(
@@ -93,11 +116,26 @@ public final class RunLifecycleRecorder {
       TransactionOperations transactions,
       Scheduler jdbcScheduler,
       ObjectMapper mapper) {
+    this(runRepository, messageRepository, transactions, jdbcScheduler, mapper, null, null, null);
+  }
+
+  public RunLifecycleRecorder(
+      AgentRunRepository runRepository,
+      ChatMessageRepository messageRepository,
+      TransactionOperations transactions,
+      Scheduler jdbcScheduler,
+      ObjectMapper mapper,
+      AgentPendingActionRepository pendingActions,
+      CheckpointStore checkpoints,
+      PendingActionCheckpointCodec pendingCheckpointCodec) {
     this.runRepository = runRepository;
     this.messageRepository = messageRepository;
     this.transactions = transactions;
     this.jdbcScheduler = jdbcScheduler;
     this.mapper = mapper;
+    this.pendingActions = pendingActions;
+    this.checkpoints = checkpoints;
+    this.pendingCheckpointCodec = pendingCheckpointCodec;
   }
 
   /** Returns {@code events} unchanged, scheduling terminal persistence off the calling thread. */
@@ -112,6 +150,8 @@ public final class RunLifecycleRecorder {
             usage[2] += u.usage().cachedTokens();
           } else if (e instanceof AgentRunEvent.TextDelta d) {
             text.append(d.delta());
+          } else if (e instanceof AgentRunEvent.ToolApprovalRequired approval) {
+            return dispatch(() -> persistApproval(ctx, approval)).thenReturn(e);
           } else if (e instanceof AgentRunEvent.RunCompleted) {
             String usageJson = usageJson(usage);
             String assistantText = text.toString();
@@ -129,6 +169,68 @@ public final class RunLifecycleRecorder {
           }
           return Mono.just(e);
         });
+  }
+
+  private void persistApproval(RunMessageContext ctx, AgentRunEvent.ToolApprovalRequired approval) {
+    if (pendingActions == null || checkpoints == null || pendingCheckpointCodec == null) {
+      throw new IllegalStateException("HITL persistence is not configured");
+    }
+    Instant now = Instant.now();
+    PendingActionCheckpoint checkpoint =
+        new PendingActionCheckpoint(
+            approval.replyId(),
+            approval.approvals().stream()
+                .map(
+                    item ->
+                        new PendingActionCheckpoint.PendingToolCall(
+                            item.actionId(), item.toolCallId(), item.toolName(), item.inputJson()))
+                .toList());
+    transactions.executeWithoutResult(
+        ignored -> {
+          runRepository.transition(
+              ctx.tenantId(),
+              ctx.runId(),
+              AgentRunStatus.WAITING_INPUT,
+              RunTransition.waitingForInput());
+          for (AgentRunEvent.ToolApproval item : approval.approvals()) {
+            pendingActions.create(
+                ctx.userId(),
+                new AgentPendingAction(
+                    item.actionId(),
+                    ctx.tenantId(),
+                    ctx.runId(),
+                    item.toolCallId(),
+                    PendingActionType.APPROVAL,
+                    approvalRequestJson(approval.replyId(), item),
+                    null,
+                    null,
+                    PendingActionStatus.PENDING,
+                    now.plus(java.time.Duration.ofMinutes(15)),
+                    null,
+                    null,
+                    0,
+                    now,
+                    now));
+          }
+          checkpoints.save(
+              ctx.tenantId(),
+              ctx.runId(),
+              approval.sequence(),
+              CheckpointType.PENDING_ACTION,
+              pendingCheckpointCodec.encode(checkpoint));
+        });
+  }
+
+  private String approvalRequestJson(String replyId, AgentRunEvent.ToolApproval approval) {
+    try {
+      var request = mapper.createObjectNode();
+      request.put("replyId", replyId);
+      request.put("toolName", approval.toolName());
+      request.set("input", mapper.readTree(approval.inputJson()));
+      return mapper.writeValueAsString(request);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to encode approval request", e);
+    }
   }
 
   private void persistCompletion(RunMessageContext ctx, String text, String usageJson) {

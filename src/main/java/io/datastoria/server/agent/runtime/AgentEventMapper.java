@@ -3,14 +3,29 @@ package io.datastoria.server.agent.runtime;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
+import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ThinkingBlockDeltaEvent;
+import io.agentscope.core.event.ToolCallDeltaEvent;
+import io.agentscope.core.event.ToolCallEndEvent;
+import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.event.ToolResultStartEvent;
+import io.agentscope.core.event.ToolResultTextDeltaEvent;
+import io.agentscope.core.message.ToolResultState;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatUsage;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
@@ -30,6 +45,10 @@ public final class AgentEventMapper {
   private final RunContext context;
   private final Clock clock;
   private final AtomicLong sequence = new AtomicLong();
+  private final ObjectMapper json =
+      new ObjectMapper().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+  private final Map<String, StringBuilder> toolInputs = new ConcurrentHashMap<>();
+  private final Map<String, StringBuilder> toolOutputs = new ConcurrentHashMap<>();
 
   public AgentEventMapper(RunContext context, Clock clock) {
     this.context = context;
@@ -67,11 +86,140 @@ public final class AgentEventMapper {
         return Optional.of(new AgentRunEvent.TextBlockEnded(runId, seq(), now()));
       case MODEL_CALL_END:
         return Optional.of(new AgentRunEvent.UsageReported(runId, seq(), now(), usageOf(event)));
+      case TOOL_CALL_START:
+        ToolCallStartEvent callStart = (ToolCallStartEvent) event;
+        toolInputs.put(callStart.getToolCallId(), new StringBuilder());
+        return Optional.of(
+            new AgentRunEvent.ToolInputStarted(
+                runId, seq(), now(), callStart.getToolCallId(), callStart.getToolCallName()));
+      case TOOL_CALL_DELTA:
+        ToolCallDeltaEvent callDelta = (ToolCallDeltaEvent) event;
+        toolInputs
+            .computeIfAbsent(callDelta.getToolCallId(), ignored -> new StringBuilder())
+            .append(callDelta.getDelta());
+        return Optional.of(
+            new AgentRunEvent.ToolInputDelta(
+                runId,
+                seq(),
+                now(),
+                callDelta.getToolCallId(),
+                callDelta.getToolCallName(),
+                callDelta.getDelta()));
+      case TOOL_CALL_END:
+        ToolCallEndEvent callEnd = (ToolCallEndEvent) event;
+        return Optional.of(
+            new AgentRunEvent.ToolInputAvailable(
+                runId,
+                seq(),
+                now(),
+                callEnd.getToolCallId(),
+                callEnd.getToolCallName(),
+                normalizeJson(
+                    toolInputs
+                        .getOrDefault(callEnd.getToolCallId(), new StringBuilder("{}"))
+                        .toString())));
+      case TOOL_RESULT_START:
+        ToolResultStartEvent resultStart = (ToolResultStartEvent) event;
+        toolOutputs.put(resultStart.getToolCallId(), new StringBuilder());
+        return Optional.of(
+            new AgentRunEvent.ToolOutputStarted(
+                runId, seq(), now(), resultStart.getToolCallId(), resultStart.getToolCallName()));
+      case TOOL_RESULT_TEXT_DELTA:
+        ToolResultTextDeltaEvent resultDelta = (ToolResultTextDeltaEvent) event;
+        toolOutputs
+            .computeIfAbsent(resultDelta.getToolCallId(), ignored -> new StringBuilder())
+            .append(resultDelta.getDelta());
+        return Optional.of(
+            new AgentRunEvent.ToolOutputDelta(
+                runId,
+                seq(),
+                now(),
+                resultDelta.getToolCallId(),
+                resultDelta.getToolCallName(),
+                resultDelta.getDelta()));
+      case TOOL_RESULT_END:
+        ToolResultEndEvent resultEnd = (ToolResultEndEvent) event;
+        ToolResultState state = resultEnd.getState();
+        return Optional.of(
+            new AgentRunEvent.ToolOutputAvailable(
+                runId,
+                seq(),
+                now(),
+                resultEnd.getToolCallId(),
+                resultEnd.getToolCallName(),
+                normalizeJson(
+                    toolOutputs
+                        .getOrDefault(resultEnd.getToolCallId(), new StringBuilder("null"))
+                        .toString()),
+                state == ToolResultState.ERROR || state == ToolResultState.INTERRUPTED,
+                state == ToolResultState.DENIED));
+      case REQUIRE_USER_CONFIRM:
+        RequireUserConfirmEvent confirm = (RequireUserConfirmEvent) event;
+        return Optional.of(
+            new AgentRunEvent.ToolApprovalRequired(
+                runId,
+                seq(),
+                now(),
+                confirm.getReplyId(),
+                confirm.getToolCalls().stream().map(this::approval).toList()));
       case AGENT_RESULT:
+        if (isPaused((AgentResultEvent) event)) {
+          return Optional.empty();
+        }
         return Optional.of(new AgentRunEvent.RunCompleted(runId, seq(), now()));
       default:
         // MODEL_CALL_START, AGENT_END, and unknown events carry nothing the wire needs.
         return Optional.empty();
+    }
+  }
+
+  private boolean isPaused(AgentResultEvent event) {
+    return switch (event.getResult().getGenerateReason()) {
+      case TOOL_SUSPENDED,
+          REASONING_STOP_REQUESTED,
+          ACTING_STOP_REQUESTED,
+          PERMISSION_ASKING,
+          MIDDLEWARE_STOP_REQUESTED -> true;
+      default -> false;
+    };
+  }
+
+  private AgentRunEvent.ToolApproval approval(ToolUseBlock call) {
+    return new AgentRunEvent.ToolApproval(
+        stableActionId(context.runId(), call.getId()),
+        call.getId(),
+        call.getName(),
+        writeJson(call.getInput()));
+  }
+
+  private String normalizeJson(String value) {
+    if (value == null || value.isBlank()) {
+      return "{}";
+    }
+    try {
+      return json.writeValueAsString(json.readTree(value));
+    } catch (Exception ignored) {
+      return writeJson(value);
+    }
+  }
+
+  private String writeJson(Object value) {
+    try {
+      return json.writeValueAsString(value);
+    } catch (Exception ignored) {
+      return "null";
+    }
+  }
+
+  private static String stableActionId(String runId, String toolCallId) {
+    try {
+      byte[] digest =
+          java.security.MessageDigest.getInstance("SHA-256")
+              .digest(
+                  (runId + "\n" + toolCallId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      return "act_" + java.util.HexFormat.of().formatHex(digest, 0, 12);
+    } catch (java.security.NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 unavailable", e);
     }
   }
 

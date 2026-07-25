@@ -6,9 +6,22 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
+import io.agentscope.core.event.ToolCallDeltaEvent;
+import io.agentscope.core.event.ToolCallEndEvent;
+import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.event.ToolResultStartEvent;
+import io.agentscope.core.event.ToolResultTextDeltaEvent;
+import io.agentscope.core.message.GenerateReason;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.ToolResultState;
+import io.agentscope.core.message.ToolUseBlock;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
 import io.datastoria.server.agent.testing.FakeModelAdapter;
@@ -104,6 +117,65 @@ class AgentEventMapperTest {
             "TextBlockEnded",
             "UsageReported",
             "RunCompleted");
+  }
+
+  @Test
+  void mapsToolLifecycleAndPermissionAskWithoutAgentScopeLeakage() {
+    AgentEventMapper mapper = new AgentEventMapper(ctx("run-tool"), FIXED_CLOCK);
+    List<AgentRunEvent> events =
+        List.of(
+                new ToolCallStartEvent("reply", "call-1", "execute_sql"),
+                new ToolCallDeltaEvent("reply", "call-1", "execute_sql", "{\"sql\":\"SELECT 1\"}"),
+                new ToolCallEndEvent("reply", "call-1", "execute_sql"),
+                new ToolResultStartEvent("reply", "call-1", "execute_sql"),
+                new ToolResultTextDeltaEvent(
+                    "reply", "call-1", "execute_sql", "{\"rows\":[{\"value\":1}]}"),
+                new ToolResultEndEvent("reply", "call-1", "execute_sql", ToolResultState.SUCCESS),
+                new RequireUserConfirmEvent(
+                    "reply",
+                    List.of(
+                        new ToolUseBlock(
+                            "call-2", "execute_sql", java.util.Map.of("sql", "SELECT 2")))))
+            .stream()
+            .map(mapper::toEvent)
+            .flatMap(Optional::stream)
+            .toList();
+
+    assertThat(events)
+        .extracting(event -> event.getClass().getSimpleName())
+        .containsExactly(
+            "ToolInputStarted",
+            "ToolInputDelta",
+            "ToolInputAvailable",
+            "ToolOutputStarted",
+            "ToolOutputDelta",
+            "ToolOutputAvailable",
+            "ToolApprovalRequired");
+    AgentRunEvent.ToolInputAvailable input = (AgentRunEvent.ToolInputAvailable) events.get(2);
+    assertThat(input.inputJson()).isEqualTo("{\"sql\":\"SELECT 1\"}");
+    AgentRunEvent.ToolOutputAvailable output = (AgentRunEvent.ToolOutputAvailable) events.get(5);
+    assertThat(output.outputJson()).isEqualTo("{\"rows\":[{\"value\":1}]}");
+    AgentRunEvent.ToolApproval approval =
+        ((AgentRunEvent.ToolApprovalRequired) events.get(6)).approvals().get(0);
+    assertThat(approval.actionId()).startsWith("act_").hasSize(28);
+    assertThat(approval.inputJson()).isEqualTo("{\"sql\":\"SELECT 2\"}");
+    assertThat(events)
+        .extracting(AgentRunEvent::sequence)
+        .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L);
+  }
+
+  @Test
+  void pausedAgentResultDoesNotCompleteRun() {
+    for (GenerateReason reason :
+        List.of(
+            GenerateReason.PERMISSION_ASKING,
+            GenerateReason.TOOL_SUSPENDED,
+            GenerateReason.MIDDLEWARE_STOP_REQUESTED)) {
+      AgentEventMapper mapper = new AgentEventMapper(ctx("run-paused"), FIXED_CLOCK);
+      Msg result = Msg.builder().textContent("paused").generateReason(reason).build();
+
+      assertThat(mapper.toEvent(new AgentResultEvent(result))).as(reason.name()).isEmpty();
+    }
   }
 
   private static String concatReasoning(List<AgentRunEvent> events) {

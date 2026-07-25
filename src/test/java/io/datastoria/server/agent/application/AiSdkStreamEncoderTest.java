@@ -205,6 +205,75 @@ class AiSdkStreamEncoderTest {
     assertThat(abortChunk.get("reason").asText()).isEqualTo("client_disconnect");
   }
 
+  @Test
+  void toolAndApprovalEventsUseAiSdkV6WireContract() {
+    List<String> frames =
+        encodeAll(
+            List.of(
+                started(),
+                new AgentRunEvent.ToolInputStarted("run_1", 2, NOW, "call-1", "execute_sql"),
+                new AgentRunEvent.ToolInputDelta(
+                    "run_1", 3, NOW, "call-1", "execute_sql", "{\"sql\":\"SELECT 1\"}"),
+                new AgentRunEvent.ToolInputAvailable(
+                    "run_1", 4, NOW, "call-1", "execute_sql", "{\"sql\":\"SELECT 1\"}"),
+                new AgentRunEvent.ToolOutputStarted("run_1", 5, NOW, "call-1", "execute_sql"),
+                new AgentRunEvent.ToolOutputDelta(
+                    "run_1", 6, NOW, "call-1", "execute_sql", "{\"rows\":[]}"),
+                new AgentRunEvent.ToolOutputAvailable(
+                    "run_1", 7, NOW, "call-1", "execute_sql", "{\"rows\":[]}", false, false),
+                new AgentRunEvent.ToolApprovalRequired(
+                    "run_1",
+                    8,
+                    NOW,
+                    "reply-1",
+                    List.of(
+                        new AgentRunEvent.ToolApproval(
+                            "act-1", "call-2", "execute_sql", "{\"sql\":\"SELECT 2\"}")))));
+
+    assertThat(types(frames))
+        .containsExactly(
+            "start",
+            "start-step",
+            "tool-input-start",
+            "tool-input-delta",
+            "tool-input-available",
+            "tool-output-available",
+            "tool-approval-request");
+    List<JsonNode> chunks = chunks(frames);
+    assertThat(
+            chunks.stream()
+                .filter(c -> "tool-input-available".equals(type(c)))
+                .findFirst()
+                .orElseThrow()
+                .path("input")
+                .path("sql")
+                .asText())
+        .isEqualTo("SELECT 1");
+    JsonNode approval =
+        chunks.stream()
+            .filter(c -> "tool-approval-request".equals(type(c)))
+            .findFirst()
+            .orElseThrow();
+    assertThat(approval.path("approvalId").asText()).isEqualTo("act-1");
+    assertThat(approval.path("toolCallId").asText()).isEqualTo("call-2");
+  }
+
+  @Test
+  void deniedAndFailedToolsNeverExposeRawOutput() {
+    List<JsonNode> chunks =
+        chunks(
+            encodeAll(
+                List.of(
+                    new AgentRunEvent.ToolOutputAvailable(
+                        "r", 1, NOW, "denied", "danger", "sk-secret", false, true),
+                    new AgentRunEvent.ToolOutputAvailable(
+                        "r", 2, NOW, "failed", "query", "password=secret", true, false))));
+    assertThat(chunks)
+        .extracting(AiSdkStreamEncoderTest::type)
+        .containsExactly("tool-output-denied", "tool-output-error");
+    assertThat(chunks.toString()).doesNotContain("sk-secret", "password=secret");
+  }
+
   // ---- JSON escaping + fragment boundaries ----
 
   @Test

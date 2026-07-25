@@ -50,6 +50,17 @@ public class JdbcAgentPendingActionRepository implements AgentPendingActionRepos
   @Override
   @Transactional
   public AgentPendingAction create(String userId, AgentPendingAction a) {
+    Optional<AgentPendingAction> existing =
+        findByToolCall(a.tenantId(), userId, a.runId(), a.toolCallId());
+    if (existing.isPresent()) {
+      AgentPendingAction row = existing.orElseThrow();
+      if (row.id().equals(a.id())
+          && row.actionType() == a.actionType()
+          && row.requestJson().equals(a.requestJson())) {
+        return row;
+      }
+      throw new PendingActionConflictException(row.id());
+    }
     Instant created = a.createdAt() != null ? a.createdAt() : Instant.now();
     Instant updated = a.updatedAt() != null ? a.updatedAt() : created;
     int inserted =
@@ -89,14 +100,26 @@ public class JdbcAgentPendingActionRepository implements AgentPendingActionRepos
   @Override
   public Optional<AgentPendingAction> find(
       String tenantId, String userId, String runId, String actionId) {
+    return findScoped(tenantId, userId, runId, "a.id=:value", actionId);
+  }
+
+  @Override
+  public Optional<AgentPendingAction> findByToolCall(
+      String tenantId, String userId, String runId, String toolCallId) {
+    return findScoped(tenantId, userId, runId, "a.tool_call_id=:value", toolCallId);
+  }
+
+  private Optional<AgentPendingAction> findScoped(
+      String tenantId, String userId, String runId, String predicate, String value) {
     return jdbc.sql(
             "SELECT a.* FROM ds_agent_pending_action a"
                 + " JOIN ds_agent_run r ON r.tenant_id=a.tenant_id AND r.id=a.run_id"
-                + " WHERE a.tenant_id=:tenant AND a.run_id=:run AND a.id=:action"
+                + " WHERE a.tenant_id=:tenant AND a.run_id=:run AND "
+                + predicate
                 + " AND r.user_id=:user")
         .param("tenant", tenantId)
         .param("run", runId)
-        .param("action", actionId)
+        .param("value", value)
         .param("user", userId)
         .query(MAPPER)
         .optional();

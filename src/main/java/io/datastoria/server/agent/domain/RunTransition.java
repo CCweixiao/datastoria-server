@@ -29,4 +29,8 @@ public record RunTransition(
   public static RunTransition cancelling(Instant finishedAt) {
     return new RunTransition(null, finishedAt, null, null, null);
   }
+
+  public static RunTransition waitingForInput() {
+    return new RunTransition(null, null, null, null, null);
+  }
 }

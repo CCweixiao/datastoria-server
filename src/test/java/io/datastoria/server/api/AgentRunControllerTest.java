@@ -15,12 +15,19 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import io.datastoria.server.TestDbHelper;
+import io.datastoria.server.agent.application.RunLifecycleRecorder;
+import io.datastoria.server.agent.application.RunMessageContext;
 import io.datastoria.server.agent.domain.AgentPendingAction;
+import io.datastoria.server.agent.domain.AgentRunEvent;
+import io.datastoria.server.agent.domain.CheckpointType;
 import io.datastoria.server.agent.domain.PendingActionStatus;
 import io.datastoria.server.agent.domain.PendingActionType;
 import io.datastoria.server.agent.domain.PersistedAgentFrame;
+import io.datastoria.server.repository.AgentCheckpointRepository;
 import io.datastoria.server.repository.AgentEventRepository;
 import io.datastoria.server.repository.AgentPendingActionRepository;
+
+import reactor.core.publisher.Flux;
 
 /** HTTP contract for P8 owner-scoped run, replay, resolution, and cancellation endpoints. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -37,6 +44,8 @@ class AgentRunControllerTest {
   @Autowired TestDbHelper db;
   @Autowired AgentPendingActionRepository actions;
   @Autowired AgentEventRepository events;
+  @Autowired AgentCheckpointRepository checkpoints;
+  @Autowired RunLifecycleRecorder lifecycleRecorder;
 
   @BeforeEach
   void setUp() {
@@ -137,6 +146,45 @@ class AgentRunControllerTest {
           .jsonPath("$.run.status")
           .isEqualTo("CANCELLED");
     }
+  }
+
+  @Test
+  void approvalBoundaryAtomicallyPersistsWaitingActionAndCheckpoint() {
+    jdbc.sql("UPDATE ds_agent_run SET status='running' WHERE id='run-1'").update();
+    AgentRunEvent.ToolApprovalRequired approval =
+        new AgentRunEvent.ToolApprovalRequired(
+            "run-1",
+            7,
+            NOW,
+            "reply-1",
+            java.util.List.of(
+                new AgentRunEvent.ToolApproval(
+                    "action-runtime", "call-runtime", "execute_sql", "{\"sql\":\"SELECT 1\"}")));
+
+    lifecycleRecorder
+        .tap(
+            new RunMessageContext(TENANT, "run-1", USER, "session-1", "message-1", "model"),
+            Flux.just(approval))
+        .blockLast();
+
+    client
+        .get()
+        .uri("/api/ai/runs/run-1")
+        .header("x-datastoria-user-email", USER)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.run.status")
+        .isEqualTo("WAITING_INPUT")
+        .jsonPath("$.pendingActions[0].id")
+        .isEqualTo("action-runtime")
+        .jsonPath("$.pendingActions[0].requestJson")
+        .value(value -> assertThat(value.toString()).contains("reply-1", "SELECT 1"));
+    assertThat(checkpoints.findBySequence(TENANT, "run-1", 7))
+        .get()
+        .extracting(row -> row.checkpointType())
+        .isEqualTo(CheckpointType.PENDING_ACTION);
   }
 
   private String respond(String body, String key) {

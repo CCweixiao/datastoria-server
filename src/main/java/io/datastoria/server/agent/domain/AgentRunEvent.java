@@ -26,6 +26,13 @@ public sealed interface AgentRunEvent
         AgentRunEvent.ReasoningBlockStarted,
         AgentRunEvent.ReasoningDelta,
         AgentRunEvent.ReasoningBlockEnded,
+        AgentRunEvent.ToolInputStarted,
+        AgentRunEvent.ToolInputDelta,
+        AgentRunEvent.ToolInputAvailable,
+        AgentRunEvent.ToolOutputStarted,
+        AgentRunEvent.ToolOutputDelta,
+        AgentRunEvent.ToolOutputAvailable,
+        AgentRunEvent.ToolApprovalRequired,
         AgentRunEvent.UsageReported,
         AgentRunEvent.RunCompleted,
         AgentRunEvent.RunFailed,
@@ -63,6 +70,68 @@ public sealed interface AgentRunEvent
 
   record ReasoningBlockEnded(String runId, long sequence, Instant occurredAt)
       implements AgentRunEvent {}
+
+  record ToolInputStarted(
+      String runId, long sequence, Instant occurredAt, String toolCallId, String toolName)
+      implements AgentRunEvent {}
+
+  record ToolInputDelta(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String toolCallId,
+      String toolName,
+      String delta)
+      implements AgentRunEvent {}
+
+  record ToolInputAvailable(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String toolCallId,
+      String toolName,
+      String inputJson)
+      implements AgentRunEvent {}
+
+  record ToolOutputStarted(
+      String runId, long sequence, Instant occurredAt, String toolCallId, String toolName)
+      implements AgentRunEvent {}
+
+  record ToolOutputDelta(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String toolCallId,
+      String toolName,
+      String delta)
+      implements AgentRunEvent {}
+
+  record ToolOutputAvailable(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String toolCallId,
+      String toolName,
+      String outputJson,
+      boolean error,
+      boolean denied)
+      implements AgentRunEvent {}
+
+  /** AgentScope permission ASK boundary. One event can contain a batch of gated calls. */
+  record ToolApprovalRequired(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String replyId,
+      java.util.List<ToolApproval> approvals)
+      implements AgentRunEvent {
+
+    public ToolApprovalRequired {
+      approvals = java.util.List.copyOf(approvals);
+    }
+  }
+
+  record ToolApproval(String actionId, String toolCallId, String toolName, String inputJson) {}
 
   /** Token usage for a completed model call (MODEL_CALL_END). */
   record UsageReported(String runId, long sequence, Instant occurredAt, TokenUsage usage)
