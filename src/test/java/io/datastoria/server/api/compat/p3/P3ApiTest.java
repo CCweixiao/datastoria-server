@@ -754,7 +754,11 @@ class P3ApiTest extends AbstractP3ApiTest {
                   { "type": "text", "text": "before" },
                   { "type": "future-unknown", "payload": { "nested": [1, 2, 3], "flag": true } },
                   { "type": "text", "text": "after" }
-                ]
+                ],
+                "metadata": {
+                  "futureField": { "nested": true },
+                  "usage": { "inputTokens": 12, "outputTokens": 8 }
+                }
               }
             ]
           }
@@ -786,6 +790,9 @@ class P3ApiTest extends AbstractP3ApiTest {
       assertThat(parts.get(1).get("type").asText()).isEqualTo("future-unknown");
       assertThat(parts.get(1).get("payload").get("nested").get(2).asInt()).isEqualTo(3);
       assertThat(parts.get(1).get("payload").get("flag").asBoolean()).isTrue();
+      JsonNode metadata = resp.get(0).get("metadata");
+      assertThat(metadata.get("futureField").get("nested").asBoolean()).isTrue();
+      assertThat(metadata.get("usage").get("inputTokens").asInt()).isEqualTo(12);
     }
   }
 

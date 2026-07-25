@@ -42,40 +42,57 @@ public class JdbcChatMessageRepository implements ChatMessageRepository {
     // SQLITE_CONSTRAINT error (Xerial does not map it to DataIntegrityViolationException).
     Optional<ChatMessage> existing = findById(m.id(), m.tenantId(), m.sessionId());
     if (existing.isEmpty()) {
-      jdbc.sql(
-              "INSERT INTO ds_chat_message"
-                  + " (id, tenant_id, session_id, user_id, role, parts_json, metadata_json,"
-                  + " sequence, created_at, updated_at)"
-                  + " VALUES (:id, :tenantId, :sessionId, :userId, :role, :partsJson,"
-                  + " :metadataJson, :sequence, :now, :now)")
-          .param("id", m.id())
-          .param("tenantId", m.tenantId())
-          .param("sessionId", m.sessionId())
-          .param("userId", m.userId())
-          .param("role", m.role())
-          .param("partsJson", m.partsJson())
-          .param("metadataJson", m.metadataJson())
-          .param("sequence", m.sequence())
-          .param("now", SqlTimestamps.toParamMillis(now))
-          .update();
+      try {
+        insert(m, now);
+      } catch (RuntimeException insertFailure) {
+        // Concurrent retries with the same client message id are idempotent. Do not absorb a
+        // sequence collision from a different message id.
+        if (findById(m.id(), m.tenantId(), m.sessionId()).isEmpty()) {
+          throw insertFailure;
+        }
+        update(m, now);
+      }
     } else {
-      jdbc.sql(
-              "UPDATE ds_chat_message SET role = :role, parts_json = :partsJson,"
-                  + " metadata_json = :metadataJson, sequence = :sequence,"
-                  + " updated_at = :now"
-                  + " WHERE tenant_id = :tenantId AND session_id = :sessionId AND id = :id")
-          .param("role", m.role())
-          .param("partsJson", m.partsJson())
-          .param("metadataJson", m.metadataJson())
-          .param("sequence", m.sequence())
-          .param("now", SqlTimestamps.toParamMillis(now))
-          .param("tenantId", m.tenantId())
-          .param("sessionId", m.sessionId())
-          .param("id", m.id())
-          .update();
+      update(m, now);
     }
     return findById(m.id(), m.tenantId(), m.sessionId())
         .orElseThrow(() -> new NotFoundException("ChatMessage", m.id()));
+  }
+
+  private void insert(ChatMessage m, Instant now) {
+    jdbc.sql(
+            "INSERT INTO ds_chat_message"
+                + " (id, tenant_id, session_id, user_id, role, parts_json, metadata_json,"
+                + " sequence, created_at, updated_at)"
+                + " VALUES (:id, :tenantId, :sessionId, :userId, :role, :partsJson,"
+                + " :metadataJson, :sequence, :now, :now)")
+        .param("id", m.id())
+        .param("tenantId", m.tenantId())
+        .param("sessionId", m.sessionId())
+        .param("userId", m.userId())
+        .param("role", m.role())
+        .param("partsJson", m.partsJson())
+        .param("metadataJson", m.metadataJson())
+        .param("sequence", m.sequence())
+        .param("now", SqlTimestamps.toParamMillis(now))
+        .update();
+  }
+
+  private void update(ChatMessage m, Instant now) {
+    jdbc.sql(
+            "UPDATE ds_chat_message SET role = :role, parts_json = :partsJson,"
+                + " metadata_json = :metadataJson, sequence = :sequence,"
+                + " updated_at = :now"
+                + " WHERE tenant_id = :tenantId AND session_id = :sessionId AND id = :id")
+        .param("role", m.role())
+        .param("partsJson", m.partsJson())
+        .param("metadataJson", m.metadataJson())
+        .param("sequence", m.sequence())
+        .param("now", SqlTimestamps.toParamMillis(now))
+        .param("tenantId", m.tenantId())
+        .param("sessionId", m.sessionId())
+        .param("id", m.id())
+        .update();
   }
 
   @Override

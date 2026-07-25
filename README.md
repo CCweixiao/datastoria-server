@@ -3,7 +3,11 @@
 DataStoria 的 Spring Boot 后端。该项目将分阶段接管现有 DataStoria Node.js
 后端的 REST API、会话持久化、工具执行、Skill 加载和 Agent 运行时。
 
-当前状态：P0/P1 工程与契约基线。
+当前状态：P0–P3 已落地。仓库从 P3 起采用单仓库结构：
+
+- Spring Boot 后端位于仓库根目录。
+- Next.js 前端位于 `frontend/`。
+- 前端第三方 Git submodule 位于 `frontend/external/`，由根目录 `.gitmodules` 管理。
 
 ## 技术基线
 
@@ -46,6 +50,26 @@ curl http://localhost:8080/actuator/health
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw test
+```
+
+前端开发与验证：
+
+```bash
+git submodule update --init --recursive
+cd frontend
+npm install
+npm run dev
+```
+
+前端的格式化、类型检查、测试和生产构建仍从 `frontend/` 执行：
+
+```bash
+cd frontend
+npm run format
+npm run typecheck
+npm run lint
+npm run test
+npm run build
 ```
 
 ## 文档

@@ -10,6 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    name: frontend (node22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: npm ci --force
+
+      - name: Validate frontend
+        run: |
+          npm run format:check
+          npm run lint
+          npm run typecheck
+          npm run test -- --run
+          npm run build
+
   build:
     name: build (jdk17)
     runs-on: ubuntu-latest

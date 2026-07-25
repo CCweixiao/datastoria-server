@@ -159,7 +159,23 @@ public class SessionService {
             0L,
             null,
             null);
-    ChatSession saved = sessionRepo.save(toSave);
+    ChatSession saved;
+    try {
+      saved = sessionRepo.save(toSave);
+    } catch (RuntimeException insertFailure) {
+      // Two retries may race after both observed the id as absent. Treat the database unique
+      // constraint as the serialization point, then apply the same idempotency checks as the
+      // normal reuse path.
+      Optional<ChatSession> raced =
+          sessionRepo.findById(sessionId, identity.tenantId(), identity.userId());
+      if (raced.isEmpty()) {
+        throw insertFailure;
+      }
+      saved = raced.get();
+      if (!Objects.equals(saved.connectionId(), req.connectionId().trim())) {
+        throw PlainTextException.connectionIdMismatch();
+      }
+    }
     if (req.messages() != null && !req.messages().isEmpty()) {
       upsertInitialMessages(saved, req.messages(), identity);
     }
@@ -329,7 +345,7 @@ public class SessionService {
               identity.userId(),
               m.role(),
               writeJson(m.parts()),
-              null,
+              m.metadata() == null ? null : writeJson(m.metadata()),
               seq++,
               null,
               null);

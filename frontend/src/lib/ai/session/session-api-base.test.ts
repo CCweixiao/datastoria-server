@@ -1,10 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
   getSessionApiBase,
   isJavaSessionBackend,
   sessionIdentityHeaders,
 } from "@/lib/ai/session/session-api-base";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const NODE_ENV_BACKUP = { ...process.env };
 
@@ -55,12 +54,14 @@ describe("session-api-base", () => {
       expect(isJavaSessionBackend()).toBe(true);
     });
 
-    it("falls back to empty string when NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL is unset", () => {
+    it("fails closed when NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL is unset", () => {
       withEnv({
         NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND: "java",
         NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL: undefined,
       });
-      expect(getSessionApiBase()).toBe("");
+      expect(() => getSessionApiBase()).toThrow(
+        "NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL is required"
+      );
     });
 
     it("emits the x-datastoria-user-email header when dev email is set", () => {

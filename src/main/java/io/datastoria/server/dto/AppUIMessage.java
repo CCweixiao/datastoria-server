@@ -12,4 +12,4 @@ import com.fasterxml.jackson.databind.JsonNode;
  * AppUIMessage}/{@code MessagePart} schemas documents this.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record AppUIMessage(String id, String role, JsonNode parts) {}
+public record AppUIMessage(String id, String role, JsonNode parts, JsonNode metadata) {}

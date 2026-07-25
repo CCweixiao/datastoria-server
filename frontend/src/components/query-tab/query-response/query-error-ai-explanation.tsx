@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
 import type { AutoExplainNegativeReasonCode } from "@/lib/ai/session/feedback-events";
-import { BasePath } from "@/lib/base-path";
+import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
 import { useChat, type Chat } from "@ai-sdk/react";
 import {
   AlertCircle,
@@ -161,11 +161,11 @@ const AutoExplainFeedback = memo(function AutoExplainFeedback({
     setSavedMessage(null);
 
     try {
-      const response = await fetch(BasePath.getURL("/api/ai/chat/feedback/auto-explain"), {
+      const response = await fetch(`${getSessionApiBase()}/api/ai/chat/feedback/auto-explain`, {
         method: "POST",
-        headers: {
+        headers: sessionIdentityHeaders({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           source: "auto_explain_error",
           sessionId,

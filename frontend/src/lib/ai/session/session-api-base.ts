@@ -35,6 +35,11 @@ function backend(): SessionBackend {
 export function getSessionApiBase(): string {
   if (backend() === "java") {
     const base = (process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "").replace(/\/+$/, "");
+    if (!base) {
+      throw new Error(
+        "NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL is required when the session backend is java"
+      );
+    }
     return base;
   }
   // Node mode: BasePath.getBasePath() returns "" when there's no base path configured, so the

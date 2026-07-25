@@ -1,9 +1,9 @@
 # P3 实施报告 — 会话、消息、反馈与分享
 
 > Stage: P3 (sessions / messages / feedback / share)
-> Java branch: `codex/phase-p3` (off `master` @ `9046eec`, 7 commits)
-> Frontend branch: `codex/phase-p3-frontend` (off `master` @ `22b7ae4`, 1 commit)
-> Status: Ready for review. **Not pushed, no PR, not merged to master.**
+> Reviewed integration branch: `codex/phase-p3-review`
+> Source branches: `codex/phase-p3` and `codex/phase-p3-frontend`
+> Status: Review fixes complete; frontend has been imported into this repository under `frontend/`.
 
 ## 1. 范围
 
@@ -18,6 +18,7 @@ P3 把 chat 产品的会话数据从 Node.js Runtime 迁移到独立 Spring Boot
 - A10 auto-explain feedback（upsert，store-enabled 开关）
 - 旧数据 JSONL 导入与校验工具
 - 前端 endpoint 切换网关
+- 单仓库目录整合：Spring Boot 保持在根目录，Next.js 位于 `frontend/`
 
 非目标（已在 PRD/PDC 明确）：
 
@@ -57,8 +58,8 @@ P3 把 chat 产品的会话数据从 Node.js Runtime 迁移到独立 Spring Boot
 - 软删除不用：sessions/messages/feedback 硬删，与 Node 一致；share 行保留审计，撤销只
   把 `revoked_at` 填上、靠 `active_key` 生成列翻转。
 
-A03 列表按 `(updated_at DESC, id DESC)` keyset 分页，cursor 是
-`yyyy-MM-dd HH:mm:ss.SSS|<session_id>` 的 base64。`SqlTimestamps.toParamMillis` 把
+A03 列表按 `(updated_at DESC, id DESC)` keyset 分页，cursor 是不透明使用的
+`yyyy-MM-dd HH:mm:ss.SSS|<session_id>` 字符串（由客户端 URL encode）。`SqlTimestamps.toParamMillis` 把
 `updated_at` 截断到毫秒，避免 SQLite TEXT 字典序把 cursor 自身行再次返回。
 
 ### 3.2 访问控制
@@ -136,10 +137,24 @@ HTTP 401 plain text `Authentication required`。这让 `P3UnauthenticatedTest` �
 - `sessionIdentityHeaders()`：Java 模式注入 `x-datastoria-user-email` dev header。
 - `isJavaSessionBackend()`：便捷开关查询。
 
-`RemoteSessionRepository` 与 `chat-panel.tsx` 的 share 调用换成 `${getSessionApiBase()}/...`
-+ `sessionFetch()` 包装。Java 与 Node 共享同样的 wire 契约，所以无需 per-method
+`RemoteSessionRepository`、`chat-panel.tsx` 的 share 调用及 auto-explain feedback 调用
+均换成 `${getSessionApiBase()}/...`，并在 Java 模式注入开发身份 header。Java 与 Node
+共享同样的 wire 契约，所以无需 per-method
 gateway（这是与 P2 configuration gateway 的核心差异）。`NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND`
-默认 `node`，回退即重新构建并部署。
+默认 `node`，回退即重新构建并部署；Java 模式缺失 base URL 时 fail closed，避免请求
+意外落回 Node origin。
+
+### 3.10 Review 修复与单仓库迁移
+
+- 修复 A10 前端未经过 session backend gateway 的问题；Java 开关现覆盖 A03–A10。
+- `AppUIMessage.metadata` 与未知 metadata 字段现可写入并无损回放。
+- session/message 幂等写入增加并发重试冲突处理，不把不同 message 的 sequence 冲突
+  误判为幂等。
+- 前端完整代码树迁入 `frontend/`；根 `.gitmodules` 管理
+  `frontend/external/*` 四个第三方 submodule。
+- 根 README 增加单仓库目录、初始化、开发和验证命令。
+- 根 GitHub Actions 增加 `frontend (node22)` 门禁；原前端仓库内嵌 workflow 已移除，
+  避免迁移后实际不会被 GitHub 识别却造成仍在运行的错觉。
 
 ## 4. 测试矩阵
 
@@ -174,6 +189,12 @@ Tests: 419 passed
 
 P3 新增 10 个测试（`session-api-base.test.ts` 8 + `remote-session-repository.test.ts` 2）。
 TypeScript typecheck 与 ESLint 均通过。
+
+Review 后再次执行全量前端验证：80 test files / 419 tests 全部通过；A10 网关修复由
+现有 feedback 交互测试与 session base 测试共同覆盖。
+
+干净 `npm ci --force` 后生产构建通过。依赖安装仍报告上游依赖树中的已知 audit 项，
+本次不使用 `npm audit fix --force` 做破坏性大版本升级，留待独立依赖治理任务。
 
 ## 5. 与 Node 基线的偏离
 
@@ -399,5 +420,5 @@ src/components/chat/view/chat-panel.tsx (修改)
 
 ---
 
-> 该报告完成时 `codex/phase-p3` 与 `codex/phase-p3-frontend` 两个分支均未 push、未开
-> PR、未合并 master，等待 review。
+> Review 完成后，后端与前端统一位于 `datastoria-server`。原
+> `datastoria-p3-frontend` worktree 仅保留为迁移来源，不再作为后续开发位置。
