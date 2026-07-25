@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1–P4.6（均已通过 review）**
+> 本次交付：**P4.1–P4.6（已通过 review）+ P4.7（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.6 review 已通过；P4.7–P4.8 未开始。
+> 状态：P4.1–P4.6 review 已通过；**P4.7 已实现，待 review**；P4.8 未开始。
 
 ---
 
@@ -957,3 +957,125 @@ review 发现并修复 4 个边界问题：
 
 验证：JDK 17 执行 `./mvnw -B -ntp spotless:apply clean verify`，272 tests 全通过；本机无 Docker，
 `SchemaParityTest` 仍为 0 tests，由 CI `mysql-contract` 覆盖。**P4.6 review 通过，可开始 P4.7。**
+
+---
+
+# P4.7 — 前端 Node/Java Chat Gateway（本次交付，待 review）
+
+## P4.7-0. 范围
+
+在前端 `POST /api/ai/agent` 路由加 `NEXT_PUBLIC_DATASTORIA_CHAT_BACKEND=node|java` 开关（默认 `node`）。
+`node` 模式行为/响应字节**完全不变**；`java` 模式把请求**原样代理**到 Java `POST /api/ai/agent` 并流式回传
+AI SDK UI Message Stream。**不接真实 provider、不做 run resume/事件重放（P4.8）。**
+
+## P4.7-1. 设计
+
+```text
+POST /api/ai/agent (frontend/src/app/api/ai/agent/route.ts)
+  if (isJavaChatBackend()) return proxyChatToJava(req);   // 顶部短路，node 逻辑一字不改
+  // ...既有 Node streamText 逻辑...
+```
+
+- `frontend/src/lib/ai/chat/chat-backend.ts`：开关 + Java base URL 解析（镜像 P3 `session-api-base.ts`）。
+  `NEXT_PUBLIC_DATASTORIA_CHAT_BACKEND==="java"` 选 java；Java URL 取自 `NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL`
+  （与 session 后端共用），未配置时 fail-fast。
+- `frontend/src/lib/ai/chat/java-chat-proxy.ts`：`proxyChatToJava(req)` 代理。
+- `/api/ai/chat/v2` 复用 A01 的 `POST`，短路随之生效。
+
+## P4.7-2. 关键不变量
+
+1. **node 模式零改动**：短路在 `try` 之前；既有 `streamText`/`createUIMessageStreamResponse` 字节不变。
+2. **客户端凭据不发往 Java**：`stripClientSecrets` 递归删除 `apiKey/api_key/password/token/accessToken/
+   refreshToken/authorization/secret/clientSecret`（含嵌套 `model.apiKey`/`connection.password`）再转发。
+   Java 端 (P4.6) 也会拒绝，gateway 是双保险。
+3. **身份转发**：`getAuthenticatedUserEmail(req)`（`proxy.ts` 中间件从 next-auth session 注入到请求头）→ 作为
+   `x-datastoria-user-email` 转发。**不**用客户端可控的公开 env 伪造身份。
+4. **稳定 Idempotency-Key**：优先透传客户端 `Idempotency-Key` 头；否则由 `sessionId + message.id`（客户端
+   `uuidv7`，跨重试稳定）派生 `ds-<djb2hex>`；再否则 `sessionId+text`。同一请求（含网络重试）复用同一键。
+5. **SSE 原样流式**：上游 `Response.body` 经一个 `ReadableStream` 包装逐 chunk `enqueue` 转发（**不缓冲、不解析、
+   不重新编码**）；透传 `content-type`/`cache-control`/`connection`/`x-vercel-ai-ui-message-stream`/
+   `x-accel-buffering` 头与状态码。Java 非 2xx → 透传状态 + 兼容错误体（不合成内部异常）。
+6. **取消传播**：`AbortController` + `ReadableStream.cancel()` —— 浏览器断开（downstream cancel）→ `abort()` 上游
+   fetch → Java 后端取消 run、停 provider token。`signal` 传入 fetch。
+7. **未修改前端 chat 客户端**：`DefaultChatTransport` 仍打 `/api/ai/agent`；java 模式下网关透明代理，AI SDK 消费
+   Java SSE（P4.6 已验证 `data: {json}\n\n` + `[DONE]`）。
+
+## P4.7-3. 测试命令与结果
+
+```
+cd frontend
+npm ci                              # 1306 包
+npx vitest run src/lib/ai/chat/     # P4.7 专项
+npx vitest run                      # 全量
+npx tsc -p tsconfig.typecheck.json --noEmit   # typecheck
+npx eslint src/lib/ai/chat/ src/app/api/ai/agent/route.ts
+npx prettier --check "src/lib/ai/chat/*.ts" src/app/api/ai/agent/route.ts
+```
+
+- P4.7 专项：`chat-backend.test.ts`(4) + `java-chat-proxy.test.ts`(9) = **13/13 通过**。
+- 前端全量：**82 files / 432 tests 全通过**。
+- typecheck / eslint / prettier：**clean**（修复了一个 TS `Transformer.cancel` 类型缺失 → 改用 `ReadableStream`
+  包装，及一个 unused eslint-disable）。
+- Java 回归：`./mvnw test -Dtest=AiAgentControllerTest` → **17/17 通过**（P4.6 未受影响，P4.7 不改 Java）。
+
+P4.7 测试覆盖（对齐需求 9）：
+
+| 测试 | 不变量 |
+| --- | --- |
+| chat-backend | 默认 node；仅 `===\"java\"` 选 java；Java URL 去尾斜杠；未配置 fail-fast |
+| proxy forwards endpoint+identity+idempotency | 转发到 `${JAVA_BASE}/api/ai/agent`，带 `x-datastoria-user-email` + `idempotency-key` |
+| proxy strips client credentials | `model.apiKey`/`connection.password`/`accessToken` 不进转发体 |
+| resolveIdempotencyKey stable | 同请求同键、不同 message.id 不同键；客户端头优先透传 |
+| proxy streams SSE verbatim + headers | 状态 200 + 5 头 + body 逐字节相等 |
+| proxy passes through non-2xx | 409 状态 + body 透传，不合成内部异常 |
+| proxy aborts upstream on disconnect | `reader.cancel()` → `signal.aborted===true` |
+| proxy 502 when URL unset | 未配置返回 502，不 fetch |
+| stripClientSecrets | 嵌套凭据键删除、安全字段保留 |
+
+## P4.7-4. 安全检查
+
+- **客户端凭据**：`apiKey/password/token/authorization/secret` 递归剥离，绝不发往 Java（测试断言 `sk-LEAK`/`pw-LEAK`/
+  `tok-LEAK` 不在转发体）。
+- **身份**：服务端从请求头解析（中间件已剥离客户端伪造的 `x-datastoria-user-email`），不以公开 env 信任客户端身份。
+- **错误透传**：Java 非 2xx 状态+body 透传，gateway 不合成/不放大后端内部异常（P4.6 已脱敏）。
+- 未改 Java、未改前端 chat 客户端、未改协议 fixture（route/fixture 只读）。
+
+## P4.7-5. 回滚
+
+- P4.7 纯前端：新增 `frontend/src/lib/ai/chat/{chat-backend,java-chat-proxy}.ts` + 2 测试 + `route.ts` 顶部 3 行短路。
+  无 Java 改动、无 DDL、无协议变更。
+- 回滚 = 删除 `lib/ai/chat/` + 撤销 `route.ts` 短路与 import。默认 `node` 模式下行为与 P4.6 完全一致。
+- 开关默认 `node`：即便合并，前端仍走 Node A01，需显式 `NEXT_PUBLIC_DATASTORIA_CHAT_BACKEND=java` 才切 Java。
+
+## P4.7-6. 已知风险（不阻断 P4.8）
+
+1. **未做真实端到端**：`DefaultChatTransport` 消费 Java SSE 已由 P4.6 的字节契约（`data: {json}\n\n`+`[DONE]`）+ P4.7
+   逐字节透传测试覆盖；真实浏览器 ↔ Java 的 Playwright 留 P4.8。
+2. **`message.id` 稳定性依赖客户端**：AI SDK `useChat` 跨重试复用 user-message id（`newUniqueSessionId`）；若未来客户端
+   改为每次重试生成新 id，幂等键会变（此时应改由客户端显式传 `Idempotency-Key`）。
+3. **gateway 逐 chunk 转发**：经 JS `ReadableStream`（非零拷贝 pipe），SSE 帧小，性能可接受；高吞吐场景可换
+   `pipeThrough` + `AbortController`（受 TS `Transformer.cancel` 类型限制，当前用 ReadableStream 包装规避）。
+4. **`Connection: keep-alive`**：透传上游值；实际是否下发取决于部署的反向代理。
+5. **title / assistant 消息持久化**：仍由 Java 侧负责（P4.6 未做 title/消息落库），gateway 不参与。
+
+## P4.7-7. 修改文件
+
+```
+frontend/src/app/api/ai/agent/route.ts                         (顶部 java 短路 + import)
+frontend/src/lib/ai/chat/chat-backend.ts                       (新增：开关 + Java URL)
+frontend/src/lib/ai/chat/java-chat-proxy.ts                    (新增：代理 + 凭据剥离 + 稳定幂等键 + SSE 流式 + 取消传播)
+frontend/src/lib/ai/chat/chat-backend.test.ts                  (新增)
+frontend/src/lib/ai/chat/java-chat-proxy.test.ts               (新增)
+docs/delivery/p4-implementation-report.md                      (追加 P4.7)
+```
+
+## P4.7-8. 下一阶段（P4.8）计划
+
+- fake model 端到端验证：`CHAT_BACKEND=java` + `SESSION_BACKEND=java`，`DefaultChatTransport` 消费 Java SSE 全流程
+  （纯文本/reasoning/usage/error/cancel）。
+- 可选真实 provider smoke（显式环境变量开关，不进常规 CI）。
+- run resume / 事件重放（`Last-Event-ID`/`ds_agent_event`）+ assistant 消息落 `ds_chat_message` + title 注入。
+- Node↔Java 字节级 diff（contract runner 抓真实字节）。
+
+**停在 P4.7 review，不自动开始 P4.8。**
+

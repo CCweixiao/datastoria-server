@@ -6,6 +6,8 @@ import {
   type SessionTitleGenerationResponse,
 } from "@/lib/ai/agent/session-title-generator";
 import type { AgentContext, AppUIMessage, MessageMetadata } from "@/lib/ai/ai-types";
+import { isJavaChatBackend } from "@/lib/ai/chat/chat-backend";
+import { proxyChatToJava } from "@/lib/ai/chat/java-chat-proxy";
 import { CommandManager } from "@/lib/ai/commands/command-manager";
 import {
   LanguageModelProviderFactory,
@@ -247,6 +249,13 @@ function hasClickHouseClusterContext(context: ServerDatabaseContext): boolean {
 }
 
 export async function POST(req: Request) {
+  // P4.7 gateway: when the chat backend is "java", proxy the request to the Java A01 endpoint and
+  // stream its AI SDK UI Message Stream back verbatim. Short-circuit before any Node-local work
+  // (auth resolution, body parsing, streamText) so node mode stays byte-for-byte unchanged. This
+  // also covers /api/ai/chat/v2, which re-exports this POST handler.
+  if (isJavaChatBackend()) {
+    return proxyChatToJava(req);
+  }
   try {
     const userEmail = getAuthenticatedUserEmail(req);
 
