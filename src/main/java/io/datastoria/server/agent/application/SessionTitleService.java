@@ -3,8 +3,8 @@ package io.datastoria.server.agent.application;
 import org.springframework.stereotype.Service;
 
 /**
- * Independent title boundary for A01. P4 uses a deterministic provisional title; a later provider
- * implementation can replace this bean without coupling title failure or latency to the agent run.
+ * Deterministic fallback title boundary for A01. The selected server-side model generates the final
+ * title; this fallback keeps title failure or timeout independent from the primary answer.
  */
 @Service
 public class SessionTitleService {

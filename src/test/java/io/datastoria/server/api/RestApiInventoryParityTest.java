@@ -67,6 +67,10 @@ class RestApiInventoryParityTest {
     paths.forEach(
         (path, rawItem) -> {
           if (path.startsWith("/api/auth/")) {
+            operations.add(new Operation("GET", "/api/auth/providers"));
+            operations.add(new Operation("GET", "/api/auth/session"));
+            operations.add(new Operation("GET", "/api/auth/signin/{}"));
+            operations.add(new Operation("POST", "/api/auth/signout"));
             return;
           }
           Map<String, Object> item = (Map<String, Object>) rawItem;

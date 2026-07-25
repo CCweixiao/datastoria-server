@@ -86,13 +86,20 @@ public class AiAgentController {
                 return writeSse(
                     exchange, replayService.replay(identity, req.clientRequestId(), after));
               }
+              String fallbackTitle = provisionalTitle(req);
+              Mono<String> generatedTitle = service.generateTitle(req, identity);
+              if (generatedTitle == null) {
+                generatedTitle =
+                    Mono.empty(); // Mockito/default compatibility for controller tests.
+              }
+              Mono<String> resolvedTitle = generatedTitle;
               return service.stream(req, identity)
                   .flatMap(
                       events ->
                           writeSse(
                               exchange,
                               replayService.encodeAndRecord(
-                                  identity.tenantId(), events, provisionalTitle(req))));
+                                  identity.tenantId(), events, resolvedTitle, fallbackTitle)));
             });
   }
 
@@ -120,10 +127,9 @@ public class AiAgentController {
 
   /**
    * Builds a provisional session title from the first words of the user message (mirrors Node A01's
-   * {@code buildProvisionalTitle}). Synchronous and cannot hang, so it needs no timeout; a real
-   * LLM-generated title (separate model call with its own timeout) is a later concern. Derived only
-   * from the user's own text — no prompt fragment beyond the first 8 words, no credential, no
-   * provider error reaches it.
+   * {@code buildProvisionalTitle}). This synchronous fallback cannot hang; the independent
+   * server-side model title has its own timeout and replaces it on the finish frame when available.
+   * Derived only from the user's own text — no credential or provider error reaches it.
    */
   private String provisionalTitle(AgentChatRequest req) {
     try {

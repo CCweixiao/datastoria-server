@@ -10,6 +10,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -30,11 +38,14 @@ import {
   HelpCircle,
   History,
   LayoutDashboard,
+  LogOut,
   ScrollText,
   Settings,
   Sparkles,
   Terminal,
 } from "lucide-react";
+import { loadAuthSession, signOut, type AuthSession } from "@/lib/auth-client";
+import { UserProfileImage } from "@/components/user-profile-image";
 import React, { useCallback, useEffect, useState } from "react";
 import { DashboardList } from "./dashboard-tab/dashboard-list";
 import { showSettingsDialog } from "./settings/settings-dialog";
@@ -292,11 +303,26 @@ export function AppSidebar() {
   const { isConnectionAvailable } = useConnection();
   const { open: openChatPanel, setActiveSidebarTab, setDisplayMode } = useChatPanel();
   const [activeTabType, setActiveTabType] = useState<TabType | null>(null);
+  const [authUser, setAuthUser] = useState<NonNullable<AuthSession["user"]>>();
 
   useEffect(() => {
     return TabManager.onActiveTabChange((event) => {
       setActiveTabType(event.detail.tabInfo?.type ?? null);
     });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    loadAuthSession()
+      .then((session) => {
+        if (active) setAuthUser(session.user);
+      })
+      .catch(() => {
+        // AuthGate owns authentication failures; the sidebar simply omits account UI.
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -365,9 +391,47 @@ export function AppSidebar() {
             <GitHubButton />
           </SidebarMenuItem>
           <HelpSidebarMenuItem />
+          {authUser ? (
+            <SidebarMenuItem>
+              <UserNavButton user={authUser} />
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function UserNavButton({ user }: { user: NonNullable<AuthSession["user"]> }) {
+  const { isMobile } = useSidebar();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <SidebarMenuButton tooltip="Account">
+          <UserProfileImage user={user} className="h-5 w-5" />
+          <span>Account</span>
+        </SidebarMenuButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-56" align="end" side={isMobile ? "top" : "right"}>
+        <DropdownMenuLabel className="p-0 font-normal">
+          <div className="flex items-center gap-2 px-2 py-1.5 text-left text-sm">
+            <UserProfileImage user={user} className="h-8 w-8" />
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold">{user.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            </div>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={() => void signOut("/login")}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

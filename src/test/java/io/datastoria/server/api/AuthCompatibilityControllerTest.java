@@ -29,6 +29,7 @@ class AuthCompatibilityControllerTest {
     assertThat(response.getHeaders().getLocation().toString())
         .isEqualTo("/oauth2/authorization/github");
     assertThat(controller.signIn("google").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(controller.signOut().getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
   }
 
   @Test

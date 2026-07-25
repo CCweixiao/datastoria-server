@@ -14,6 +14,8 @@ const {
   switchConnectionMock,
   showConnectionEditDialogMock,
   savedConnectionsMock,
+  loadAuthSessionMock,
+  signOutMock,
 } = vi.hoisted(() => ({
   openMock: vi.fn(),
   setDisplayModeMock: vi.fn(),
@@ -21,6 +23,13 @@ const {
   switchConnectionMock: vi.fn(),
   showConnectionEditDialogMock: vi.fn(),
   savedConnectionsMock: vi.fn((): unknown[] => []),
+  loadAuthSessionMock: vi.fn(),
+  signOutMock: vi.fn(),
+}));
+
+vi.mock("@/lib/auth-client", () => ({
+  loadAuthSession: loadAuthSessionMock,
+  signOut: signOutMock,
 }));
 
 const testGlobal = globalThis as typeof globalThis & {
@@ -151,9 +160,31 @@ describe("AppSidebar", () => {
     showConnectionEditDialogMock.mockReset();
     savedConnectionsMock.mockReset();
     savedConnectionsMock.mockReturnValue([]);
+    loadAuthSessionMock.mockReset();
+    loadAuthSessionMock.mockResolvedValue({});
+    signOutMock.mockReset();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+  });
+
+  it("shows the authenticated account and signs out through the Java API wrapper", async () => {
+    loadAuthSessionMock.mockResolvedValue({
+      user: { id: "user-1", name: "Example User", email: "user@example.com" },
+    });
+    await act(async () => {
+      root.render(<AppSidebar />);
+    });
+
+    expect(container.textContent).toContain("Example User");
+    const logout = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Log out")
+    );
+    expect(logout).toBeDefined();
+    await act(async () => {
+      logout?.click();
+    });
+    expect(signOutMock).toHaveBeenCalledWith("/login");
   });
 
   afterEach(() => {

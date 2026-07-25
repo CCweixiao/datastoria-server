@@ -37,15 +37,32 @@ public class AgentEventReplayService {
   }
 
   public Flux<String> encodeAndRecord(String tenantId, Flux<AgentRunEvent> events, String title) {
+    return encodeAndRecord(tenantId, events, Mono.justOrEmpty(title), title);
+  }
+
+  public Flux<String> encodeAndRecord(
+      String tenantId,
+      Flux<AgentRunEvent> events,
+      Mono<String> generatedTitle,
+      String fallbackTitle) {
     return Flux.defer(
         () -> {
-          AiSdkStreamEncoder encoder = new AiSdkStreamEncoder().withTitle(title);
+          AiSdkStreamEncoder encoder = new AiSdkStreamEncoder().withTitle(fallbackTitle);
           AtomicLong sequence = new AtomicLong(-1L);
           AtomicReference<String> runId = new AtomicReference<>();
           Flux<String> frames =
               events.concatMap(
                   event -> {
                     runId.compareAndSet(null, event.runId());
+                    if (event instanceof AgentRunEvent.RunCompleted) {
+                      return generatedTitle
+                          .defaultIfEmpty(fallbackTitle == null ? "" : fallbackTitle)
+                          .flatMapIterable(
+                              title -> {
+                                encoder.withTitle(title.isBlank() ? fallbackTitle : title);
+                                return encoder.encode(event);
+                              });
+                    }
                     return Flux.fromIterable(encoder.encode(event));
                   });
           return frames

@@ -1234,3 +1234,30 @@ Chat Completions。它需要独立的 Java AgentScope Responses adapter 后才�
   ClickHouse client 执行入口。
 
 P4.8 的 Codex、图片、多轮工具历史和 request-scoped 模型选项已完成；仍不自动开始 P5。
+
+## P4.8-7. A28 与真实标题兼容收口（2026-07-26）
+
+最终差异审计继续修复两项用户可见回退：
+
+1. A28 不再从 REST inventory 中整体排除。自动化清单明确验证 Spring 的
+   `GET /api/auth/providers`、`GET /api/auth/session`、`GET /api/auth/signin/{provider}` 与
+   `POST /api/auth/signout`。生产环境 signout 由 Spring Security filter 失效 WebSession，
+   非生产 profile 提供 204 compatibility fallback。前端恢复账户头像、用户信息与退出菜单，
+   仅调用 Java auth REST wrapper，不重新引入 NextAuth。
+2. 会话标题不再永远停留在前八词 provisional title。主回答成功后，Java 使用已解析的服务端
+   model adapter/credential 发起独立 AgentScope 标题调用，限制输入 300 字符、输出 64 字符并
+   设置 8 秒超时；成功标题写入 finish metadata，失败或超时继续使用 deterministic fallback，
+   不影响主回答与事件重放。
+
+静态边界复核：
+
+- 原仓库 `src/app/api` 有 24 个 route 文件；当前前端为 **0**，冻结 A01–A29 由 Spring
+  controller/Security handler 承担。
+- `frontend/package*.json` 与生产源码未发现 AI SDK/provider SDK/ClickHouse client 执行依赖，
+  未发现 `streamText`、`generateText`、`HarnessAgent`、browser storage 等服务端执行入口。
+- 前端所有 SQL、schema、monitoring 查询仍通过 `Connection.query` 包装
+  `/api/connections/{id}/query`，由 Spring 解析加密连接并访问 ClickHouse。
+
+最终回归：Java 17 `spotless:check test` **344 tests / 0 failure / 0 error**；前端
+TypeScript、Vitest **57 files / 297 tests**、`next build --webpack` 全部通过。构建路由仅包含
+页面，不包含 `/api/*`。

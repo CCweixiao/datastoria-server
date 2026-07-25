@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -87,6 +88,15 @@ public class AuthCompatibilityController {
     putIfPresent(user, "image", image);
     return Mono.just(
         Map.of("user", user, "expires", Instant.now().plusSeconds(7 * 24 * 60 * 60).toString()));
+  }
+
+  /**
+   * Development/non-prod fallback. In the prod profile Spring Security's logout filter intercepts
+   * this same POST first and invalidates the authenticated WebSession.
+   */
+  @PostMapping("/signout")
+  public ResponseEntity<Void> signOut() {
+    return ResponseEntity.noContent().build();
   }
 
   private static String value(Map<String, Object> attributes, String... keys) {

@@ -30,6 +30,7 @@ import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
 import io.datastoria.server.agent.runtime.HumanInteractionAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
+import io.datastoria.server.agent.runtime.ModelTitleGenerator;
 import io.datastoria.server.agent.runtime.QuestionResumeRequest;
 import io.datastoria.server.agent.runtime.RepositoryAgentTools;
 import io.datastoria.server.agent.runtime.SqlWorkflowAgentTools;
@@ -110,6 +111,7 @@ public class ChatRunService {
   private final ClickHouseConnectionService clickHouseConnectionService;
   private final RcaTemplateCatalog rcaTemplateCatalog;
   private final ModelAdapterProvider modelAdapterProvider;
+  private final ModelTitleGenerator titleGenerator;
   private final RunLifecycleRecorder lifecycleRecorder;
   private final Scheduler jdbcScheduler;
   private final ObjectMapper mapper;
@@ -135,6 +137,7 @@ public class ChatRunService {
       ClickHouseConnectionService clickHouseConnectionService,
       RcaTemplateCatalog rcaTemplateCatalog,
       ModelAdapterProvider modelAdapterProvider,
+      ModelTitleGenerator titleGenerator,
       RunLifecycleRecorder lifecycleRecorder,
       CheckpointStore checkpointStore,
       PendingActionCheckpointCodec pendingCheckpointCodec,
@@ -158,6 +161,7 @@ public class ChatRunService {
     this.clickHouseConnectionService = clickHouseConnectionService;
     this.rcaTemplateCatalog = rcaTemplateCatalog;
     this.modelAdapterProvider = modelAdapterProvider;
+    this.titleGenerator = titleGenerator;
     this.lifecycleRecorder = lifecycleRecorder;
     this.checkpointStore = checkpointStore;
     this.pendingCheckpointCodec = pendingCheckpointCodec;
@@ -188,6 +192,50 @@ public class ChatRunService {
                       rc.modelConfigId());
               return lifecycleRecorder.tap(ctx, events);
             });
+  }
+
+  /** Generates an optional first-turn title with the selected server-side model and credential. */
+  public Mono<String> generateTitle(AgentChatRequest req, Identity identity) {
+    if (!req.generateTitle() || req.userText().isBlank()) {
+      return Mono.empty();
+    }
+    return Mono.fromCallable(
+            () -> {
+              java.util.List<ChatMessage> existing =
+                  messageRepository.findBySession(req.sessionId(), identity.tenantId());
+              long userMessages =
+                  existing.stream()
+                      .filter(message -> "user".equals(message.role()))
+                      .filter(message -> !Objects.equals(message.id(), req.messageId()))
+                      .count();
+              boolean hasAssistant =
+                  existing.stream().anyMatch(message -> "assistant".equals(message.role()));
+              if (userMessages > 0 || hasAssistant) {
+                return null;
+              }
+              Model model = resolveModel(req, identity.tenantId());
+              ModelAdapter adapter = modelAdapterProvider.adapterFor(model, identity);
+              RunContext titleContext =
+                  new RunContext(
+                      "title-" + Ulid.next(),
+                      identity.tenantId(),
+                      identity.userId(),
+                      req.sessionId(),
+                      req.messageId() == null ? Ulid.next() : req.messageId(),
+                      req.clientRequestId(),
+                      BUILTIN_DEFAULT_REVISION,
+                      model.id(),
+                      Instant.now());
+              return new TitleRequest(adapter, titleContext);
+            })
+        .subscribeOn(jdbcScheduler)
+        .flatMap(
+            request ->
+                request == null
+                    ? Mono.empty()
+                    : titleGenerator.generate(request.adapter(), request.context(), req.userText()))
+        .timeout(java.time.Duration.ofSeconds(8))
+        .onErrorResume(ignored -> Mono.empty());
   }
 
   /** Restores a permission-paused run and returns its continuation event stream. */
@@ -816,6 +864,8 @@ public class ChatRunService {
       RunRequest runRequest, ApprovalResumeRequest approval, QuestionResumeRequest question) {}
 
   private record ResolvedAgent(AgentRuntimeConfig config, String agentRevisionId) {}
+
+  private record TitleRequest(ModelAdapter adapter, RunContext context) {}
 
   private record ResolvedCapabilities(
       AgentRunCapabilities capabilities, java.util.List<AgentRunSkillPin> skillPins) {}
