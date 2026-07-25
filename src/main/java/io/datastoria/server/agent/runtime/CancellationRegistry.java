@@ -1,11 +1,12 @@
 package io.datastoria.server.agent.runtime;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.datastoria.server.agent.domain.RunContext;
+import org.reactivestreams.Subscription;
 
-import reactor.core.Disposable;
+import io.datastoria.server.agent.domain.RunContext;
 
 /**
  * Tracks active runs so a server-initiated cancel (or the {@code POST /runs/{id}:cancel} endpoint
@@ -29,25 +30,42 @@ public final class CancellationRegistry {
 
   private record Registration(
       RunnableAgent agent,
-      AtomicReference<Disposable> subscription,
+      AtomicReference<Subscription> subscription,
+      AtomicBoolean cancelled,
       String tenantId,
       String userId) {}
 
-  /** Registers a run as active; the subscription is bound later via {@link #bindSubscription}. */
-  public void register(RunContext context, RunnableAgent agent) {
-    runs.put(
-        context.runId(),
-        new Registration(agent, new AtomicReference<>(), context.tenantId(), context.userId()));
+  /**
+   * Atomically registers a run as active.
+   *
+   * @return false when the same run id is already active; the existing registration is untouched.
+   */
+  public boolean register(RunContext context, RunnableAgent agent) {
+    Registration registration =
+        new Registration(
+            agent,
+            new AtomicReference<>(),
+            new AtomicBoolean(),
+            context.tenantId(),
+            context.userId());
+    return runs.putIfAbsent(context.runId(), registration) == null;
   }
 
   /**
    * Binds the live subscription for a run, enabling reliable dispose-based cancellation. Called by
    * the subscriber (P4.6 controller on subscribe; tests directly).
    */
-  public void bindSubscription(String runId, Disposable subscription) {
+  public void bindSubscription(String runId, RunnableAgent agent, Subscription subscription) {
     Registration registration = runs.get(runId);
-    if (registration != null) {
+    if (registration != null && registration.agent() == agent) {
       registration.subscription().set(subscription);
+      // Covers cancel arriving after register but before Reactor invokes doOnSubscribe.
+      if (registration.cancelled().get()) {
+        subscription.cancel();
+      }
+    } else {
+      // A stale/duplicate run must never be allowed to continue without registry ownership.
+      subscription.cancel();
     }
   }
 
@@ -70,16 +88,17 @@ public final class CancellationRegistry {
         || !registration.userId().equals(requesterUserId)) {
       return false;
     }
-    Disposable subscription = registration.subscription().get();
-    if (subscription != null && !subscription.isDisposed()) {
-      subscription.dispose();
+    registration.cancelled().set(true);
+    Subscription subscription = registration.subscription().get();
+    if (subscription != null) {
+      subscription.cancel();
     }
     registration.agent().interrupt();
     return true;
   }
 
   /** Removes a run from the active set (called on terminal complete/error/cancel). */
-  public void unregister(String runId) {
-    runs.remove(runId);
+  public void unregister(String runId, RunnableAgent agent) {
+    runs.computeIfPresent(runId, (ignored, current) -> current.agent() == agent ? null : current);
   }
 }

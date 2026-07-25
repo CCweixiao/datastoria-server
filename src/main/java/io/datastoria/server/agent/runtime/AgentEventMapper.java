@@ -86,6 +86,11 @@ public final class AgentEventMapper {
         context.runId(), seq(), now(), code.name(), code.safeMessage());
   }
 
+  /** Builds the terminal cancellation event for the independent run-lifecycle observer. */
+  public AgentRunEvent.RunCancelled cancelled() {
+    return new AgentRunEvent.RunCancelled(context.runId(), seq(), now());
+  }
+
   private long seq() {
     return sequence.incrementAndGet();
   }

@@ -46,6 +46,11 @@ final class HarnessRunnableAgent implements RunnableAgent {
   }
 
   @Override
+  public AgentRunEvent.RunCancelled cancelledEvent() {
+    return mapper.cancelled();
+  }
+
+  @Override
   public void interrupt() {
     agent.interrupt();
   }

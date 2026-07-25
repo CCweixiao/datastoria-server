@@ -6,11 +6,11 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
+import org.reactivestreams.Subscription;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
 
-import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 /**
@@ -33,6 +33,11 @@ class CancellationRegistryTest {
       }
 
       @Override
+      public AgentRunEvent.RunCancelled cancelledEvent() {
+        return new AgentRunEvent.RunCancelled("run", 1, Instant.EPOCH);
+      }
+
+      @Override
       public void interrupt() {
         interrupted.set(true);
       }
@@ -42,25 +47,38 @@ class CancellationRegistryTest {
     };
   }
 
-  private static Disposable neverSubscription() {
-    return Flux.<AgentRunEvent>never().subscribe();
+  private static final class TestSubscription implements Subscription {
+    private final AtomicBoolean cancelled = new AtomicBoolean();
+
+    @Override
+    public void request(long count) {}
+
+    @Override
+    public void cancel() {
+      cancelled.set(true);
+    }
+
+    boolean isCancelled() {
+      return cancelled.get();
+    }
   }
 
   @Test
   void ownerCancelDisposesSubscriptionAndInterruptsAgent() {
     CancellationRegistry registry = new CancellationRegistry();
     AtomicBoolean interrupted = new AtomicBoolean();
-    registry.register(ctx("run-1", "t1", "u1"), fakeAgent(interrupted));
-    Disposable subscription = neverSubscription();
-    registry.bindSubscription("run-1", subscription);
+    TestSubscription subscription = new TestSubscription();
+    RunnableAgent agent = fakeAgent(interrupted);
+    registry.register(ctx("run-1", "t1", "u1"), agent);
+    registry.bindSubscription("run-1", agent, subscription);
 
-    assertThat(subscription.isDisposed()).isFalse();
+    assertThat(subscription.isCancelled()).isFalse();
     assertThat(registry.isActive("run-1")).isTrue();
 
     boolean result = registry.cancel("run-1", "t1", "u1");
 
     assertThat(result).isTrue();
-    assertThat(subscription.isDisposed())
+    assertThat(subscription.isCancelled())
         .as("subscription disposed (stops provider tokens)")
         .isTrue();
     assertThat(interrupted).as("agent interrupted (cooperative cleanup)").isTrue();
@@ -70,14 +88,15 @@ class CancellationRegistryTest {
   void wrongTenantCannotCancel() {
     CancellationRegistry registry = new CancellationRegistry();
     AtomicBoolean interrupted = new AtomicBoolean();
-    registry.register(ctx("run-1", "t1", "u1"), fakeAgent(interrupted));
-    Disposable subscription = neverSubscription();
-    registry.bindSubscription("run-1", subscription);
+    RunnableAgent agent = fakeAgent(interrupted);
+    registry.register(ctx("run-1", "t1", "u1"), agent);
+    TestSubscription subscription = new TestSubscription();
+    registry.bindSubscription("run-1", agent, subscription);
 
     boolean result = registry.cancel("run-1", "t-other", "u1");
 
     assertThat(result).isFalse();
-    assertThat(subscription.isDisposed()).isFalse();
+    assertThat(subscription.isCancelled()).isFalse();
     assertThat(interrupted).isFalse();
     assertThat(registry.isActive("run-1")).isTrue();
   }
@@ -86,12 +105,13 @@ class CancellationRegistryTest {
   void wrongUserCannotCancel() {
     CancellationRegistry registry = new CancellationRegistry();
     AtomicBoolean interrupted = new AtomicBoolean();
-    registry.register(ctx("run-1", "t1", "u1"), fakeAgent(interrupted));
-    Disposable subscription = neverSubscription();
-    registry.bindSubscription("run-1", subscription);
+    RunnableAgent agent = fakeAgent(interrupted);
+    registry.register(ctx("run-1", "t1", "u1"), agent);
+    TestSubscription subscription = new TestSubscription();
+    registry.bindSubscription("run-1", agent, subscription);
 
     assertThat(registry.cancel("run-1", "t1", "u-other")).isFalse();
-    assertThat(subscription.isDisposed()).isFalse();
+    assertThat(subscription.isCancelled()).isFalse();
     assertThat(interrupted).isFalse();
   }
 
@@ -115,11 +135,41 @@ class CancellationRegistryTest {
   }
 
   @Test
+  void subscriptionBoundAfterCancelIsCancelledImmediately() {
+    CancellationRegistry registry = new CancellationRegistry();
+    RunnableAgent agent = fakeAgent(new AtomicBoolean());
+    registry.register(ctx("run-1", "t1", "u1"), agent);
+    assertThat(registry.cancel("run-1", "t1", "u1")).isTrue();
+
+    TestSubscription lateSubscription = new TestSubscription();
+    registry.bindSubscription("run-1", agent, lateSubscription);
+
+    assertThat(lateSubscription.isCancelled()).isTrue();
+  }
+
+  @Test
+  void duplicateRunIdIsRejectedWithoutReplacingExistingRegistration() {
+    CancellationRegistry registry = new CancellationRegistry();
+    AtomicBoolean firstInterrupted = new AtomicBoolean();
+    AtomicBoolean duplicateInterrupted = new AtomicBoolean();
+    RunnableAgent first = fakeAgent(firstInterrupted);
+    RunnableAgent duplicate = fakeAgent(duplicateInterrupted);
+
+    assertThat(registry.register(ctx("run-1", "t1", "u1"), first)).isTrue();
+    assertThat(registry.register(ctx("run-1", "t1", "u1"), duplicate)).isFalse();
+    assertThat(registry.cancel("run-1", "t1", "u1")).isTrue();
+
+    assertThat(firstInterrupted).isTrue();
+    assertThat(duplicateInterrupted).isFalse();
+  }
+
+  @Test
   void unregisterRemovesRun() {
     CancellationRegistry registry = new CancellationRegistry();
-    registry.register(ctx("run-1", "t1", "u1"), fakeAgent(new AtomicBoolean()));
+    RunnableAgent agent = fakeAgent(new AtomicBoolean());
+    registry.register(ctx("run-1", "t1", "u1"), agent);
     assertThat(registry.isActive("run-1")).isTrue();
-    registry.unregister("run-1");
+    registry.unregister("run-1", agent);
     assertThat(registry.isActive("run-1")).isFalse();
   }
 }

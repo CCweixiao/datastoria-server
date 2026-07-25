@@ -18,6 +18,12 @@ public interface RunnableAgent extends AutoCloseable {
   /** The mapped event stream for this run. Errors are consumed into {@code RunFailed}. */
   Flux<AgentRunEvent> streamEvents();
 
+  /**
+   * Creates the cancellation terminal event for lifecycle persistence. It is delivered out of band
+   * because a cancelled reactive subscriber cannot receive another onNext signal.
+   */
+  AgentRunEvent.RunCancelled cancelledEvent();
+
   /** Cooperative, step-boundary cancel signal (does not abort an in-flight single-step call). */
   void interrupt();
 

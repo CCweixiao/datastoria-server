@@ -4,7 +4,7 @@
 > 本次交付：**P4.1（已通过 review）+ P4.2（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1 review 已通过；**P4.2 已实现，待 review**；P4.3–P4.8 未开始。
+> 状态：P4.1、P4.2 review 已通过；可开始 P4.3，P4.3–P4.8 未开始。
 
 ---
 
@@ -121,7 +121,7 @@ src/test/java/io/datastoria/server/agent/spike/AgentScopeSpikeTest.java (新增)
 
 ---
 
-# P4.2 — 内部 Agent 抽象层（本次交付，待 review）
+# P4.2 — 内部 Agent 抽象层（已通过 review）
 
 ## P4.2-0. 范围
 
@@ -135,7 +135,7 @@ controller / repository / 内部 event model **不依赖任何 `io.agentscope.*`
 - `AgentEventMapper`（AgentScope 事件 → 内部事件）
 - `CancellationRegistry`（取消传播 + 租户隔离）
 - `RunContext` / `AgentRunService` 骨架（`start` / `cancel`）
-- 对应 fake-model 单元测试（15 个）
+- 对应 fake-model 单元测试（20 个）
 
 **明确非目标（未实现，留给后续阶段）**：Run/Checkpoint DDL + repository（P4.3/4）、AI SDK
 encoder（P4.5）、A01 Java chat API（P4.6）、前端 gateway（P4.7）、端到端验证（P4.8）。**不涉及
@@ -166,7 +166,7 @@ domain: AgentRunEvent(sealed, 11 变体) / RunContext / TokenUsage / RunFailureC
 | AgentEventMapper | `runtime/AgentEventMapper.java`（ADR-0004 §3.2 映射，sequence 仅计已发射事件） | ✅ |
 | CancellationRegistry | `runtime/CancellationRegistry.java`（dispose + interrupt，owner 校验） | ✅ |
 | RunContext / AgentRunService 骨架 | `application/{RunRequest,AgentRunService}.java` | ✅ |
-| fake-model 单元测试 | 4 个测试类，15 测试 | ✅ |
+| fake-model 单元测试 | 4 个测试类，20 测试 | ✅ |
 
 ## P4.2-3. 关键设计决策
 
@@ -178,18 +178,21 @@ domain: AgentRunEvent(sealed, 11 变体) / RunContext / TokenUsage / RunFailureC
    Flux.just(mapper.failure(error)))` 把任何流错误映射为 `RunFailed`（固定 `safeMessage`，永不透传
    raw）。订阅者只见 `onNext(RunFailed)` + `onComplete`，永不 `onError`；不安装全局
    `Hooks.onErrorDropped`。
-4. **取消（ADR-0004 §3.3）**：客户端断开 / 服务端 cancel = **dispose 订阅**（可靠，停 provider
-   token，向上游传播）+ **`agent.interrupt()`**（协作、步边界）。`CancellationRegistry` 按 `runId`
-   注册订阅与 agent；`cancel(runId, tenant, user)` **仅当 (tenant,userId) 匹配 owner 才生效**——
-   租户隔离内置在 registry（独立于 P4.6 controller 层鉴权）。
+4. **取消（ADR-0004 §3.3）**：客户端断开 / 服务端 cancel = **cancel Reactor Subscription**
+   （可靠，停 provider token，向上游传播）+ **`agent.interrupt()`**（协作、步边界）。
+   `AgentRunService` 在 `doOnSubscribe` 自动绑定 subscription，WebFlux controller 无需也不得手工
+   subscribe/bind。`CancellationRegistry` 按 `runId` 原子注册；重复活动 runId 被拒绝，晚于 cancel
+   到达的 subscription 会立即 cancel，且仅 owner 可以取消。
 5. **最小权限**：所有 P5+ capability `disable*` + `removeTool("wait_async_results")` +
    `enableAgentTracingLog(false)`（AgentScope `AgentTraceMiddleware` 默认 INFO 打印模型输出与异常
    `toString()`，可能泄露 prompt/context/凭据 → 关闭）。测试断言 `lastToolCount()==0`。
 6. **无文件系统**：实测 HarnessAgent 2.0.0 在全 disable 下 **不需要 workspace** 即可构建并流式
    （probe 证实 `BUILD_OK_WITHOUT_WORKSPACE`）。P4.2 无任何 per-run FS I/O；测试运行未创建
    `.agentscope/`。
-7. **线程模型**：返回 `Flux` 全 reactive；唯一阻塞的 AgentScope `close()` 经专用 daemon executor
-   执行，不阻塞 Netty event loop（测试注入同步 executor 保证确定性）。
+7. **生命周期/线程模型**：返回的 `Flux` 为 single-use，agent 创建与注册通过 `Flux.defer` 延迟到
+   订阅时，未订阅不分配资源，重复订阅被拒绝。唯一阻塞的 AgentScope `close()` 经专用 daemon
+   executor 执行，不阻塞 Netty event loop。取消后 `RunCancelled` 通过独立 lifecycle observer
+   交给 P4.3 持久化；不会尝试向已经取消的 subscriber 继续 `onNext`。
 
 ## P4.2-4. 测试命令与结果
 
@@ -198,9 +201,9 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw -B -ntp spotless:apply clean verify
 ```
 
-- 全量：`Tests run: 188, Failures: 0, Errors: 0, Skipped: 0`
-  （P3 基线 169 + P4.1 spike 4 + **P4.2 新增 15**）。
-- P4.2 专项：`./mvnw test -Dtest='AgentEventMapperTest,HarnessAgentFactoryTest,CancellationRegistryTest,AgentRunServiceTest'` → 15/15。
+- 全量：`Tests run: 193, Failures: 0, Errors: 0, Skipped: 0`
+  （P3 基线 169 + P4.1 spike 4 + **P4.2 新增 20**）。
+- P4.2 专项：`./mvnw test -Dtest='AgentEventMapperTest,HarnessAgentFactoryTest,CancellationRegistryTest,AgentRunServiceTest'` → 20/20。
 - P4.1 spike 仍 4/4：`FakeStreamModel` 提升到 `agent.testing`（共享测试基础设施），spike 测试
   import 同步更新，**行为不变**（class 体未改逻辑，仅迁包 + 新增可选 `error(Throwable)` builder）。
 - 无真实网络、无 API key、无真实 provider。
@@ -211,8 +214,8 @@ P4.2 新增测试覆盖：
 | --- | --- | --- |
 | `AgentEventMapperTest` | reasoning+text 序列 / text-only 序列 | ADR-0004 §3.2 精确事件序列、delta 拼接、usage 值、runId/sequence 单调、`lastToolCount==0` |
 | `HarnessAgentFactoryTest` | 流式+无工具 / 独立 run / interrupt+close | 最小权限、run-scoped、清理不抛 |
-| `CancellationRegistryTest` | owner 取消 / 错租户 / 错用户 / 未知 run / 无订阅取消 / unregister | dispose+interrupt、**租户隔离** |
-| `AgentRunServiceTest` | 流式完成 / 错误脱敏 / 服务端 cancel 停 provider / 错 owner 拒绝 | 端到端、**raw 错误不入 event**、cancel 传播 |
+| `CancellationRegistryTest` | owner / 错 owner / 未知 run / 晚绑定 / 重复 runId / unregister | cancel+interrupt、竞态安全、**租户隔离** |
+| `AgentRunServiceTest` | 完成 / 脱敏 / cancel / owner / single-use / 重复 run / 取消 observer | 延迟分配、端到端、终态与 cancel 传播 |
 
 ## P4.2-5. 安全检查
 
@@ -249,9 +252,8 @@ P4.2 新增测试覆盖：
 2. **真实 provider 错误 redact**：event 层已脱敏、trace log 已关；但 P4.6 的 provider `ModelAdapter`
    仍应在 `stream()` 内捕获 provider 原始异常并 re-throw redacted 版本，确保任何上游 logger 都拿不到
    含 prompt/key 的 raw 文本。
-3. **start() 订阅前丢弃会泄漏 agent**（未 close）。P4.6 controller 始终订阅；骨架阶段已知，文档化。
-4. **未实现**：idempotency / 重放 / run 状态持久化 / HITL（P4.3/4/6/8）。
-5. **reactor 降级**（3.8.2→3.7.19）：本次全量 188 测试通过，无异常。
+3. **未实现**：idempotency / 重放 / run 状态持久化 / HITL（P4.3/4/6/8）。
+4. **reactor 降级**（3.8.2→3.7.19）：本次全量 193 测试通过，无异常。
 
 ## P4.2-9. 修改文件
 
@@ -291,4 +293,3 @@ docs/delivery/p4-implementation-report.md                                  (追�
 - 验证：默认 SQLite repository contract + MySQL Testcontainers（CI），dialect parity。
 
 **停在 P4.2 review，不自动开始 P4.3。**
-

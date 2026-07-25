@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import io.datastoria.server.agent.testing.FakeStreamModel;
 
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 /**
  * Exercises the {@link AgentRunService} skeleton end-to-end with a deterministic fake model: normal
@@ -125,7 +127,6 @@ class AgentRunServiceTest {
                 context, new FakeModelAdapter(model), AgentRuntimeConfig.minimal("sys"), "hi"));
 
     Disposable subscription = flux.subscribe();
-    service.bindSubscription("run-3", subscription);
     Thread.sleep(80); // allow streaming to begin
 
     boolean cancelled = service.cancel("run-3", "t1", "u1");
@@ -154,12 +155,102 @@ class AgentRunServiceTest {
                 new RunRequest(
                     context, new FakeModelAdapter(model), AgentRuntimeConfig.minimal("sys"), "hi"))
             .subscribe();
-    service.bindSubscription("run-4", subscription);
 
     assertThat(service.cancel("run-4", "t-other", "u1")).isFalse();
     assertThat(service.cancel("run-4", "t1", "u-other")).isFalse();
     assertThat(service.isActive("run-4")).as("run still active after rejected cancels").isTrue();
 
     subscription.dispose();
+  }
+
+  @Test
+  void startAllocatesOnlyOnSubscribeAndRejectsSecondSubscription() {
+    FakeStreamModel model = FakeStreamModel.builder().text("x").finish(1, 1).build();
+    AgentRunService service = newService();
+    Flux<AgentRunEvent> flux =
+        service.start(
+            new RunRequest(
+                ctx("run-single"),
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                "hi"));
+
+    assertThat(service.isActive("run-single")).isFalse();
+    assertThat(model.streamInvocations()).isZero();
+    StepVerifier.create(flux).expectNextCount(6).verifyComplete();
+    StepVerifier.create(flux)
+        .expectErrorMatches(error -> error.getMessage().contains("only be subscribed once"))
+        .verify();
+    assertThat(model.streamInvocations()).isEqualTo(1);
+  }
+
+  @Test
+  void duplicateActiveRunIdDoesNotReplaceOriginalRun() throws Exception {
+    FakeStreamModel first =
+        FakeStreamModel.builder()
+            .text("slow")
+            .finish(1, 1)
+            .perFrameDelay(Duration.ofSeconds(1))
+            .build();
+    FakeStreamModel duplicate = FakeStreamModel.builder().text("duplicate").finish(1, 1).build();
+    AgentRunService service = newService();
+    Disposable firstSubscription =
+        service
+            .start(
+                new RunRequest(
+                    ctx("same-run"),
+                    new FakeModelAdapter(first),
+                    AgentRuntimeConfig.minimal("sys"),
+                    "hi"))
+            .subscribe();
+    Thread.sleep(50);
+
+    StepVerifier.create(
+            service.start(
+                new RunRequest(
+                    ctx("same-run"),
+                    new FakeModelAdapter(duplicate),
+                    AgentRuntimeConfig.minimal("sys"),
+                    "hi")))
+        .expectErrorMatches(error -> error.getMessage().contains("already active"))
+        .verify();
+
+    assertThat(service.cancel("same-run", "t1", "u1")).isTrue();
+    Thread.sleep(50);
+    assertThat(first.wasCancelled()).isTrue();
+    assertThat(duplicate.streamInvocations()).isZero();
+    firstSubscription.dispose();
+  }
+
+  @Test
+  void cancellationIsDeliveredToIndependentLifecycleObserver() throws Exception {
+    CopyOnWriteArrayList<AgentRunEvent.RunCancelled> cancellations = new CopyOnWriteArrayList<>();
+    AgentRunService service =
+        new AgentRunService(
+            new HarnessAgentFactory(),
+            new CancellationRegistry(),
+            Runnable::run,
+            cancellations::add);
+    FakeStreamModel model =
+        FakeStreamModel.builder()
+            .text("slow")
+            .finish(1, 1)
+            .perFrameDelay(Duration.ofSeconds(1))
+            .build();
+    Disposable subscription =
+        service
+            .start(
+                new RunRequest(
+                    ctx("run-cancel-event"),
+                    new FakeModelAdapter(model),
+                    AgentRuntimeConfig.minimal("sys"),
+                    "hi"))
+            .subscribe();
+
+    Thread.sleep(50);
+    subscription.dispose();
+
+    assertThat(cancellations).hasSize(1);
+    assertThat(cancellations.get(0).runId()).isEqualTo("run-cancel-event");
   }
 }
