@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -11,6 +12,10 @@ import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+
+import io.datastoria.server.identity.Identity;
+
+import reactor.util.context.Context;
 
 class AuthCompatibilityControllerTest {
 
@@ -54,6 +59,25 @@ class AuthCompatibilityControllerTest {
     assertThat(session.toString())
         .contains("user@example.com", "Example User")
         .doesNotContain("must-not-leak");
+    assertThat(session).containsKey("expires");
+  }
+
+  @Test
+  void returnsDevelopmentIdentityAsAnAuthenticatedSession() {
+    var controller = new AuthCompatibilityController(new MockEnvironment());
+
+    Map<String, Object> session =
+        controller
+            .session(null)
+            .contextWrite(
+                Context.of(
+                    "datastoria.identity",
+                    new Identity(
+                        "tenant-local", "dev@example.com", Set.of("ROLE_ADMIN", "ROLE_USER"))))
+            .block();
+
+    assertThat(session).isNotNull();
+    assertThat(session.toString()).contains("dev@example.com");
     assertThat(session).containsKey("expires");
   }
 

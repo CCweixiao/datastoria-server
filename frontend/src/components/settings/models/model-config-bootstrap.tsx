@@ -57,17 +57,15 @@ async function bootstrapModelCatalog(): Promise<boolean> {
           ]
         : []),
     ];
-    manager.setProviderSettings(
-      [
-        ...providers.map((provider) => ({
-          provider: provider.providerKey,
-          providerId: provider.id,
-          credentialConfigured: provider.credentialConfigured,
-          maskedHint: provider.maskedHint,
-        })),
-        ...oauthProviders,
-      ]
-    );
+    manager.setProviderSettings([
+      ...providers.map((provider) => ({
+        provider: provider.providerKey,
+        providerId: provider.id,
+        credentialConfigured: provider.credentialConfigured,
+        maskedHint: provider.maskedHint,
+      })),
+      ...oauthProviders,
+    ]);
     const selectedModelId = await getAiConfigurationGateway().getModelPreference();
     manager.setServerSelectedModel(selectedModelId);
     return true;

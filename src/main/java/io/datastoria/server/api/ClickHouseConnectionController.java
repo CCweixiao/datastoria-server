@@ -110,7 +110,15 @@ public class ClickHouseConnectionController {
             : new LinkedHashMap<>(request.parameters());
     parameters.putIfAbsent("default_format", "JSON");
     return IdentityContext.current()
-        .flatMap(identity -> service.queryStream(id, request.query(), parameters, identity))
+        .flatMap(
+            identity ->
+                service.queryStream(
+                    id,
+                    request.query(),
+                    parameters,
+                    request.targetNode(),
+                    request.targetUser(),
+                    identity))
         .map(
             response -> {
               ResponseEntity.BodyBuilder builder = ResponseEntity.status(response.status());

@@ -118,9 +118,9 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     const response = await backendApiFetch(
       javaUrl(`/api/admin/ai/providers/${configured.id}/credential`),
       {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...identityHeaders() },
-      body: JSON.stringify({ secretKind: "api_key", value: credential }),
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...identityHeaders() },
+        body: JSON.stringify({ secretKind: "api_key", value: credential }),
       }
     );
     if (!response.ok) {
@@ -141,8 +141,8 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     const response = await backendApiFetch(
       javaUrl(`/api/admin/ai/providers/${existing.id}/credential`),
       {
-      method: "DELETE",
-      headers: identityHeaders(),
+        method: "DELETE",
+        headers: identityHeaders(),
       }
     );
     if (!response.ok) {
@@ -157,7 +157,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     const currentResponse = await backendApiFetch(
       javaUrl(`/api/admin/ai/models/${model.configId}`),
       {
-      headers: identityHeaders(),
+        headers: identityHeaders(),
       }
     );
     const current = await checkedJson<{

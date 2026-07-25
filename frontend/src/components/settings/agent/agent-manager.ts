@@ -110,9 +110,7 @@ export class AgentConfigurationManager {
             ...current,
             reasoningLevel: normalizeReasoningLevel(current.reasoningLevel),
             aiResponseLanguage: normalizeAIResponseLanguage(
-              current.aiResponseLanguage ??
-                current.sqlReviewLanguage ??
-                current.autoExplainLanguage
+              current.aiResponseLanguage ?? current.sqlReviewLanguage ?? current.autoExplainLanguage
             ),
           };
           return this.configuration;

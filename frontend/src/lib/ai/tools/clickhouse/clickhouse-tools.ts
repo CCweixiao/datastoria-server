@@ -26,8 +26,7 @@ export const CLICKHOUSE_TOOL_NAMES = {
   COLLECT_RCA_EVIDENCE: "collect_rca_evidence",
 } as const;
 
-export type ClickHouseToolName =
-  (typeof CLICKHOUSE_TOOL_NAMES)[keyof typeof CLICKHOUSE_TOOL_NAMES];
+export type ClickHouseToolName = (typeof CLICKHOUSE_TOOL_NAMES)[keyof typeof CLICKHOUSE_TOOL_NAMES];
 
 export type ClickHouseUITools = {
   explore_schema: { input: ExploreSchemaInput; output: ExploreSchemaOutput };

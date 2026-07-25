@@ -159,6 +159,31 @@ describe("Connection query context parameters", () => {
     expect(body.parameters.output_format_pretty_row_numbers).toBe(true);
   });
 
+  it("delegates selected-node queries to Spring without exposing the password", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
+    const connection = Connection.create({
+      id: "connection-cluster",
+      name: "cluster",
+      url: "http://localhost:8123",
+      user: "external",
+      password: "must-not-leave-the-browser",
+      cluster: "prod",
+      editable: true,
+    });
+    connection.metadata.remoteHostName = "node-1.example";
+    connection.metadata.internalUser = "internal";
+
+    await connection.queryOnNode("SELECT 1").response;
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toBe("SELECT 1");
+    expect(body.targetNode).toBe("node-1.example");
+    expect(body.targetUser).toBe("internal");
+    expect(JSON.stringify(body)).not.toContain("must-not-leave-the-browser");
+  });
+
   it("uses Spring ProblemDetail detail as the query error message", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

@@ -110,25 +110,22 @@ function CodeViewer() {
           </nav>
         </aside>
         <pre className="overflow-x-auto rounded-lg border bg-card py-3 text-xs leading-5">
-        {lines.map((line, index) => {
-          const number = view.startLine + index;
-          const highlighted =
-            highlightedStart != null &&
-            highlightedEnd != null &&
-            number >= highlightedStart &&
-            number <= highlightedEnd;
-          return (
-            <div
-              key={number}
-              className={highlighted ? "bg-yellow-500/15" : "hover:bg-muted/40"}
-            >
-              <span className="mr-4 inline-block w-14 select-none text-right text-muted-foreground">
-                {number}
-              </span>
-              <code>{line || " "}</code>
-            </div>
-          );
-        })}
+          {lines.map((line, index) => {
+            const number = view.startLine + index;
+            const highlighted =
+              highlightedStart != null &&
+              highlightedEnd != null &&
+              number >= highlightedStart &&
+              number <= highlightedEnd;
+            return (
+              <div key={number} className={highlighted ? "bg-yellow-500/15" : "hover:bg-muted/40"}>
+                <span className="mr-4 inline-block w-14 select-none text-right text-muted-foreground">
+                  {number}
+                </span>
+                <code>{line || " "}</code>
+              </div>
+            );
+          })}
         </pre>
       </div>
     </main>

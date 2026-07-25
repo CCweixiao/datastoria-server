@@ -7,8 +7,6 @@ import { openConnectionSelectorDialog } from "@/components/connection/connection
 import { openReleaseNotes } from "@/components/release-note/release-notes-view";
 import { SYSTEM_TABLE_REGISTRY } from "@/components/system-table-tab/system-table-registry";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +15,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +31,8 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { UserProfileImage } from "@/components/user-profile-image";
+import { loadAuthSession, signOut, type AuthSession } from "@/lib/auth-client";
 import {
   BookOpen,
   ChevronRight,
@@ -44,8 +46,6 @@ import {
   Sparkles,
   Terminal,
 } from "lucide-react";
-import { loadAuthSession, signOut, type AuthSession } from "@/lib/auth-client";
-import { UserProfileImage } from "@/components/user-profile-image";
 import React, { useCallback, useEffect, useState } from "react";
 import { DashboardList } from "./dashboard-tab/dashboard-list";
 import { showSettingsDialog } from "./settings/settings-dialog";
@@ -423,10 +423,7 @@ function UserNavButton({ user }: { user: NonNullable<AuthSession["user"]> }) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={() => void signOut("/login")}
-        >
+        <DropdownMenuItem className="cursor-pointer" onClick={() => void signOut("/login")}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>

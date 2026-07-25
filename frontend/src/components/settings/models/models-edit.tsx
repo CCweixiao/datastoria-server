@@ -307,8 +307,7 @@ export function ModelsEdit() {
                         <TableCell className="py-1.5 pr-4">
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1 flex-1 ">
-                              {provider === "GitHub Copilot" ||
-                              provider === "OpenAI Codex" ? (
+                              {provider === "GitHub Copilot" || provider === "OpenAI Codex" ? (
                                 <span className="text-xs text-muted-foreground">
                                   OAuth credential managed by Java
                                 </span>

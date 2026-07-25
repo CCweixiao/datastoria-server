@@ -517,9 +517,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     setReviewResult(null);
 
     try {
-      const response = await backendApiFetch(
-        backendApiUrl("/api/ai/skills/actions/review"),
-        {
+      const response = await backendApiFetch(backendApiUrl("/api/ai/skills/actions/review"), {
         method: "POST",
         headers: backendApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
@@ -535,8 +533,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
             ],
           },
         }),
-        }
-      );
+      });
 
       if (!response.ok) {
         throw new Error(await readJsonError(response, "Failed to review file"));

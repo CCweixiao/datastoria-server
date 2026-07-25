@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ServerWebExchange;
 
+import io.datastoria.server.identity.Identity;
+import io.datastoria.server.identity.IdentityContext;
+
 import reactor.core.publisher.Mono;
 
 /** NextAuth-compatible read endpoints backed by Spring Security OAuth2 login. */
@@ -105,9 +108,19 @@ public class AuthCompatibilityController {
 
   @GetMapping("/session")
   public Mono<Map<String, Object>> session(Authentication authentication) {
-    if (authentication == null || !authentication.isAuthenticated()) {
-      return Mono.just(Map.of());
+    if (authentication != null && authentication.isAuthenticated()) {
+      return Mono.just(oauthSession(authentication));
     }
+    // Local/test profiles resolve the same request identity used by every other REST endpoint from
+    // x-datastoria-user-email. Expose that identity through the NextAuth-compatible session shape
+    // as well, otherwise AuthGate loops back to /login even though all business APIs are usable.
+    // In prod there is no IdentityWebFilter; an unauthenticated request therefore falls back to {}.
+    return IdentityContext.current()
+        .map(AuthCompatibilityController::developmentSession)
+        .onErrorReturn(Map.of());
+  }
+
+  private static Map<String, Object> oauthSession(Authentication authentication) {
     Map<String, Object> attributes =
         authentication.getPrincipal() instanceof OAuth2AuthenticatedPrincipal principal
             ? principal.getAttributes()
@@ -120,8 +133,19 @@ public class AuthCompatibilityController {
     putIfPresent(user, "name", name);
     putIfPresent(user, "email", email);
     putIfPresent(user, "image", image);
-    return Mono.just(
-        Map.of("user", user, "expires", Instant.now().plusSeconds(7 * 24 * 60 * 60).toString()));
+    return Map.of("user", user, "expires", sessionExpiration());
+  }
+
+  private static Map<String, Object> developmentSession(Identity identity) {
+    Map<String, Object> user = new LinkedHashMap<>();
+    user.put("id", identity.userId());
+    user.put("email", identity.userId());
+    user.put("name", identity.userId());
+    return Map.of("user", user, "expires", sessionExpiration());
+  }
+
+  private static String sessionExpiration() {
+    return Instant.now().plusSeconds(7 * 24 * 60 * 60).toString();
   }
 
   /**

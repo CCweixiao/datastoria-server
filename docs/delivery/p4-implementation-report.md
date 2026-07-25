@@ -1290,3 +1290,30 @@ TypeScript、Vitest **57 files / 297 tests**、`next build --webpack` 全部通�
 
 本轮回归：Java 17 `spotless:check test` **351 tests / 0 failure / 0 error**；前端
 TypeScript、Vitest **58 files / 299 tests** 和包含 `/code-viewer` 的生产构建全部通过。
+
+## P4.8-9. 本地联调与 ClickHouse 节点路由收口（2026-07-26）
+
+实际以前端 origin 跨域访问 Spring 时继续发现并修复以下联调缺口：
+
+1. local profile 的 CORS 现在同时允许 `localhost:3000` 与 `127.0.0.1:3000`，补齐
+   `PATCH`、`Idempotency-Key`、`X-Session-Share-Code`，并显式暴露 ETag、Location、
+   AI UI stream 及前端消费的 `X-ClickHouse-*` 响应头。
+2. `GET /api/auth/session` 在 local/test profile 使用与业务 API 相同的 `IdentityContext`，
+   因此开发身份头可以得到一致的登录会话；生产环境仍要求 Spring Security OAuth 身份。
+3. 原前端在 cluster 模式通过 ClickHouse `remote()` 固定查询选中的节点。迁移后该分支曾退化为
+   普通查询。现在前端只向 `/api/connections/{id}/query` 发送 `targetNode/targetUser`，Spring
+   校验节点、解密服务端凭据并构造节点查询；密码不会返回或进入浏览器请求。
+4. 再次静态检查确认当前前端没有 Next `/api` route、AI/provider SDK、`streamText`、
+   `generateText`、浏览器 Agent/Skill/Tool executor 或 ClickHouse client。页面中的 schema、
+   monitoring 和 SQL 定义均通过 Spring query wrapper 执行。
+5. legacy A02 `/api/ai/chat` 继续按既定退役策略映射到 A01，并返回弃用头；当前前端不调用
+   A02。原 A02 允许浏览器提交 provider secret，与“secret 只存后端”的目标冲突，因此不会恢复
+   该不安全请求字段。
+
+真实 HTTP 验证确认开发会话返回 200，来自 `127.0.0.1:3000` 的 PATCH/幂等键/分享码 CORS
+预检返回 200，且 ClickHouse 响应头处于 expose 列表。全量回归结果：
+
+- Java 17：`./mvnw spotless:check test`，**392 tests / 0 failure / 0 error**；本机无 Docker，
+  Testcontainers MySQL runtime parity 仍未执行。
+- 前端：Prettier、TypeScript、ESLint、Vitest **58 files / 300 tests**、`next build --webpack`
+  全部通过；构建路由仍只有页面，无 `/api/*`。

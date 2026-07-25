@@ -1,5 +1,5 @@
-import { listUserState, putUserState } from "@/lib/user-state-client";
 import { backendApiFetch } from "@/lib/backend-api";
+import { listUserState, putUserState } from "@/lib/user-state-client";
 import type { ConnectionConfig } from "./connection-config";
 
 export const ConnectionChangeType = {

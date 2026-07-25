@@ -3,10 +3,12 @@ package io.datastoria.server.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
@@ -263,6 +265,62 @@ class ClickHouseConnectionApiTest {
         .expectBody()
         .jsonPath("$.data[0].value")
         .isEqualTo(1);
+  }
+
+  @Test
+  void nodeQueryIsWrappedBySpringWithStoredCredential() {
+    String id =
+        web.post()
+            .uri("/api/connections")
+            .header(IDENTITY_HEADER, "dev@example.com")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(
+                """
+                {
+                  "name": "cluster",
+                  "url": "http://127.0.0.1:8123",
+                  "username": "external",
+                  "password": "server-secret",
+                  "cluster": "prod",
+                  "enabled": true
+                }
+                """)
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(JsonNode.class)
+            .returnResult()
+            .getResponseBody()
+            .path("id")
+            .asText();
+
+    web.post()
+        .uri("/api/connections/{id}/query", id)
+        .header(IDENTITY_HEADER, "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {
+              "query": "SELECT 1",
+              "parameters": {},
+              "targetNode": "node-1.example",
+              "targetUser": "internal"
+            }
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    ArgumentCaptor<String> password = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+    verify(remoteClient).executeStream(any(), password.capture(), query.capture(), any());
+    assertThat(password.getValue()).isEqualTo("server-secret");
+    assertThat(query.getValue())
+        .contains("remote(")
+        .contains("'node-1.example'")
+        .contains("'internal'")
+        .contains("'server-secret'")
+        .contains("SELECT 1");
   }
 
   @Test

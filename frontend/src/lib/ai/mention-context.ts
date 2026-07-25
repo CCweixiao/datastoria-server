@@ -79,5 +79,4 @@ export class MentionContext {
 
     return mentions.length > 0 ? { version: 1, mentions } : undefined;
   }
-
 }

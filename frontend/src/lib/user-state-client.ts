@@ -10,7 +10,7 @@ export async function listUserState<T>(namespace: string): Promise<UserStateEntr
   const response = await backendApiFetch(
     backendApiUrl(`/api/me/state/${encodeURIComponent(namespace)}`),
     {
-    headers: backendApiHeaders(),
+      headers: backendApiHeaders(),
     }
   );
   if (!response.ok) {

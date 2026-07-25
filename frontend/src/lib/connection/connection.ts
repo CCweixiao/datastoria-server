@@ -491,7 +491,61 @@ export class Connection {
       return this.query(processedSql, params, headers);
     }
 
-    return this.query(processedSql, params, headers);
+    return this.queryWithTarget(processedSql, params, headers, node, this.metadata.internalUser);
+  }
+
+  private queryWithTarget(
+    sql: string,
+    params: Record<string, unknown> | undefined,
+    _headers: Record<string, string> | undefined,
+    targetNode: string,
+    targetUser: string
+  ): { response: Promise<QueryResponse>; abortController: AbortController } {
+    const queryParameters = this.buildQueryParameters(params);
+    const abortController = new AbortController();
+    const response = (async (): Promise<QueryResponse> => {
+      if (!this.id) {
+        throw new QueryError("Connection must be saved before executing a query");
+      }
+      const apiBase = (
+        process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+      ).replace(/\/+$/, "");
+      const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+      const res = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(identity ? { "x-datastoria-user-email": identity } : {}),
+        },
+        body: JSON.stringify({ query: sql, parameters: queryParameters, targetNode, targetUser }),
+        signal: abortController.signal,
+      });
+      if (!res.ok) {
+        const { message, body } = await readBackendError(
+          res,
+          `Failed to execute query, got HTTP status ${res.status} ${res.statusText} from server`
+        );
+        const clickHouseErrorCode = res.headers.get("x-clickhouse-exception-code");
+        throw new QueryError(
+          clickHouseErrorCode
+            ? `Failed to execute query, got ClickHouse Exception Code: ${clickHouseErrorCode}`
+            : message,
+          res.status,
+          Object.fromEntries(res.headers.entries()),
+          body
+        );
+      }
+      const responseText = await res.text();
+      return {
+        httpStatus: res.status,
+        httpHeaders: Object.fromEntries(res.headers.entries()),
+        data: {
+          text: () => responseText,
+          json: <T = unknown>() => JSON.parse(responseText) as T,
+        },
+      };
+    })();
+    return { response, abortController };
   }
 
   /**

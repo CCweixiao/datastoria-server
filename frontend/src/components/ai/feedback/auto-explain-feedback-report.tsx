@@ -38,8 +38,8 @@ export function AutoExplainFeedbackReport() {
         const response = await backendApiFetch(
           backendApiUrl(`/api/ai/chat/feedback/report?${params}`),
           {
-          cache: "no-store",
-          headers: backendApiHeaders(),
+            cache: "no-store",
+            headers: backendApiHeaders(),
           }
         );
 

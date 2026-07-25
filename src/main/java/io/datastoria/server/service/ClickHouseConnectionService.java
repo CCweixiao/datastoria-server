@@ -208,6 +208,16 @@ public class ClickHouseConnectionService {
 
   public Mono<ClickHouseRemoteClient.RemoteQueryResponse> queryStream(
       String id, String sql, Map<String, Object> parameters, Identity identity) {
+    return queryStream(id, sql, parameters, null, null, identity);
+  }
+
+  public Mono<ClickHouseRemoteClient.RemoteQueryResponse> queryStream(
+      String id,
+      String sql,
+      Map<String, Object> parameters,
+      String targetNode,
+      String targetUser,
+      Identity identity) {
     return Mono.defer(
             () -> {
               ClickHouseConnection connection = require(id, identity);
@@ -215,10 +225,47 @@ public class ClickHouseConnectionService {
                 return Mono.error(
                     new IllegalArgumentException("ClickHouse connection is disabled: " + id));
               }
-              return remoteClient.executeStream(
-                  connection, decryptPassword(connection), sql, parameters);
+              String password = decryptPassword(connection);
+              String effectiveSql =
+                  wrapForTargetNode(sql, targetNode, targetUser, connection.username(), password);
+              return remoteClient.executeStream(connection, password, effectiveSql, parameters);
             })
         .subscribeOn(jdbcScheduler);
+  }
+
+  static String wrapForTargetNode(
+      String sql,
+      String targetNode,
+      String targetUser,
+      String configuredUser,
+      String configuredPassword) {
+    if (targetNode == null || targetNode.isBlank()) {
+      return sql;
+    }
+    String node = targetNode.trim();
+    if (!node.matches("[A-Za-z0-9._:-]+")) {
+      throw new IllegalArgumentException("Invalid ClickHouse target node");
+    }
+    String user = targetUser == null || targetUser.isBlank() ? configuredUser : targetUser.trim();
+    return """
+        SELECT * FROM remote(
+          '%s',
+          view(
+        %s
+          ),
+          '%s',
+          '%s'
+        )
+        """
+        .formatted(
+            escapeClickHouseString(node),
+            sql,
+            escapeClickHouseString(user),
+            escapeClickHouseString(configuredPassword));
+  }
+
+  private static String escapeClickHouseString(String value) {
+    return value.replace("\\", "\\\\").replace("'", "\\'");
   }
 
   private ClickHouseConnection require(String id, Identity identity) {
