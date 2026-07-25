@@ -7,11 +7,10 @@ import type { PlanToolOutput } from "@/lib/ai/agent/plan/planning-types";
 import type { AgentContext, AppUIMessage, Message } from "@/lib/ai/ai-types";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
-import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
 import { Connection } from "@/lib/connection/connection";
 import { Chat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { DefaultChatTransport } from "ai";
 import { v7 as uuidv7 } from "uuid";
 import { ChatContext, type DatabaseContext } from "./chat-context";
 import { ChatUIContext } from "./chat-ui-context";
@@ -144,14 +143,12 @@ export function buildSendMessagesRequestPayload({
 }: SendMessagesRequestPayloadArgs): Record<string, unknown> {
   if (chatPersistenceMode === "remote") {
     const lastMessage = messages[messages.length - 1];
-    const continuation = lastAssistantMessageIsCompleteWithToolCalls({ messages });
 
     return {
       sessionId,
       connectionId: toSessionRepositoryConnectionId(connectionId),
       message: lastMessage,
-      ...(continuation ? { continuation: true } : {}),
-      ...(!continuation ? { generateTitle } : {}),
+      generateTitle,
       ...(ephemeral ? { ephemeral: true } : {}),
       agentContext: {
         ...(agentContext ?? {}),
@@ -201,8 +198,97 @@ function buildChatRequestHeaders(
 }
 
 export class ChatFactory {
-  static stopClientTools(_sessionId: string): void {
-    // Tool execution is server-side; retained as a UI cancellation hook.
+  private static readonly resumeTargets = new WeakMap<
+    Chat<AppUIMessage>,
+    (runId: string) => void
+  >();
+
+  static async respondToQuestion(
+    chat: Chat<AppUIMessage>,
+    runId: string,
+    actionId: string,
+    response: unknown
+  ): Promise<void> {
+    const javaApiBase = (
+      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+    ).replace(/\/+$/, "");
+    const headers = buildChatRequestHeaders(
+      {
+        "Content-Type": "application/json",
+        "Idempotency-Key": uuidv7(),
+      },
+      undefined
+    );
+    const resolved = await fetch(
+      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ response }),
+      }
+    );
+    if (!resolved.ok) {
+      throw new Error((await resolved.text()) || "Failed to submit answer.");
+    }
+    const selectTarget = ChatFactory.resumeTargets.get(chat);
+    if (!selectTarget) {
+      throw new Error("Chat resume transport is unavailable.");
+    }
+    selectTarget(runId);
+    await chat.resumeStream({
+      headers: new Headers(buildChatRequestHeaders({ "Idempotency-Key": uuidv7() }, undefined)),
+    });
+  }
+
+  static async resolveApproval(
+    chat: Chat<AppUIMessage>,
+    runId: string,
+    actionId: string,
+    approved: boolean
+  ): Promise<void> {
+    const javaApiBase = (
+      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+    ).replace(/\/+$/, "");
+    const resolved = await fetch(
+      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:${approved ? "approve" : "deny"}`,
+      {
+        method: "POST",
+        headers: buildChatRequestHeaders(
+          {
+            "Content-Type": "application/json",
+            "Idempotency-Key": uuidv7(),
+          },
+          undefined
+        ),
+        body: "{}",
+      }
+    );
+    if (!resolved.ok) {
+      throw new Error((await resolved.text()) || "Failed to resolve approval.");
+    }
+    const snapshot = await fetch(
+      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}`,
+      {
+        headers: buildChatRequestHeaders(undefined, undefined),
+      }
+    );
+    if (!snapshot.ok) {
+      throw new Error((await snapshot.text()) || "Failed to inspect pending approvals.");
+    }
+    const state = (await snapshot.json()) as {
+      pendingActions?: { status?: string }[];
+    };
+    if (state.pendingActions?.some((action) => action.status === "PENDING")) {
+      return;
+    }
+    const selectTarget = ChatFactory.resumeTargets.get(chat);
+    if (!selectTarget) {
+      throw new Error("Chat resume transport is unavailable.");
+    }
+    selectTarget(runId);
+    await chat.resumeStream({
+      headers: new Headers(buildChatRequestHeaders({ "Idempotency-Key": uuidv7() }, undefined)),
+    });
   }
 
   /**
@@ -303,21 +389,32 @@ export class ChatFactory {
     const connection = options.connection ?? null;
     const connectionId = options.connectionId ?? getSessionRepositoryConnectionId(connection);
 
+    let resumeRunId: string | undefined;
+    const javaApiBase = (
+      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
+    ).replace(/\/+$/, "");
     // Create Chat instance
     const chat = new Chat<AppUIMessage>({
       id: sessionId,
       generateId: newUniqueSessionId,
 
-      // Automatically send tool results back to the API when all tool calls are complete
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-
       transport: new DefaultChatTransport({
-        fetch: async (_input, init) => {
-          const javaApiBase = (
-            process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-          ).replace(/\/+$/, "");
+        fetch: async (input, init) => {
+          if (resumeRunId && String(input).includes(`${encodeURIComponent(resumeRunId)}:resume`)) {
+            return fetch(input, { ...init, method: "POST" });
+          }
           const endpoint = `${javaApiBase}/api/ai/agent`;
           return fetch(endpoint, init);
+        },
+        prepareReconnectToStreamRequest: ({ headers, credentials }) => {
+          if (!resumeRunId) {
+            throw new Error("No suspended run is selected.");
+          }
+          return {
+            api: `${javaApiBase}/api/ai/runs/${encodeURIComponent(resumeRunId)}:resume`,
+            headers,
+            credentials,
+          };
         },
 
         prepareSendMessagesRequest: async ({
@@ -386,10 +483,6 @@ export class ChatFactory {
           return;
         }
 
-        if (toolName === CLIENT_TOOL_NAMES.ASK_USER_QUESTION) {
-          return;
-        }
-
         console.error(`Unexpected client-side tool request: ${toolName}`, {
           toolCallId,
           input,
@@ -408,6 +501,9 @@ export class ChatFactory {
         : undefined,
     });
 
+    ChatFactory.resumeTargets.set(chat, (runId) => {
+      resumeRunId = runId;
+    });
     return chat;
   }
 }

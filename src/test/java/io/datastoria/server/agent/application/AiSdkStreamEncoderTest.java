@@ -238,7 +238,8 @@ class AiSdkStreamEncoderTest {
             "tool-input-delta",
             "tool-input-available",
             "tool-output-available",
-            "tool-approval-request");
+            "tool-approval-request",
+            "data-pending-action");
     List<JsonNode> chunks = chunks(frames);
     assertThat(
             chunks.stream()
@@ -256,6 +257,14 @@ class AiSdkStreamEncoderTest {
             .orElseThrow();
     assertThat(approval.path("approvalId").asText()).isEqualTo("act-1");
     assertThat(approval.path("toolCallId").asText()).isEqualTo("call-2");
+    JsonNode pending =
+        chunks.stream()
+            .filter(c -> "data-pending-action".equals(type(c)))
+            .findFirst()
+            .orElseThrow()
+            .path("data");
+    assertThat(pending.path("runId").asText()).isEqualTo("run_1");
+    assertThat(pending.path("actionType").asText()).isEqualTo("approval");
   }
 
   @Test

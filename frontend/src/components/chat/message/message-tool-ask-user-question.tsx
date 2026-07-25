@@ -4,12 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
+import type { AppUIMessage, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
 import {
-  CLIENT_TOOL_NAMES,
   type AskUserQuestionInput,
   type AskUserQuestionOutput,
-} from "@/lib/ai/tools/client/client-tools";
+} from "@/lib/ai/tools/server/human-interaction-types";
 import { cn } from "@/lib/utils";
 import { CircleAlert, HelpCircle, Loader2 } from "lucide-react";
 import { memo, useMemo, useState } from "react";
@@ -73,9 +72,11 @@ function extractAskUserQuestionInput(toolPart: ToolPart): AskUserQuestionInput |
 
 export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuestion({
   part,
+  pendingAction,
   isRunning = true,
 }: {
   part: AppUIMessage["parts"][0];
+  pendingAction?: PendingActionData;
   isRunning?: boolean;
 }) {
   const toolPart = part as ToolPart;
@@ -111,6 +112,9 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
     if (!toolCallId) {
       return { success: false, error: "Question is missing a tool call id." };
     }
+    if (!pendingAction) {
+      return { success: false, error: "Question action is unavailable." };
+    }
     if (isSubmitting || hasSubmitted) {
       return { success: false, error: "Answer submission is already in progress." };
     }
@@ -118,7 +122,8 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
     setIsSubmitting(true);
     try {
       await onToolOutput({
-        tool: CLIENT_TOOL_NAMES.ASK_USER_QUESTION,
+        runId: pendingAction.runId,
+        actionId: pendingAction.actionId,
         toolCallId,
         output: answer,
       });

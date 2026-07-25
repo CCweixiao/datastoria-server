@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.ChatUsage;
@@ -86,6 +87,31 @@ class HarnessAgentFactoryTest {
     assertThat(eventsB).allSatisfy(e -> assertThat(e.runId()).isEqualTo("run-b"));
     // Two stream calls across two independent runnables.
     assertThat(model.streamInvocations()).isEqualTo(2);
+  }
+
+  @Test
+  void compactsLongHistoryWithoutWorkspaceMemoryFlushOrOffload() {
+    CompactionModel model = new CompactionModel();
+    List<ChatTurn> history = new java.util.ArrayList<>();
+    for (int i = 0; i < 55; i++) {
+      history.add(new ChatTurn(i % 2 == 0 ? "user" : "assistant", "history-" + i));
+    }
+
+    List<AgentRunEvent> events =
+        new HarnessAgentFactory()
+            .create(
+                ctx("run-compaction"),
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                history,
+                "current request")
+            .streamEvents()
+            .collectList()
+            .block();
+
+    assertThat(events).anyMatch(AgentRunEvent.RunCompleted.class::isInstance);
+    assertThat(model.calls()).isEqualTo(2);
+    assertThat(model.observedCompactedSummary()).isTrue();
   }
 
   @Test
@@ -321,6 +347,59 @@ class HarnessAgentFactoryTest {
     assertThat(model.observedDeniedResult()).isTrue();
   }
 
+  @Test
+  void questionSuspendsAndResponseResumesAfterProcessRestart() {
+    String runId = "run-question-" + UUID.randomUUID();
+    RunContext context = ctx(runId);
+    QuestionCallingModel model = new QuestionCallingModel();
+    AgentRunCapabilities capabilities =
+        new AgentRunCapabilities(List.of(), List.of(new HumanInteractionAgentTools()));
+    List<AgentRunEvent> paused =
+        new HarnessAgentFactory()
+            .create(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(),
+                "ask me")
+            .streamEvents()
+            .collectList()
+            .block();
+    AgentRunEvent.QuestionRequired question =
+        (AgentRunEvent.QuestionRequired)
+            paused.stream()
+                .filter(AgentRunEvent.QuestionRequired.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+
+    List<AgentRunEvent> resumed =
+        new HarnessAgentFactory()
+            .resumeQuestion(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(new ChatTurn("user", "ask me")),
+                new QuestionResumeRequest(
+                    question.sequence(),
+                    question.replyId(),
+                    question.actionId(),
+                    question.toolCallId(),
+                    question.toolName(),
+                    Map.of("questions", List.of(Map.of("question", "Which cluster?"))),
+                    "{\"answer\":\"prod\"}"))
+            .streamEvents()
+            .collectList()
+            .block();
+
+    assertThat(paused).noneMatch(AgentRunEvent.RunCompleted.class::isInstance);
+    assertThat(resumed).anyMatch(AgentRunEvent.RunCompleted.class::isInstance);
+    assertThat(resumed)
+        .allSatisfy(event -> assertThat(event.sequence()).isGreaterThan(question.sequence() + 1));
+    assertThat(model.observedAnswer()).isEqualTo("{\"answer\":\"prod\"}");
+  }
+
   private static AgentRunCapabilities askCapabilities(TestTools tools) {
     PermissionContextState permissionContext =
         PermissionContextState.builder()
@@ -397,6 +476,108 @@ class HarnessAgentFactoryTest {
 
     boolean observedDeniedResult() {
       return observedDeniedResult;
+    }
+  }
+
+  static final class QuestionCallingModel implements Model {
+    private final AtomicInteger calls = new AtomicInteger();
+    private volatile String observedAnswer;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      if (calls.incrementAndGet() > 1) {
+        observedAnswer =
+            messages.stream()
+                .flatMap(message -> message.getContent().stream())
+                .filter(ToolResultBlock.class::isInstance)
+                .map(ToolResultBlock.class::cast)
+                .flatMap(result -> result.getOutput().stream())
+                .filter(TextBlock.class::isInstance)
+                .map(TextBlock.class::cast)
+                .map(TextBlock::getText)
+                .findFirst()
+                .orElse(null);
+        return Flux.just(
+            ChatResponse.builder()
+                .content(List.of(TextBlock.builder().text("thanks").build()))
+                .build(),
+            ChatResponse.builder()
+                .content(List.of())
+                .usage(ChatUsage.builder().inputTokens(1).outputTokens(1).time(0.0).build())
+                .finishReason("stop")
+                .metadata(Map.of())
+                .build());
+      }
+      ToolUseBlock call =
+          ToolUseBlock.builder()
+              .id("question-call")
+              .name("ask_user_question")
+              .input(Map.of("questions", List.of(Map.of("question", "Which cluster?"))))
+              .content("{\"questions\":[{\"question\":\"Which cluster?\"}]}")
+              .state(ToolCallState.FINISHED)
+              .build();
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(call))
+              .finishReason("tool_calls")
+              .metadata(Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "question-test-model";
+    }
+
+    String observedAnswer() {
+      return observedAnswer;
+    }
+  }
+
+  static final class CompactionModel implements Model {
+    private final AtomicInteger calls = new AtomicInteger();
+    private volatile boolean observedCompactedSummary;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      int call = calls.incrementAndGet();
+      if (call == 1) {
+        return response("summary-preserves-intent");
+      }
+      observedCompactedSummary =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(TextBlock.class::isInstance)
+              .map(TextBlock.class::cast)
+              .map(TextBlock::getText)
+              .anyMatch(text -> text.contains("summary-preserves-intent"));
+      return response("done");
+    }
+
+    private Flux<ChatResponse> response(String text) {
+      return Flux.just(
+          ChatResponse.builder().content(List.of(TextBlock.builder().text(text).build())).build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(ChatUsage.builder().inputTokens(1).outputTokens(1).time(0.0).build())
+              .finishReason("stop")
+              .metadata(Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "compaction-test-model";
+    }
+
+    int calls() {
+      return calls.get();
+    }
+
+    boolean observedCompactedSummary() {
+      return observedCompactedSummary;
     }
   }
 }

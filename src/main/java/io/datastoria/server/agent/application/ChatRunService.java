@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.datastoria.server.agent.domain.AgentPendingAction;
 import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunSkillPin;
@@ -18,6 +19,7 @@ import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.domain.CheckpointType;
 import io.datastoria.server.agent.domain.PendingActionCheckpoint;
 import io.datastoria.server.agent.domain.PendingActionStatus;
+import io.datastoria.server.agent.domain.PendingActionType;
 import io.datastoria.server.agent.domain.RunContext;
 import io.datastoria.server.agent.domain.RunTransition;
 import io.datastoria.server.agent.runtime.AgentRunCapabilities;
@@ -25,8 +27,10 @@ import io.datastoria.server.agent.runtime.AgentRuntimeConfig;
 import io.datastoria.server.agent.runtime.AgentToolExecutionPolicy;
 import io.datastoria.server.agent.runtime.ApprovalResumeRequest;
 import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
+import io.datastoria.server.agent.runtime.HumanInteractionAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
+import io.datastoria.server.agent.runtime.QuestionResumeRequest;
 import io.datastoria.server.agent.runtime.RepositoryAgentTools;
 import io.datastoria.server.agent.runtime.SqlWorkflowAgentTools;
 import io.datastoria.server.api.compat.AgentChatRequest;
@@ -188,12 +192,14 @@ public class ChatRunService {
 
   /** Restores a permission-paused run and returns its continuation event stream. */
   public Mono<Flux<AgentRunEvent>> resume(String runId, Identity identity) {
-    return Mono.fromCallable(() -> prepareApprovalResume(runId, identity))
+    return Mono.fromCallable(() -> prepareResume(runId, identity))
         .subscribeOn(jdbcScheduler)
         .map(
             prepared -> {
               Flux<AgentRunEvent> events =
-                  agentRunService.resume(prepared.runRequest(), prepared.resume());
+                  prepared.question() == null
+                      ? agentRunService.resume(prepared.runRequest(), prepared.approval())
+                      : agentRunService.resumeQuestion(prepared.runRequest(), prepared.question());
               RunContext rc = prepared.runRequest().context();
               RunMessageContext messageContext =
                   new RunMessageContext(
@@ -207,7 +213,7 @@ public class ChatRunService {
             });
   }
 
-  private PreparedResume prepareApprovalResume(String runId, Identity identity) {
+  private PreparedResume prepareResume(String runId, Identity identity) {
     AgentRun run =
         runRepository
             .find(identity.tenantId(), runId)
@@ -226,27 +232,21 @@ public class ChatRunService {
             new io.datastoria.server.agent.domain.CheckpointContent(
                 checkpointRow.codecVersion(), checkpointRow.stateJson(), checkpointRow.checksum()));
 
-    java.util.List<ApprovalResumeRequest.Decision> decisions =
+    java.util.List<AgentPendingAction> actions =
         checkpoint.toolCalls().stream()
             .map(
-                call -> {
-                  var action =
-                      pendingActionRepository
-                          .findByToolCall(
-                              identity.tenantId(), identity.userId(), runId, call.toolCallId())
-                          .orElseThrow(
-                              () -> new NotFoundException("AgentPendingAction", call.actionId()));
-                  if (action.status() != PendingActionStatus.APPROVED
-                      && action.status() != PendingActionStatus.DENIED) {
-                    throw new ResourceInUseException("AgentPendingAction", action.id());
-                  }
-                  return new ApprovalResumeRequest.Decision(
-                      call.toolCallId(),
-                      call.toolName(),
-                      parseToolInput(call.inputJson()),
-                      action.status() == PendingActionStatus.APPROVED);
-                })
+                call ->
+                    pendingActionRepository
+                        .findByToolCall(
+                            identity.tenantId(), identity.userId(), runId, call.toolCallId())
+                        .orElseThrow(
+                            () -> new NotFoundException("AgentPendingAction", call.actionId())))
             .toList();
+    boolean question = actions.stream().anyMatch(a -> a.actionType() == PendingActionType.QUESTION);
+    if (question
+        && (actions.size() != 1 || actions.get(0).actionType() != PendingActionType.QUESTION)) {
+      throw new IllegalStateException("Question checkpoints cannot contain mixed actions");
+    }
 
     Model model =
         modelRepository
@@ -282,9 +282,45 @@ public class ChatRunService {
     runRepository.transition(
         run.tenantId(), run.id(), AgentRunStatus.RUNNING, RunTransition.starting(Instant.now()));
     RunRequest request = new RunRequest(context, adapter, config, capabilities, history, "");
+    if (question) {
+      var action = actions.get(0);
+      var call = checkpoint.toolCalls().get(0);
+      if (action.status() != PendingActionStatus.RESPONDED) {
+        throw new ResourceInUseException("AgentPendingAction", action.id());
+      }
+      return new PreparedResume(
+          request,
+          null,
+          new QuestionResumeRequest(
+              checkpointRow.sequence(),
+              checkpoint.replyId(),
+              action.id(),
+              call.toolCallId(),
+              call.toolName(),
+              parseToolInput(call.inputJson()),
+              parseQuestionResponse(action.responseJson())));
+    }
+    java.util.List<ApprovalResumeRequest.Decision> decisions =
+        java.util.stream.IntStream.range(0, actions.size())
+            .mapToObj(
+                index -> {
+                  var action = actions.get(index);
+                  var call = checkpoint.toolCalls().get(index);
+                  if (action.status() != PendingActionStatus.APPROVED
+                      && action.status() != PendingActionStatus.DENIED) {
+                    throw new ResourceInUseException("AgentPendingAction", action.id());
+                  }
+                  return new ApprovalResumeRequest.Decision(
+                      call.toolCallId(),
+                      call.toolName(),
+                      parseToolInput(call.inputJson()),
+                      action.status() == PendingActionStatus.APPROVED);
+                })
+            .toList();
     return new PreparedResume(
         request,
-        new ApprovalResumeRequest(checkpointRow.sequence(), checkpoint.replyId(), decisions));
+        new ApprovalResumeRequest(checkpointRow.sequence(), checkpoint.replyId(), decisions),
+        null);
   }
 
   private AgentRuntimeConfig resolvePinnedAgentConfig(AgentRun run, String tenantId) {
@@ -331,7 +367,8 @@ public class ChatRunService {
             clickHouseTools,
             new SqlWorkflowAgentTools(
                 adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
-            new RepositoryAgentTools(configuredRoot, mapper, toolPolicy)));
+            new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
+            new HumanInteractionAgentTools()));
   }
 
   private java.util.Map<String, Object> parseToolInput(String inputJson) {
@@ -341,6 +378,18 @@ public class ChatRunService {
           new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
     } catch (Exception e) {
       throw new IllegalStateException("Pending tool input is invalid", e);
+    }
+  }
+
+  private String parseQuestionResponse(String responseJson) {
+    try {
+      JsonNode envelope = mapper.readTree(responseJson);
+      if (!"responded".equals(envelope.path("status").asText()) || !envelope.has("response")) {
+        throw new IllegalStateException("Question response envelope is invalid");
+      }
+      return mapper.writeValueAsString(envelope.get("response"));
+    } catch (Exception e) {
+      throw new IllegalStateException("Question response is invalid", e);
     }
   }
 
@@ -361,6 +410,13 @@ public class ChatRunService {
         sessionRepository
             .findById(req.sessionId(), tenant, user)
             .orElseThrow(() -> new NotFoundException("ChatSession", req.sessionId()));
+    runRepository.findBySession(tenant, session.id()).stream()
+        .filter(run -> !run.status().isTerminal())
+        .findFirst()
+        .ifPresent(
+            active -> {
+              throw new ResourceInUseException("AgentRun", active.id());
+            });
     if (req.connectionId() == null || req.connectionId().isBlank()) {
       throw PlainTextException.badRequest("connectionId is required");
     }
@@ -509,7 +565,8 @@ public class ChatRunService {
                 clickHouseTools,
                 new SqlWorkflowAgentTools(
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
-                new RepositoryAgentTools(configuredRoot, mapper, toolPolicy))),
+                new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
+                new HumanInteractionAgentTools())),
         pins);
   }
 
@@ -627,7 +684,8 @@ public class ChatRunService {
 
   private record PreparedRun(String runId, RunRequest runRequest) {}
 
-  private record PreparedResume(RunRequest runRequest, ApprovalResumeRequest resume) {}
+  private record PreparedResume(
+      RunRequest runRequest, ApprovalResumeRequest approval, QuestionResumeRequest question) {}
 
   private record ResolvedAgent(AgentRuntimeConfig config, String agentRevisionId) {}
 

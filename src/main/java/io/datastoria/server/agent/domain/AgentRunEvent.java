@@ -33,6 +33,7 @@ public sealed interface AgentRunEvent
         AgentRunEvent.ToolOutputDelta,
         AgentRunEvent.ToolOutputAvailable,
         AgentRunEvent.ToolApprovalRequired,
+        AgentRunEvent.QuestionRequired,
         AgentRunEvent.UsageReported,
         AgentRunEvent.RunCompleted,
         AgentRunEvent.RunFailed,
@@ -132,6 +133,18 @@ public sealed interface AgentRunEvent
   }
 
   record ToolApproval(String actionId, String toolCallId, String toolName, String inputJson) {}
+
+  /** Server-side suspended question tool waiting for a durable user response. */
+  record QuestionRequired(
+      String runId,
+      long sequence,
+      Instant occurredAt,
+      String replyId,
+      String actionId,
+      String toolCallId,
+      String toolName,
+      String inputJson)
+      implements AgentRunEvent {}
 
   /** Token usage for a completed model call (MODEL_CALL_END). */
   record UsageReported(String runId, long sequence, Instant occurredAt, TokenUsage usage)

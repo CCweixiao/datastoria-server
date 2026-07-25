@@ -173,23 +173,42 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
   });
 
   const handleStop = useStableCallback(() => {
-    ChatFactory.stopClientTools(chat.id);
     stop();
   });
 
   const handleToolOutput = useStableCallback(
-    ({ tool, toolCallId, output }: { tool: string; toolCallId: string; output: unknown }) =>
-      chat.addToolOutput({
-        tool: tool as never,
-        toolCallId,
-        output: output as never,
-      })
+    async ({
+      runId,
+      actionId,
+      output,
+    }: {
+      runId: string;
+      actionId: string;
+      toolCallId: string;
+      output: unknown;
+    }) => {
+      await ChatFactory.respondToQuestion(chat, runId, actionId, output);
+    }
+  );
+  const handleApproval = useStableCallback(
+    async ({
+      runId,
+      actionId,
+      approved,
+    }: {
+      runId: string;
+      actionId: string;
+      approved: boolean;
+    }) => {
+      await ChatFactory.resolveApproval(chat, runId, actionId, approved);
+    }
   );
 
   return (
     <ChatActionProvider
       onAction={handleUserAction}
       onToolOutput={handleToolOutput}
+      onApproval={handleApproval}
       chatId={chat.id}
     >
       <div className="flex flex-col h-full bg-background overflow-hidden relative">

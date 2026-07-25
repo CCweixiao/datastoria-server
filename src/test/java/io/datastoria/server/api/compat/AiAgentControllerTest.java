@@ -242,6 +242,172 @@ class AiAgentControllerTest {
   }
 
   @Test
+  void answeredQuestionResumesFromSafeCheckpointAndStreamsToolOutput() {
+    jdbc.sql(
+            """
+            INSERT INTO ds_agent_run
+              (id,tenant_id,user_id,session_id,message_id,agent_revision_id,model_id,status,
+               connection_id,revision,created_at,updated_at)
+            VALUES
+              ('question-run',:tenant,:user,'sess-1','question-assistant','builtin-default','mdl-1',
+               'running','ch-1',0,:now,:now)
+            """)
+        .param("tenant", TENANT)
+        .param("user", USER)
+        .param("now", NOW.toString())
+        .update();
+    messageRepository.save(
+        new ChatMessage(
+            "question-user",
+            TENANT,
+            "sess-1",
+            USER,
+            "user",
+            "[{\"type\":\"text\",\"text\":\"diagnose my cluster\"}]",
+            null,
+            1,
+            NOW,
+            NOW));
+    lifecycleRecorder
+        .tap(
+            new RunMessageContext(
+                TENANT, "question-run", USER, "sess-1", "question-assistant", "mdl-1"),
+            Flux.just(
+                new AgentRunEvent.QuestionRequired(
+                    "question-run",
+                    9,
+                    NOW,
+                    "question-reply",
+                    "question-action",
+                    "question-call",
+                    "ask_user_question",
+                    """
+                    {"questions":[{"header":"Which cluster?","options":[{"id":"prod","label":"Production","input":"none"}]}]}
+                    """)))
+        .blockLast();
+
+    webTestClient
+        .post()
+        .uri("/api/ai/runs/question-run/actions/question-action:respond")
+        .header("x-datastoria-user-email", USER)
+        .header("Idempotency-Key", "answer-question")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {"response":{"optionId":"prod","label":"Production","input":"none","value":"Production"}}
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo(PendingActionStatus.RESPONDED.name());
+
+    ResumeAfterQuestionModel resumeModel = new ResumeAfterQuestionModel();
+    fakeProvider.setModel(resumeModel);
+    String sse =
+        webTestClient
+            .post()
+            .uri("/api/ai/runs/question-run:resume")
+            .header("x-datastoria-user-email", USER)
+            .header("Idempotency-Key", "resume-question")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectHeader()
+            .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(sse)
+        .contains("\"type\":\"tool-output-available\"")
+        .contains("\"value\":\"Production\"")
+        .contains("continued after answer")
+        .contains("\"type\":\"finish\"");
+    assertThat(resumeModel.observedAnswer()).contains("\"value\":\"Production\"");
+    assertThat(runRepository.find(TENANT, "question-run"))
+        .get()
+        .extracting(AgentRun::status)
+        .isEqualTo(AgentRunStatus.SUCCEEDED);
+  }
+
+  @Test
+  void questionToolCompletesFullHttpActionAndResumeRoundTrip() {
+    QuestionRoundTripModel model = new QuestionRoundTripModel();
+    fakeProvider.setModel(model);
+    String paused =
+        webTestClient
+            .post()
+            .uri("/api/ai/agent")
+            .header("x-datastoria-user-email", USER)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(streamBody("sess-1", "mdl-1", "ask which cluster"))
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(paused)
+        .contains("\"type\":\"data-pending-action\"")
+        .contains("\"actionType\":\"question\"")
+        .doesNotContain("\"type\":\"finish\"");
+    AgentRun run = runRepository.findBySession(TENANT, "sess-1").get(0);
+    String actionId =
+        jdbc.sql(
+                """
+                SELECT id FROM ds_agent_pending_action
+                WHERE tenant_id = :tenant AND run_id = :run
+                """)
+            .param("tenant", TENANT)
+            .param("run", run.id())
+            .query(String.class)
+            .single();
+    assertThat(run.status()).isEqualTo(AgentRunStatus.WAITING_INPUT);
+
+    webTestClient
+        .post()
+        .uri("/api/ai/agent")
+        .header("x-datastoria-user-email", USER)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(streamBody("sess-1", "mdl-1", "start another run"))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(409);
+
+    webTestClient
+        .post()
+        .uri("/api/ai/runs/" + run.id() + "/actions/" + actionId + ":respond")
+        .header("x-datastoria-user-email", USER)
+        .header("Idempotency-Key", "round-trip-answer")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {"response":{"optionId":"prod","label":"Production","input":"none","value":"Production"}}
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk();
+    String resumed =
+        webTestClient
+            .post()
+            .uri("/api/ai/runs/" + run.id() + ":resume")
+            .header("x-datastoria-user-email", USER)
+            .header("Idempotency-Key", "round-trip-resume")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(resumed).contains("round trip complete", "\"type\":\"finish\"");
+    assertThat(model.observedAnswer()).contains("\"value\":\"Production\"");
+  }
+
+  @Test
   void runPinsSelectedSkillRevisionAndChecksum() {
     webTestClient
         .post()
@@ -1061,6 +1227,121 @@ class AiAgentControllerTest {
 
     boolean observedDenied() {
       return observedDenied;
+    }
+  }
+
+  private static final class ResumeAfterQuestionModel implements Model {
+    private volatile String observedAnswer;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      observedAnswer =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(ToolResultBlock.class::isInstance)
+              .map(ToolResultBlock.class::cast)
+              .flatMap(result -> result.getOutput().stream())
+              .filter(TextBlock.class::isInstance)
+              .map(TextBlock.class::cast)
+              .map(TextBlock::getText)
+              .findFirst()
+              .orElse(null);
+      ChatUsage usage = ChatUsage.builder().inputTokens(2).outputTokens(2).time(0.0).build();
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(TextBlock.builder().text("continued after answer").build()))
+              .build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(usage)
+              .finishReason("stop")
+              .metadata(java.util.Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "resume-after-question";
+    }
+
+    String observedAnswer() {
+      return observedAnswer;
+    }
+  }
+
+  private static final class QuestionRoundTripModel implements Model {
+    private final AtomicInteger calls = new AtomicInteger();
+    private volatile String observedAnswer;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      if (calls.incrementAndGet() == 1) {
+        assertThat(tools).anyMatch(tool -> "ask_user_question".equals(tool.getName()));
+        return Flux.just(
+            ChatResponse.builder()
+                .content(
+                    List.of(
+                        ToolUseBlock.builder()
+                            .id("http-question-call")
+                            .name("ask_user_question")
+                            .input(
+                                java.util.Map.of(
+                                    "questions",
+                                    List.of(
+                                        java.util.Map.of(
+                                            "header",
+                                            "Which cluster?",
+                                            "options",
+                                            List.of(
+                                                java.util.Map.of(
+                                                    "id",
+                                                    "prod",
+                                                    "label",
+                                                    "Production",
+                                                    "input",
+                                                    "none"))))))
+                            .content(
+                                """
+                                {"questions":[{"header":"Which cluster?","options":[{"id":"prod","label":"Production","input":"none"}]}]}
+                                """)
+                            .state(ToolCallState.FINISHED)
+                            .build()))
+                .finishReason("tool_calls")
+                .metadata(java.util.Map.of())
+                .build());
+      }
+      observedAnswer =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(ToolResultBlock.class::isInstance)
+              .map(ToolResultBlock.class::cast)
+              .flatMap(result -> result.getOutput().stream())
+              .filter(TextBlock.class::isInstance)
+              .map(TextBlock.class::cast)
+              .map(TextBlock::getText)
+              .findFirst()
+              .orElse(null);
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(TextBlock.builder().text("round trip complete").build()))
+              .build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(ChatUsage.builder().inputTokens(2).outputTokens(2).time(0.0).build())
+              .finishReason("stop")
+              .metadata(java.util.Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "question-round-trip";
+    }
+
+    String observedAnswer() {
+      return observedAnswer;
     }
   }
 }

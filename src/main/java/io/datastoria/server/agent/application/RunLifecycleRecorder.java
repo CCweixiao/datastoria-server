@@ -152,6 +152,8 @@ public final class RunLifecycleRecorder {
             text.append(d.delta());
           } else if (e instanceof AgentRunEvent.ToolApprovalRequired approval) {
             return dispatch(() -> persistApproval(ctx, approval)).thenReturn(e);
+          } else if (e instanceof AgentRunEvent.QuestionRequired question) {
+            return dispatch(() -> persistQuestion(ctx, question)).thenReturn(e);
           } else if (e instanceof AgentRunEvent.RunCompleted) {
             String usageJson = usageJson(usage);
             String assistantText = text.toString();
@@ -216,6 +218,54 @@ public final class RunLifecycleRecorder {
               ctx.tenantId(),
               ctx.runId(),
               approval.sequence(),
+              CheckpointType.PENDING_ACTION,
+              pendingCheckpointCodec.encode(checkpoint));
+        });
+  }
+
+  private void persistQuestion(RunMessageContext ctx, AgentRunEvent.QuestionRequired question) {
+    if (pendingActions == null || checkpoints == null || pendingCheckpointCodec == null) {
+      throw new IllegalStateException("HITL persistence is not configured");
+    }
+    Instant now = Instant.now();
+    PendingActionCheckpoint checkpoint =
+        new PendingActionCheckpoint(
+            question.replyId(),
+            java.util.List.of(
+                new PendingActionCheckpoint.PendingToolCall(
+                    question.actionId(),
+                    question.toolCallId(),
+                    question.toolName(),
+                    question.inputJson())));
+    transactions.executeWithoutResult(
+        ignored -> {
+          runRepository.transition(
+              ctx.tenantId(),
+              ctx.runId(),
+              AgentRunStatus.WAITING_INPUT,
+              RunTransition.waitingForInput());
+          pendingActions.create(
+              ctx.userId(),
+              new AgentPendingAction(
+                  question.actionId(),
+                  ctx.tenantId(),
+                  ctx.runId(),
+                  question.toolCallId(),
+                  PendingActionType.QUESTION,
+                  question.inputJson(),
+                  null,
+                  null,
+                  PendingActionStatus.PENDING,
+                  now.plus(java.time.Duration.ofMinutes(15)),
+                  null,
+                  null,
+                  0,
+                  now,
+                  now));
+          checkpoints.save(
+              ctx.tenantId(),
+              ctx.runId(),
+              question.sequence(),
               CheckpointType.PENDING_ACTION,
               pendingCheckpointCodec.encode(checkpoint));
         });

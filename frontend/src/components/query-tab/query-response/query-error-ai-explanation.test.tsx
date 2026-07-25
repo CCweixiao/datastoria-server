@@ -41,7 +41,6 @@ vi.mock("@/components/settings/agent/agent-manager", () => ({
 vi.mock("@/components/chat/chat-factory", () => ({
   ChatFactory: {
     createEphemeral: createEphemeralMock,
-    stopClientTools: vi.fn(),
   },
 }));
 

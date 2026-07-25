@@ -9,6 +9,7 @@ import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.runtime.ApprovalResumeRequest;
 import io.datastoria.server.agent.runtime.CancellationRegistry;
 import io.datastoria.server.agent.runtime.HarnessAgentFactory;
+import io.datastoria.server.agent.runtime.QuestionResumeRequest;
 import io.datastoria.server.agent.runtime.RunnableAgent;
 
 import reactor.core.publisher.Flux;
@@ -93,6 +94,32 @@ public final class AgentRunService {
                 request.capabilities(),
                 request.history(),
                 resume));
+  }
+
+  /** Resumes a server-suspended question and exposes the supplied answer as a tool output. */
+  public Flux<AgentRunEvent> resumeQuestion(RunRequest request, QuestionResumeRequest resume) {
+    AgentRunEvent.ToolOutputAvailable answer =
+        new AgentRunEvent.ToolOutputAvailable(
+            request.context().runId(),
+            resume.checkpointSequence() + 1,
+            java.time.Instant.now(),
+            resume.toolCallId(),
+            resume.toolName(),
+            resume.responseJson(),
+            false,
+            false);
+    return Flux.concat(
+        Flux.just(answer),
+        execute(
+            request,
+            () ->
+                factory.resumeQuestion(
+                    request.context(),
+                    request.modelAdapter(),
+                    request.config(),
+                    request.capabilities(),
+                    request.history(),
+                    resume)));
   }
 
   private Flux<AgentRunEvent> execute(

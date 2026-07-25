@@ -177,7 +177,30 @@ public final class AiSdkStreamEncoder {
         chunk.put("approvalId", approval.actionId());
         chunk.put("toolCallId", approval.toolCallId());
         frames.add(frame(chunk));
+        ObjectNode pending = mapper.createObjectNode();
+        pending.put("type", "data-pending-action");
+        pending.put("id", approval.actionId());
+        ObjectNode data = pending.putObject("data");
+        data.put("runId", e.runId());
+        data.put("actionId", approval.actionId());
+        data.put("actionType", "approval");
+        data.put("toolCallId", approval.toolCallId());
+        data.put("toolName", approval.toolName());
+        data.set("request", parseJson(approval.inputJson()));
+        frames.add(frame(pending));
       }
+    } else if (event instanceof AgentRunEvent.QuestionRequired e) {
+      ObjectNode chunk = mapper.createObjectNode();
+      chunk.put("type", "data-pending-action");
+      chunk.put("id", e.actionId());
+      ObjectNode data = chunk.putObject("data");
+      data.put("runId", e.runId());
+      data.put("actionId", e.actionId());
+      data.put("actionType", "question");
+      data.put("toolCallId", e.toolCallId());
+      data.put("toolName", e.toolName());
+      data.set("request", parseJson(e.inputJson()));
+      frames.add(frame(chunk));
     } else if (event instanceof AgentRunEvent.UsageReported e) {
       this.inputTokens += e.usage().inputTokens();
       this.outputTokens += e.usage().outputTokens();

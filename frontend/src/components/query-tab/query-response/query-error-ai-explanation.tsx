@@ -448,7 +448,6 @@ export const QueryErrorAIExplanation = memo(function QueryErrorAIExplanation({
       });
 
       if (cancelled) {
-        ChatFactory.stopClientTools(createdChat.id);
         return;
       }
 
@@ -524,7 +523,6 @@ const QueryErrorAIExplanationContent = memo(function QueryErrorAIExplanationCont
 
   useEffect(() => {
     return () => {
-      ChatFactory.stopClientTools(chat.id);
       stop();
     };
   }, [chat, stop]);

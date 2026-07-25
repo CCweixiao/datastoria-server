@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 起始提交：`1acedf9`
-> 状态：**P8.1 已完成；P8.2 approval 暂停/重启恢复已完成，question suspension 进行中**
+> 状态：**P8 已完成，等待合并后最终联调确认**
 
 ## P8 权威范围
 
@@ -102,7 +102,27 @@ approval/deny 恢复链路现已完成：
 - continuation mapper 从 checkpoint event sequence 继续，忽略重复 `AgentStart`；
 - SSE 持久帧从 `ds_agent_event` 当前最大 sequence 追加，不会在续流时从 1 重置。
 
-### P8.2 当前证据
+question suspension 与前端恢复链路也已完成：
+
+- `ask_user_question` 是服务端 AgentScope suspension tool，浏览器不再执行此 tool；
+- question 与 approval 均输出 `data-pending-action`，携带稳定的 run/action/tool 标识；
+- 前端调用 `respond/approve/deny` action API，最后一个待处理 action 完成后再 POST
+  `/api/ai/runs/{runId}:resume`；
+- approval 通过 `ConfirmResult` 恢复；question 通过持久答案构造成功的
+  `ToolResultBlock` 恢复；
+- 新 JVM 中仅依赖安全 checkpoint、持久消息和固定 revision 重建最小 AgentScope 状态；
+- 真实 fake-model HTTP 流覆盖首次暂停、action 落库、服务恢复与最终 SSE finish。
+
+会话与上下文策略已固定：
+
+- 同一 session 同时只允许一个 `QUEUED/RUNNING/WAITING_INPUT` run，新请求返回 409；
+- 长会话启用 AgentScope in-context compaction（默认 50 messages）；
+- compaction 禁止 memory flush 和 session offload，memory tools/hooks、workspace context
+  仍保持关闭，不把 prompt 写入 AgentScope 工作区；
+- compaction 使用安全错误包装，provider 原始异常不会被第三方 middleware 日志输出；
+- DataStoria 持久 chat message 是跨 run/跨 JVM 的权威会话记忆。
+
+### P8 最终证据
 
 - pending action repository、HTTP controller、AgentScope event mapper、AI SDK encoder 专项：
   36/36；
@@ -110,10 +130,17 @@ approval/deny 恢复链路现已完成：
 - approval 边界集成测试验证 `WAITING_INPUT + pending action + PENDING_ACTION checkpoint`
   原子落库；
 - 暂停原因回归测试覆盖 permission asking、tool suspended、middleware pause；
-- Java 全量：348/348；Spotless 通过。
+- approval、deny、question 的 JVM 内与模拟重启恢复均有 AgentScope/HTTP 集成测试；
+- session 单活动 run、长历史 compaction、action TTL/CAS、断线事件重放均有回归测试；
+- Java 全量：355/355；Spotless 通过；
+- 前端 Vitest：58 files、302/302；TypeScript typecheck 通过；
+- Next.js production build（webpack）通过；
+- MySQL schema parity 测试因本机无 Docker 未启动容器；SQLite V1–V13 迁移与全部
+  repository/API 测试通过。
 
-## 尚未完成
+## P8 退出结论
 
-- `ask_user_question` 服务端 suspension 工具和 question wire frame；
-- 前端 action API 交互替换 client executor；
-- memory/compaction、session 并发策略和完整 P8 回归。
+P8 权威范围内的服务端 suspension、持久 action、恢复、重放、前端 action API、
+session 并发、compaction 和自动化回归均已完成。真实 provider 的浏览器对话仍要求本地
+为所选 provider 配置有效的服务端 credential；credential 不属于代码交付物，缺失时
+模型列表会被前端按可用性过滤。

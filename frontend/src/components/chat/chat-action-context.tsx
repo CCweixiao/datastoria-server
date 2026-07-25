@@ -9,7 +9,13 @@ export type UserActionInput = {
 
 interface ChatActionContextType {
   onAction: (input: UserActionInput) => void;
-  onToolOutput: (input: { tool: string; toolCallId: string; output: unknown }) => Promise<void>;
+  onToolOutput: (input: {
+    runId: string;
+    actionId: string;
+    toolCallId: string;
+    output: unknown;
+  }) => Promise<void>;
+  onApproval: (input: { runId: string; actionId: string; approved: boolean }) => Promise<void>;
   chatId?: string;
 }
 
@@ -27,15 +33,17 @@ export function ChatActionProvider({
   children,
   onAction,
   onToolOutput,
+  onApproval,
   chatId,
 }: {
   children: React.ReactNode;
   onAction: (input: UserActionInput) => void;
-  onToolOutput: (input: { tool: string; toolCallId: string; output: unknown }) => Promise<void>;
+  onToolOutput: ChatActionContextType["onToolOutput"];
+  onApproval: ChatActionContextType["onApproval"];
   chatId?: string;
 }) {
   return (
-    <ChatActionContext.Provider value={{ onAction, onToolOutput, chatId }}>
+    <ChatActionContext.Provider value={{ onAction, onToolOutput, onApproval, chatId }}>
       {children}
     </ChatActionContext.Provider>
   );

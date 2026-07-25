@@ -33,13 +33,15 @@ class AgentToolRegistryTest {
             "optimize_sql",
             "generate_visualization",
             "search_file",
-            "read_file");
+            "read_file",
+            "ask_user_question");
     var toolkit =
         registry.createToolkit(
             java.util.List.of(
                 new ClickHouseAgentTools(null, null, null),
                 new SqlWorkflowAgentTools(null, null, null),
-                new RepositoryAgentTools(null)));
+                new RepositoryAgentTools(null),
+                new HumanInteractionAgentTools()));
     assertThat(toolkit.getToolNames()).isEqualTo(registry.availableToolNames());
     assertThat(toolkit.getToolGroup(AgentToolRegistry.READ_ONLY_GROUP).getTools())
         .containsExactlyInAnyOrder("get_tables", "explore_schema", "validate_sql");

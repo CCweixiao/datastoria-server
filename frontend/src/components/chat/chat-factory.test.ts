@@ -1,8 +1,9 @@
 import type { AppUIMessage } from "@/lib/ai/ai-types";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildAgentContextWithResponseLanguage,
   buildSendMessagesRequestPayload,
+  ChatFactory,
 } from "./chat-factory";
 import { NO_CONNECTION_SESSION_CONNECTION_ID } from "./session/session-connection-id";
 
@@ -91,7 +92,7 @@ describe("buildSendMessagesRequestPayload", () => {
     });
   });
 
-  it("marks continuation requests for completed tool outputs", () => {
+  it("does not create legacy client continuation requests for completed tool outputs", () => {
     const payload = buildSendMessagesRequestPayload({
       sessionId: "session-1",
       connectionId: "default@https://example.com",
@@ -113,9 +114,7 @@ describe("buildSendMessagesRequestPayload", () => {
       chatPersistenceMode: "remote",
     });
 
-    expect(payload).toMatchObject({
-      continuation: true,
-    });
+    expect(payload).not.toHaveProperty("continuation");
   });
 
   it("keeps pruneValidateSql authoritative over agentContext overrides", () => {
@@ -248,5 +247,58 @@ describe("buildAgentContextWithResponseLanguage", () => {
 
   it("does not force English as an explicit response language", () => {
     expect(buildAgentContextWithResponseLanguage(undefined, "en")).toBeUndefined();
+  });
+});
+
+describe("ChatFactory durable actions", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function resumableChat() {
+    const resumeStream = vi.fn().mockResolvedValue(undefined);
+    const chat = { resumeStream } as never;
+    (
+      ChatFactory as unknown as {
+        resumeTargets: WeakMap<object, (runId: string) => void>;
+      }
+    ).resumeTargets.set(chat, vi.fn());
+    return { chat, resumeStream };
+  }
+
+  it("responds to a question then resumes the same run stream", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { chat, resumeStream } = resumableChat();
+
+    await ChatFactory.respondToQuestion(chat, "run/1", "action/1", { value: "Production" });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/api/ai/runs/run%2F1/actions/action%2F1:respond"
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      response: { value: "Production" },
+    });
+    expect(resumeStream).toHaveBeenCalledOnce();
+  });
+
+  it("waits for every approval before resuming a batched checkpoint", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ pendingActions: [{ status: "PENDING" }] }), {
+          status: 200,
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const { chat, resumeStream } = resumableChat();
+
+    await ChatFactory.resolveApproval(chat, "run-1", "action-1", true);
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain(":approve");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(resumeStream).not.toHaveBeenCalled();
   });
 });

@@ -10,8 +10,16 @@ import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.message.ContentBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolResultMessage;
+import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.model.ToolSchema;
 import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
@@ -20,8 +28,11 @@ import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.RunContext;
+
+import reactor.core.publisher.Flux;
 
 /**
  * Builds a run-scoped {@link RunnableAgent} backed by a minimal-permission {@link HarnessAgent}.
@@ -150,6 +161,43 @@ public final class HarnessAgentFactory {
     return runnable(context, agent, List.of(confirmation), resume.checkpointSequence());
   }
 
+  /** Restores a server-suspended question and supplies its durable response as a tool result. */
+  public RunnableAgent resumeQuestion(
+      RunContext context,
+      ModelAdapter modelAdapter,
+      AgentRuntimeConfig config,
+      AgentRunCapabilities capabilities,
+      List<ChatTurn> history,
+      QuestionResumeRequest resume) {
+    Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
+    PermissionContextState permissionContext =
+        capabilities.permissionContext() == null
+            ? allowRegisteredServerTools(toolkit)
+            : capabilities.permissionContext();
+    ToolUseBlock pending =
+        ToolUseBlock.builder()
+            .id(resume.toolCallId())
+            .name(resume.toolName())
+            .input(resume.input())
+            .content(writeToolInput(resume.input()))
+            .state(ToolCallState.ALLOWED)
+            .build();
+    primeRestartState(context, history, List.of(pending), permissionContext, resume.replyId());
+
+    ToolResultBlock result =
+        new ToolResultBlock(
+            resume.toolCallId(),
+            resume.toolName(),
+            List.of(TextBlock.builder().text(resume.responseJson()).build()),
+            Map.of(),
+            ToolResultState.SUCCESS);
+    HarnessAgent agent =
+        buildAgent(context, modelAdapter, config, capabilities, toolkit, permissionContext);
+    // checkpoint+1 is reserved for the synthetic ToolOutputAvailable emitted by AgentRunService.
+    return runnable(
+        context, agent, List.of(new ToolResultMessage(result)), resume.checkpointSequence() + 1);
+  }
+
   private HarnessAgent buildAgent(
       RunContext context,
       ModelAdapter modelAdapter,
@@ -157,11 +205,12 @@ public final class HarnessAgentFactory {
       AgentRunCapabilities capabilities,
       Toolkit toolkit,
       PermissionContextState permissionContext) {
+    Model model = modelAdapter.modelFor(context);
     HarnessAgent.Builder builder =
         HarnessAgent.builder()
             .name("run-" + context.runId())
             .sysPrompt(config.systemPrompt())
-            .model(modelAdapter.modelFor(context))
+            .model(model)
             .toolkit(toolkit)
             .permissionContext(permissionContext)
             .stateStore(stateStore)
@@ -173,7 +222,12 @@ public final class HarnessAgentFactory {
     }
     HarnessAgent agent =
         builder
-            .disableCompaction()
+            .compaction(
+                CompactionConfig.builder()
+                    .flushBeforeCompact(false)
+                    .offloadBeforeCompact(false)
+                    .model(safeCompactionModel(model))
+                    .build())
             .disableFilesystemTools()
             .disableShellTool()
             .disableMemoryTools()
@@ -188,6 +242,29 @@ public final class HarnessAgentFactory {
             .build();
     agent.getToolkit().removeTool("wait_async_results");
     return agent;
+  }
+
+  private Model safeCompactionModel(Model delegate) {
+    return new Model() {
+      @Override
+      public Flux<ChatResponse> stream(
+          List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+        return delegate.stream(messages, tools, options)
+            .onErrorMap(
+                ignored ->
+                    new IllegalStateException("Model unavailable during context compaction"));
+      }
+
+      @Override
+      public String getModelName() {
+        return delegate.getModelName();
+      }
+
+      @Override
+      public int getContextWindowSize() {
+        return delegate.getContextWindowSize();
+      }
+    };
   }
 
   private RunnableAgent runnable(

@@ -29,7 +29,13 @@ public class AgentToolRegistry {
           "collect_cluster_status",
           "collect_rca_evidence");
   private static final List<String> WORKFLOW_TOOLS =
-      List.of("generate_sql", "optimize_sql", "generate_visualization", "search_file", "read_file");
+      List.of(
+          "generate_sql",
+          "optimize_sql",
+          "generate_visualization",
+          "search_file",
+          "read_file",
+          "ask_user_question");
 
   private final Set<String> availableToolNames;
 
@@ -38,6 +44,7 @@ public class AgentToolRegistry {
     register(catalog, new ClickHouseAgentTools(null, null, null));
     register(catalog, new SqlWorkflowAgentTools(null, null, null));
     register(catalog, new RepositoryAgentTools(null));
+    register(catalog, new HumanInteractionAgentTools());
     availableToolNames = Set.copyOf(catalog.getToolNames());
   }
 

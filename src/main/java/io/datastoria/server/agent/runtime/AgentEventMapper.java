@@ -148,6 +148,24 @@ public final class AgentEventMapper {
       case TOOL_RESULT_END:
         ToolResultEndEvent resultEnd = (ToolResultEndEvent) event;
         ToolResultState state = resultEnd.getState();
+        if (state == ToolResultState.RUNNING
+            && "ask_user_question".equals(resultEnd.getToolCallName())) {
+          String input =
+              normalizeJson(
+                  toolInputs
+                      .getOrDefault(resultEnd.getToolCallId(), new StringBuilder("{}"))
+                      .toString());
+          return Optional.of(
+              new AgentRunEvent.QuestionRequired(
+                  runId,
+                  seq(),
+                  now(),
+                  resultEnd.getReplyId(),
+                  stableActionId(context.runId(), resultEnd.getToolCallId()),
+                  resultEnd.getToolCallId(),
+                  resultEnd.getToolCallName(),
+                  input));
+        }
         return Optional.of(
             new AgentRunEvent.ToolOutputAvailable(
                 runId,

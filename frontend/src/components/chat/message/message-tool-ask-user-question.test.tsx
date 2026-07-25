@@ -82,6 +82,14 @@ function clickText(container: HTMLElement, text: string) {
 }
 
 describe("MessageToolAskUserQuestion", () => {
+  const pendingAction = {
+    runId: "run-1",
+    actionId: "question-1",
+    actionType: "question" as const,
+    toolCallId: "ask-user-question-1",
+    toolName: "ask_user_question",
+    request: {},
+  };
   let container: HTMLDivElement;
   let root: Root;
 
@@ -118,6 +126,7 @@ describe("MessageToolAskUserQuestion", () => {
               ],
             },
           })}
+          pendingAction={pendingAction}
           isRunning={false}
         />
       );
@@ -131,7 +140,13 @@ describe("MessageToolAskUserQuestion", () => {
 
   it("submits direct radio choices without requiring extra text", async () => {
     act(() => {
-      root.render(<MessageToolAskUserQuestion part={createToolPart()} isRunning={false} />);
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart()}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
     });
 
     clickText(container, "Last 3 hours");
@@ -145,7 +160,8 @@ describe("MessageToolAskUserQuestion", () => {
     });
 
     expect(onToolOutputMock).toHaveBeenCalledWith({
-      tool: "ask_user_question",
+      runId: "run-1",
+      actionId: "question-1",
       toolCallId: "ask-user-question-1",
       output: {
         optionId: "last_3h",
@@ -158,7 +174,13 @@ describe("MessageToolAskUserQuestion", () => {
 
   it("still requires typed input for custom options", async () => {
     act(() => {
-      root.render(<MessageToolAskUserQuestion part={createToolPart()} isRunning={false} />);
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart()}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
     });
 
     clickText(container, "Custom (I'll specify)");
@@ -176,7 +198,13 @@ describe("MessageToolAskUserQuestion", () => {
 
   it("submits the selected choice for select options", async () => {
     act(() => {
-      root.render(<MessageToolAskUserQuestion part={createSelectToolPart()} isRunning={false} />);
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createSelectToolPart()}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
     });
 
     expect(container.querySelector("textarea")).toBeNull();
@@ -189,7 +217,8 @@ describe("MessageToolAskUserQuestion", () => {
     });
 
     expect(onToolOutputMock).toHaveBeenCalledWith({
-      tool: "ask_user_question",
+      runId: "run-1",
+      actionId: "question-1",
       toolCallId: "ask-user-question-1",
       output: {
         optionId: "find_expensive_query",

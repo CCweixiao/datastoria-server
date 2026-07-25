@@ -1,8 +1,8 @@
 import { AppLogo } from "@/components/app-logo";
 import { UserProfileImage } from "@/components/user-profile-image";
-import type { AppUIMessage, FilePart, ToolPart } from "@/lib/ai/ai-types";
+import type { AppUIMessage, FilePart, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
 import { CLICKHOUSE_TOOL_NAMES } from "@/lib/ai/tools/clickhouse/clickhouse-tools";
-import { CLIENT_TOOL_NAMES } from "@/lib/ai/tools/client/client-tools";
+import { HUMAN_INTERACTION_TOOL_NAMES } from "@/lib/ai/tools/server/human-interaction-types";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
 import { DateTimeExtension } from "@/lib/datetime-utils";
 import { cn } from "@/lib/utils";
@@ -176,11 +176,13 @@ const ChatMessagePart = memo(
     isUser,
     isRunning = true,
     messageId,
+    pendingActions,
   }: {
     part: AppUIMessage["parts"][0];
     isUser: boolean;
     isRunning?: boolean;
     messageId?: string;
+    pendingActions?: Map<string, PendingActionData>;
   }) {
     if (part.type === "text") {
       if (isUser) {
@@ -221,8 +223,18 @@ const ChatMessagePart = memo(
       return <MessageToolReadFile part={part} isRunning={isRunning} />;
     }
     // CLIENT TOOLS
-    else if (toolName === CLIENT_TOOL_NAMES.ASK_USER_QUESTION) {
-      return <MessageToolAskUserQuestion part={part} isRunning={isRunning} />;
+    else if (toolName === HUMAN_INTERACTION_TOOL_NAMES.ASK_USER_QUESTION) {
+      return (
+        <MessageToolAskUserQuestion
+          part={part}
+          pendingAction={
+            (part as ToolPart).toolCallId
+              ? pendingActions?.get((part as ToolPart).toolCallId as string)
+              : undefined
+          }
+          isRunning={isRunning}
+        />
+      );
     } else if (toolName === CLICKHOUSE_TOOL_NAMES.EXECUTE_SQL) {
       return <MessageToolExecuteSql part={part} isRunning={isRunning} />;
     } else if (toolName === CLICKHOUSE_TOOL_NAMES.VALIDATE_SQL) {
@@ -246,7 +258,18 @@ const ChatMessagePart = memo(
     }
     // GENERAL TOOLS
     else if (toolName) {
-      return <MessageToolGeneral toolName={toolName} part={part} isRunning={isRunning} />;
+      return (
+        <MessageToolGeneral
+          toolName={toolName}
+          part={part}
+          pendingAction={
+            (part as ToolPart).toolCallId
+              ? pendingActions?.get((part as ToolPart).toolCallId as string)
+              : undefined
+          }
+          isRunning={isRunning}
+        />
+      );
     }
 
     return null;
@@ -296,11 +319,13 @@ const CollapsedToolCallGroup = memo(function CollapsedToolCallGroup({
   isUser,
   isRunning,
   messageId,
+  pendingActions,
 }: {
   parts: MessagePart[];
   isUser: boolean;
   isRunning: boolean;
   messageId?: string;
+  pendingActions?: Map<string, PendingActionData>;
 }) {
   const { state, success } = getToolGroupState(parts);
 
@@ -321,6 +346,7 @@ const CollapsedToolCallGroup = memo(function CollapsedToolCallGroup({
             isUser={isUser}
             isRunning={isRunning}
             messageId={messageId}
+            pendingActions={pendingActions}
           />
         ))}
       </div>
@@ -367,6 +393,13 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === "user";
   const timestamp = resolveMessageTimestamp(message);
   const parts = message.parts || [];
+  const pendingActions = new Map<string, PendingActionData>();
+  for (const part of parts) {
+    if (part.type === "data-pending-action") {
+      const data = part.data as PendingActionData;
+      if (data?.toolCallId) pendingActions.set(data.toolCallId, data);
+    }
+  }
   const partGroups = groupRenderableParts(parts);
   const error = (message as { error?: Error }).error;
 
@@ -418,6 +451,7 @@ export const ChatMessage = memo(function ChatMessage({
                     isUser={isUser}
                     isRunning={isRunning}
                     messageId={message.id}
+                    pendingActions={pendingActions}
                   />
                 ) : (
                   <ChatMessagePart
@@ -426,6 +460,7 @@ export const ChatMessage = memo(function ChatMessage({
                     isUser={isUser}
                     isRunning={isRunning}
                     messageId={message.id}
+                    pendingActions={pendingActions}
                   />
                 )
               )}

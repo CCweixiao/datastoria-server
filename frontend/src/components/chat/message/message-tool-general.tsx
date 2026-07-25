@@ -1,5 +1,7 @@
-import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
-import { memo } from "react";
+import { Button } from "@/components/ui/button";
+import type { AppUIMessage, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
+import { memo, useState } from "react";
+import { useChatAction } from "../chat-action-context";
 import { CollapsiblePart } from "./collapsible-part";
 import { ToolProgressIndicator } from "./tool-progress-indicator";
 
@@ -7,13 +9,19 @@ export const MessageToolGeneral = memo(function MessageToolGeneral({
   toolName,
   part,
   isRunning = true,
+  pendingAction,
 }: {
   toolName: string;
   part: AppUIMessage["parts"][0];
   isRunning?: boolean;
+  pendingAction?: PendingActionData;
 }) {
   const toolPart = part as ToolPart;
   const state = toolPart.state;
+  const { onApproval } = useChatAction();
+  const [isResolving, setIsResolving] = useState(false);
+  const [isResolved, setIsResolved] = useState(false);
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
 
   // Extract toolCallId from the part - try multiple possible locations
   const toolCallId =
@@ -34,6 +42,61 @@ export const MessageToolGeneral = memo(function MessageToolGeneral({
       )}
 
       <ToolProgressIndicator toolCallId={toolCallId} />
+
+      {pendingAction?.actionType === "approval" &&
+        state === "approval-requested" &&
+        !isResolved && (
+        <div className="mt-2 flex items-center gap-2">
+          <Button
+            size="sm"
+            disabled={isResolving}
+            onClick={async () => {
+              setIsResolving(true);
+              setResolutionError(null);
+              try {
+                await onApproval({
+                  runId: pendingAction.runId,
+                  actionId: pendingAction.actionId,
+                  approved: true,
+                });
+                setIsResolved(true);
+              } catch (error) {
+                setResolutionError(
+                  error instanceof Error ? error.message : "Failed to approve action."
+                );
+                setIsResolving(false);
+              }
+            }}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isResolving}
+            onClick={async () => {
+              setIsResolving(true);
+              setResolutionError(null);
+              try {
+                await onApproval({
+                  runId: pendingAction.runId,
+                  actionId: pendingAction.actionId,
+                  approved: false,
+                });
+                setIsResolved(true);
+              } catch (error) {
+                setResolutionError(
+                  error instanceof Error ? error.message : "Failed to deny action."
+                );
+                setIsResolving(false);
+              }
+            }}
+          >
+            Deny
+          </Button>
+          {resolutionError && <span className="text-xs text-destructive">{resolutionError}</span>}
+        </div>
+      )}
 
       {toolPart.output != null && (
         <div className="mt-1 max-h-[300px] overflow-auto text-[10px] text-muted-foreground">
