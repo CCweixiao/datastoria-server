@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 
 import io.datastoria.server.TestDbHelper;
@@ -26,6 +27,7 @@ class SqliteChatSessionRepositoryTest {
 
   @Autowired ChatSessionRepository repo;
   @Autowired TestDbHelper dbHelper;
+  @Autowired JdbcClient jdbc;
 
   @BeforeEach
   void clean() {
@@ -52,12 +54,13 @@ class SqliteChatSessionRepositoryTest {
   }
 
   @Test
-  void findPageOrdersByUpdatedAtDescThenIdDesc() throws Exception {
+  void findPageOrdersByUpdatedAtDescThenIdDesc() {
     repo.save(newSession("sess_1", "ch-test", "T1"));
-    Thread.sleep(5);
     repo.save(newSession("sess_2", "ch-test", "T2"));
-    Thread.sleep(5);
     repo.save(newSession("sess_0", "ch-test", "T0"));
+    setUpdatedAt("sess_1", "2026-07-25T09:00:01Z");
+    setUpdatedAt("sess_2", "2026-07-25T09:00:02Z");
+    setUpdatedAt("sess_0", "2026-07-25T09:00:03Z");
 
     SessionPage page = repo.findPage(TENANT, USER, null, null, 100);
     assertThat(page.sessions()).hasSize(3);
@@ -68,12 +71,13 @@ class SqliteChatSessionRepositoryTest {
   }
 
   @Test
-  void findPagePaginatesWithOpaqueCursor() throws Exception {
+  void findPagePaginatesWithOpaqueCursor() {
     repo.save(newSession("sess_1", "ch-test", "T1"));
-    Thread.sleep(5);
     repo.save(newSession("sess_2", "ch-test", "T2"));
-    Thread.sleep(5);
     repo.save(newSession("sess_3", "ch-test", "T3"));
+    setUpdatedAt("sess_1", "2026-07-25T09:00:01Z");
+    setUpdatedAt("sess_2", "2026-07-25T09:00:02Z");
+    setUpdatedAt("sess_3", "2026-07-25T09:00:03Z");
 
     SessionPage first = repo.findPage(TENANT, USER, null, null, 2);
     assertThat(first.sessions()).hasSize(2);
@@ -89,7 +93,7 @@ class SqliteChatSessionRepositoryTest {
   }
 
   @Test
-  void findPageFiltersByConnectionId() throws Exception {
+  void findPageFiltersByConnectionId() {
     repo.save(newSession("sess_a", "ch-prod", "A"));
     repo.save(newSession("sess_b", "ch-test", "B"));
     repo.save(newSession("sess_c", "ch-test", "C"));
@@ -127,11 +131,12 @@ class SqliteChatSessionRepositoryTest {
   }
 
   @Test
-  void findAllByConnectionReturnsAllMatchesOrdered() throws Exception {
+  void findAllByConnectionReturnsAllMatchesOrdered() {
     repo.save(newSession("a", "ch-x", "A"));
-    Thread.sleep(5);
     repo.save(newSession("b", "ch-x", "B"));
     repo.save(newSession("c", "ch-y", "C"));
+    setUpdatedAt("a", "2026-07-25T09:00:01Z");
+    setUpdatedAt("b", "2026-07-25T09:00:02Z");
 
     var rows = repo.findAllByConnection(TENANT, USER, "ch-x");
     assertThat(rows).hasSize(2);
@@ -141,6 +146,13 @@ class SqliteChatSessionRepositoryTest {
 
   private ChatSession newSession(String id, String conn, String title) {
     return newSession(id, conn, title, TENANT, USER);
+  }
+
+  private void setUpdatedAt(String id, String updatedAt) {
+    jdbc.sql("UPDATE ds_chat_session SET updated_at = :updatedAt WHERE id = :id")
+        .param("updatedAt", updatedAt)
+        .param("id", id)
+        .update();
   }
 
   private ChatSession newSession(String id, String conn, String title, String tenant, String user) {

@@ -1,0 +1,48 @@
+{
+  "get_tables": {
+    "input": {
+      "name_pattern": "%events%",
+      "database": "datastoria_test",
+      "limit": 20
+    },
+    "output": [
+      {
+        "database": "datastoria_test",
+        "table": "query_events",
+        "engine": "MergeTree",
+        "partition_key": "toYYYYMM(event_date)"
+      }
+    ]
+  },
+  "explore_schema": {
+    "input": {
+      "tables": [
+        {
+          "table": "datastoria_test.query_events",
+          "columns": ["duration_ms"]
+        }
+      ]
+    },
+    "output": [
+      {
+        "database": "datastoria_test",
+        "table": "query_events",
+        "columns": [{ "name": "duration_ms", "type": "UInt32" }],
+        "engine": "MergeTree",
+        "sortingKey": "tenant_id, service, event_date, query_id",
+        "primaryKey": "tenant_id, service, event_date, query_id",
+        "partitionBy": "toYYYYMM(event_date)",
+        "totalColumns": 9,
+        "truncated": false
+      }
+    ]
+  },
+  "validate_sql": {
+    "input": {
+      "sql": "SELECT duration_ms FROM datastoria_test.query_events LIMIT 1"
+    },
+    "output": {
+      "success": true
+    }
+  }
+}

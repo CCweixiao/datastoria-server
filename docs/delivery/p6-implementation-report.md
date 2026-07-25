@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 起始提交：`e952939`
-> 状态：**P6.1 已完成；P6 整体仍在进行**
+> 状态：**P6.1、P6.2 已完成；P6 达到退出条件**
 
 ## P6.1：三工具契约与运行时护栏
 
@@ -47,12 +47,39 @@ DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -B -ntp -Dtest=LocalClickHouseIT test
 - Java 全量 308/308，package、Spotless 通过；
 - 前端全量 292/292，typecheck、Prettier 通过。
 
-## P6 后续项
+## P6.2：Golden、三工具 Agent E2E 与网络取消
 
-在以下证据完成前不得把 P6 标记完成：
+`docs/fixtures/tools/p6-readonly-contract.json` 固定三个工具的 input/output Golden。Java
+AgentScope schema snapshot 验证同一 fixture 的输入字段，前端 Zod 同时解析输入和输出样例；真实
+ClickHouse 集成测试验证 Java 输出的对应字段和值。
 
-1. mock-model 通过真实 AgentScope Toolkit 连续调用三个工具的 SSE E2E；
-2. Java/前端共享的三工具 input/output Golden fixture；
-3. 网络请求和日志的 password/Authorization 扫描；
-4. 连接中途取消传播到 WebClient 的专项证据；
-5. 完成上述增量后再次执行全量 Java、前端和真实 ClickHouse 最终门禁。
+本地集成测试还启动完整 `/api/ai/agent` SSE：
+
+1. mock model 从真实 AgentScope schema 选择 `get_tables`；
+2. 读取工具结果后调用 `explore_schema`；
+3. 再调用 `validate_sql`；
+4. 模型确认三份真实 ClickHouse 输出并结束，SSE 返回 `[DONE]`。
+
+浏览器在这条链路中只提交 `connectionId` 并渲染 tool event，不执行 SQL。新增 Reactor Netty
+网络测试在 ClickHouse 响应挂起时取消订阅，确认取消传播到服务端 response publisher；同时确认
+密码只用于服务端 Basic Authorization，不进入 SQL body。生产代码日志扫描未发现记录 password、
+Authorization、credential 或 secret 的语句；现有 API 测试继续验证明文密码不出现在响应。
+
+## P6 最终门禁
+
+```bash
+./mvnw -B -ntp spotless:apply clean verify
+npm run test -- --run && npm run typecheck && npm run format
+DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -B -ntp -Dtest=LocalClickHouseIT test
+```
+
+- Java 全量：310/310，package、Spotless 通过；
+- 前端全量：295/295（新增 Golden 3/3），typecheck、Prettier 通过；
+- 本地 ClickHouse：1/1，包含真实三工具 AgentScope SSE 链；
+- 全量首次运行暴露 session pagination 测试依赖 `Thread.sleep`/墙钟的偶发排序；测试已改用
+  确定性 `updated_at` fixture，专项 10/10，第二次 Java 全量通过。
+- 本机无 Docker，MySQL `SchemaParityTest` 仍为 0 tests；按当前 SQLite 开发约束不阻塞 P6。
+
+P6 退出条件已满足：`get_tables`、`explore_schema`、`validate_sql` 完全由服务端 Toolkit
+执行，前端仅保留 schema、事件类型和渲染。下一阶段为 P7，其余五个工具不能沿用当前最小实现
+直接验收，必须补只读 SQL classifier、参数/输出契约和真实工作流证据。

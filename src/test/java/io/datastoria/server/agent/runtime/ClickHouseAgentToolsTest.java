@@ -11,6 +11,9 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.Toolkit;
 
@@ -73,6 +76,22 @@ class ClickHouseAgentToolsTest {
         .hasMessageContaining("database.table");
   }
 
+  @Test
+  void agentScopeInputsMatchSharedFrontendGoldenFixture() throws Exception {
+    JsonNode contract =
+        new ObjectMapper()
+            .readTree(
+                java.nio.file.Files.readString(
+                    java.nio.file.Path.of("docs/fixtures/tools/p6-readonly-contract.json")));
+    Toolkit toolkit = new Toolkit();
+    toolkit.registerTool(new ClickHouseAgentTools(null, null, null));
+
+    for (String name : List.of("get_tables", "explore_schema", "validate_sql")) {
+      assertThat(properties(schema(toolkit, name)).keySet())
+          .containsAll(iterableFieldNames(contract.path(name).path("input")));
+    }
+  }
+
   private static Map<String, Object> schema(Toolkit toolkit, String name) {
     return toolkit.getToolSchemas().stream()
         .filter(schema -> name.equals(schema.getName()))
@@ -84,5 +103,11 @@ class ClickHouseAgentToolsTest {
   @SuppressWarnings("unchecked")
   private static Map<String, Object> properties(Map<String, Object> schema) {
     return (Map<String, Object>) schema.get("properties");
+  }
+
+  private static List<String> iterableFieldNames(JsonNode node) {
+    List<String> names = new java.util.ArrayList<>();
+    node.fieldNames().forEachRemaining(names::add);
+    return names;
   }
 }
