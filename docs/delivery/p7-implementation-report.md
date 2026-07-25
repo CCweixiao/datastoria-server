@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 起始提交：`0ffc2db`
-> 状态：**P7.1 已完成；P7 整体仍在进行**
+> 状态：**P7.1、P7.2 已完成；P7 整体仍在进行**
 
 ## P7.1：`execute_sql` 只读边界
 
@@ -37,10 +37,34 @@ run-scoped 并发、最终输出 cap 和审计策略保护。
 - 对真实工具调用 DDL 和多语句在网络请求前被拒绝；
 - 真实 P6 AgentScope SSE 回归继续通过。
 
+## P7.2：诊断与证据工具
+
+本切片将四个历史 Node/browser 工具契约迁入 Java AgentScope：
+
+- `search_query_log`：支持 patterns/executions、六种排序指标、聚合方式、相对/绝对时间窗和
+  经过字段/操作符白名单编译的 predicates；用户值只作为转义后的 ClickHouse literal。
+- `collect_cluster_status`：支持 snapshot/windowed、健康分类、阈值和趋势摘要；本地 profile
+  无历史源的指标明确返回 `UNKNOWN`，不伪造数据。
+- `collect_sql_optimization_evidence`：支持 SQL 或 query_id、light/full 模式，并从真实
+  `EXPLAIN indexes = 1` 与 `EXPLAIN PIPELINE` 构造证据。
+- `collect_rca_evidence`：输出 `schema_version=1` 的 observations/candidates/actions/gaps
+  结构，严格校验 symptom、scope、target、时间范围和阈值。
+
+A27 不再由 Controller 直接读取数据库：`RcaTemplateCatalog` 统一提供 enabled template，
+运行开始时固定 `template_key/revision/checksum`，RCA 输出携带该版本证据。模板被禁用时只会
+阻止对应 RCA 调用，不会阻断普通 chat run。内置模板属于启动配置，测试清理不再误删。
+
+### 当前证据
+
+- AgentScope schema、输入验证、SQL 编译和输出 shape 专项：10/10；
+- Docker-free ClickHouse 26.5.6.64：query log、cluster snapshot、full EXPLAIN、结构化 RCA
+  及 A27 HTTP endpoint 均访问真实服务并通过；
+- P6 模拟模型三工具 SSE 链继续在同一真实集成测试中通过；
+- Spotless 通过。
+
 ## P7 后续项
 
-1. 对齐 query log、optimization evidence、cluster status、RCA 的前端 input/output；
-2. RCA template A27 与诊断 Golden；
-3. generate/optimize/visualize wrapper；
-4. 受控 repository scope 的 search_file/read_file；
-5. 核心 mock-model 工作流 E2E、全量回归和迁移清单。
+1. 诊断 Golden；
+2. generate/optimize/visualize wrapper；
+3. 受控 repository scope 的 search_file/read_file；
+4. 核心 mock-model 工作流 E2E、全量回归和迁移清单。

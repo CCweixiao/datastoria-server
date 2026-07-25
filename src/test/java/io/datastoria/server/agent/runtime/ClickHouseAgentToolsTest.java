@@ -22,6 +22,7 @@ import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.Toolkit;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.service.ClickHouseConnectionService;
+import io.datastoria.server.service.RcaTemplateCatalog;
 
 import reactor.core.publisher.Mono;
 
@@ -132,6 +133,196 @@ class ClickHouseAgentToolsTest {
         .containsEntry("max_result_rows", 1_000)
         .containsEntry("max_result_bytes", 1_000_000)
         .containsEntry("max_execution_time", 30);
+  }
+
+  @Test
+  void searchQueryLogCompilesValidatedFiltersAndReturnsFrontendShape() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+    when(service.query(anyString(), sql.capture(), any(), any()))
+        .thenReturn(
+            Mono.just(
+                """
+                {
+                  "data":[{
+                    "normalized_query_hash":"42",
+                    "sql_preview":"SELECT 1",
+                    "execution_count":3,
+                    "metric_value":30
+                  }]
+                }
+                """));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    JsonNode output =
+        new ObjectMapper()
+            .readTree(
+                tools
+                    .searchQueryLog(
+                        "patterns",
+                        "duration",
+                        "max",
+                        10,
+                        60,
+                        null,
+                        List.of(
+                            new ClickHouseAgentTools.QueryLogPredicate(
+                                "query", "contains_ci", "x' OR 1=1 --")))
+                    .block());
+
+    assertThat(output.path("success").asBoolean()).isTrue();
+    assertThat(output.path("mode").asText()).isEqualTo("patterns");
+    assertThat(output.path("metric").asText()).isEqualTo("duration");
+    assertThat(output.path("rowCount").asInt()).isEqualTo(1);
+    assertThat(output.path("defaults_applied").size()).isEqualTo(3);
+    assertThat(sql.getValue())
+        .contains("max(query_duration_ms) AS metric_value")
+        .contains("positionCaseInsensitive(query, 'x'' OR 1=1 --')")
+        .contains("type = 'QueryFinish'")
+        .doesNotContain("x' OR 1=1 --')");
+  }
+
+  @Test
+  void clusterStatusReturnsSnapshotAndWindowContract() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.query(anyString(), anyString(), any(), any()))
+        .thenReturn(
+            Mono.just(
+                """
+                {"data":[{
+                  "node":"local",
+                  "cluster_nodes":0,
+                  "unhealthy_replicas":0,
+                  "active_parts":12,
+                  "active_merges":1,
+                  "pending_mutations":0,
+                  "disk_used_percent":25.5,
+                  "current_queries":2
+                }]}
+                """),
+            Mono.just(
+                """
+                {"data":[
+                  {"timestamp":"2026-07-25 09:00:00","value":1},
+                  {"timestamp":"2026-07-25 09:05:00","value":3}
+                ]}
+                """));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    JsonNode output =
+        new ObjectMapper()
+            .readTree(
+                tools
+                    .collectClusterStatus(
+                        "windowed",
+                        List.of("parts", "disk", "errors"),
+                        "summary",
+                        null,
+                        10,
+                        new ClickHouseAgentTools.ClusterWindow("errors", 60, null, 5))
+                    .block());
+
+    assertThat(output.path("success").asBoolean()).isTrue();
+    assertThat(output.path("scope").asText()).isEqualTo("single_node");
+    assertThat(output.path("summary").path("total_nodes").asInt()).isEqualTo(1);
+    assertThat(output.path("categories").path("parts").path("value").asInt()).isEqualTo(12);
+    assertThat(output.path("window").path("series").size()).isEqualTo(2);
+    assertThat(output.path("window").path("summary").path("trend").asText()).isEqualTo("up");
+  }
+
+  @Test
+  void optimizationEvidenceReturnsLightAndFullExplainArtifacts() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.query(anyString(), anyString(), any(), any()))
+        .thenReturn(
+            Mono.just(
+                """
+                {"data":[{"explain":"ReadFromMergeTree (Indexes: PrimaryKey)"}]}
+                """),
+            Mono.just(
+                """
+                {"data":[{"explain":"ExpressionTransform → MergeTreeSelect"}]}
+                """));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    JsonNode output =
+        new ObjectMapper()
+            .readTree(
+                tools
+                    .collectSqlOptimizationEvidence(
+                        "SELECT * FROM db.events WHERE id = 1",
+                        null,
+                        "latency",
+                        "full",
+                        60,
+                        null,
+                        new ClickHouseAgentTools.RequestedEvidence(
+                            List.of("indexes"), List.of("pipeline")))
+                    .block());
+
+    assertThat(output.path("goal").asText()).isEqualTo("latency");
+    assertThat(output.path("mode").asText()).isEqualTo("full");
+    assertThat(output.path("explain_index").path("raw_text").asText()).contains("PrimaryKey");
+    assertThat(output.path("explain_pipeline").path("raw_text").asText())
+        .contains("MergeTreeSelect");
+    assertThat(output.path("requested").path("required").path(0).asText()).isEqualTo("indexes");
+  }
+
+  @Test
+  void rcaEvidenceMatchesFrontendContractAndPinsA27Template() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.query(anyString(), anyString(), any(), any()))
+        .thenReturn(
+            Mono.just(
+                """
+                {"data":[{
+                  "database":"db",
+                  "table":"events",
+                  "active_parts":12,
+                  "distinct_partitions":3,
+                  "max_parts_per_partition":6,
+                  "rows":100,
+                  "bytes_on_disk":2048
+                }]}
+                """));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(
+            service,
+            "connection",
+            new Identity("tenant", "user", Set.of()),
+            new ObjectMapper(),
+            AgentToolExecutionPolicy.untracked(),
+            new RcaTemplateCatalog.TemplateSnapshot("high_part_count", 4, "abc123"));
+
+    JsonNode output =
+        new ObjectMapper()
+            .readTree(
+                tools
+                    .collectRcaEvidence(
+                        "high_part_count",
+                        "table",
+                        new ClickHouseAgentTools.RcaTarget("db", "events", null, null),
+                        null,
+                        60,
+                        null,
+                        new ClickHouseAgentTools.RcaThresholds(
+                            new ClickHouseAgentTools.HighPartCountThresholds(
+                                null, null, 10.0, null, null, null, null, 5.0, null, null)),
+                        null)
+                    .block());
+
+    assertThat(output.path("schema_version").asInt()).isEqualTo(1);
+    assertThat(output.path("success").asBoolean()).isTrue();
+    assertThat(output.path("scope").asText()).isEqualTo("table");
+    assertThat(output.path("template").path("revision").asInt()).isEqualTo(4);
+    assertThat(output.path("observations").path(0).path("metrics").path("active_parts").asInt())
+        .isEqualTo(12);
+    assertThat(output.path("candidates").path(0).path("indicators_matched").asInt()).isEqualTo(2);
+    assertThat(output.path("possible_actions").size()).isGreaterThan(0);
+    assertThat(output.path("gaps").size()).isGreaterThan(0);
   }
 
   private static Map<String, Object> schema(Toolkit toolkit, String name) {

@@ -41,6 +41,7 @@ import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.ChatSessionRepository;
 import io.datastoria.server.repository.ModelRepository;
 import io.datastoria.server.service.ClickHouseConnectionService;
+import io.datastoria.server.service.RcaTemplateCatalog;
 import io.datastoria.server.skill.BuiltinSkillProvisioner;
 import io.datastoria.server.skill.SkillToolAvailability;
 
@@ -89,6 +90,7 @@ public class ChatRunService {
   private final BuiltinSkillProvisioner builtinSkillProvisioner;
   private final SkillToolAvailability skillToolAvailability;
   private final ClickHouseConnectionService clickHouseConnectionService;
+  private final RcaTemplateCatalog rcaTemplateCatalog;
   private final ModelAdapterProvider modelAdapterProvider;
   private final RunLifecycleRecorder lifecycleRecorder;
   private final Scheduler jdbcScheduler;
@@ -108,6 +110,7 @@ public class ChatRunService {
       BuiltinSkillProvisioner builtinSkillProvisioner,
       SkillToolAvailability skillToolAvailability,
       ClickHouseConnectionService clickHouseConnectionService,
+      RcaTemplateCatalog rcaTemplateCatalog,
       ModelAdapterProvider modelAdapterProvider,
       RunLifecycleRecorder lifecycleRecorder,
       ObjectMapper mapper,
@@ -125,6 +128,7 @@ public class ChatRunService {
     this.builtinSkillProvisioner = builtinSkillProvisioner;
     this.skillToolAvailability = skillToolAvailability;
     this.clickHouseConnectionService = clickHouseConnectionService;
+    this.rcaTemplateCatalog = rcaTemplateCatalog;
     this.modelAdapterProvider = modelAdapterProvider;
     this.lifecycleRecorder = lifecycleRecorder;
     this.mapper = mapper;
@@ -324,7 +328,8 @@ public class ChatRunService {
                 identity,
                 mapper,
                 AgentToolExecutionPolicy.tracked(
-                    auditLogRepository, jdbcScheduler, identity, runId, req.connectionId()))),
+                    auditLogRepository, jdbcScheduler, identity, runId, req.connectionId()),
+                rcaTemplateCatalog.findEnabled("high_part_count").orElse(null))),
         pins);
   }
 

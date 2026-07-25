@@ -46,6 +46,7 @@ import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AuditLogRepository;
 import io.datastoria.server.service.ClickHouseConnectionService;
+import io.datastoria.server.service.RcaTemplateCatalog;
 
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Scheduler;
@@ -79,6 +80,7 @@ class LocalClickHouseIT {
   @Autowired NamedParameterJdbcTemplate jdbc;
   @Autowired JdbcClient jdbcClient;
   @Autowired FakeModelAdapterProvider fakeProvider;
+  @Autowired RcaTemplateCatalog rcaTemplateCatalog;
 
   @Autowired
   @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER)
@@ -185,7 +187,61 @@ class LocalClickHouseIT {
     assertThatThrownBy(() -> tools.executeSql("SELECT 1; SELECT 2").block())
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Multiple");
-    assertThat(tools.collectClusterStatus().block()).contains("active_parts");
+    assertThat(
+            tools
+                .collectClusterStatus(
+                    "snapshot", java.util.List.of("parts", "disk"), "summary", null, 10, null)
+                .block())
+        .contains("\"success\":true", "\"status_analysis_mode\":\"snapshot\"", "\"parts\"");
+    assertThat(
+            tools
+                .collectSqlOptimizationEvidence(
+                    "SELECT service, count() FROM datastoria_test.query_events GROUP BY service",
+                    null,
+                    "latency",
+                    "full",
+                    60,
+                    null,
+                    null)
+                .block())
+        .contains("\"mode\":\"full\"", "\"explain_index\"", "\"explain_pipeline\"");
+    ClickHouseAgentTools templatedTools =
+        new ClickHouseAgentTools(
+            connectionService,
+            connectionId,
+            IDENTITY,
+            mapper,
+            AgentToolExecutionPolicy.tracked(
+                auditLogRepository, jdbcScheduler, IDENTITY, "local-it-run", connectionId),
+            rcaTemplateCatalog.requireEnabled("high_part_count"));
+    assertThat(
+            templatedTools
+                .collectRcaEvidence(
+                    "high_part_count",
+                    "table",
+                    new ClickHouseAgentTools.RcaTarget(
+                        "datastoria_test", "query_events", null, null),
+                    null,
+                    60,
+                    null,
+                    null,
+                    null)
+                .block())
+        .contains(
+            "\"schema_version\":1",
+            "\"success\":true",
+            "\"template\"",
+            "\"observations\"",
+            "\"candidates\"");
+    web.get()
+        .uri("/api/ai/rca/templates")
+        .header("x-datastoria-user-email", USER)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.templates.high_part_count")
+        .value(value -> assertThat(value.toString()).contains("symptom: high_part_count"));
     assertThatThrownBy(
             () ->
                 new ClickHouseAgentTools(
@@ -272,7 +328,20 @@ class LocalClickHouseIT {
     connectionService
         .query(connectionId, "SYSTEM FLUSH LOGS", Map.of("default_format", "JSON"), IDENTITY)
         .block();
-    assertThat(tools.searchQueryLog("query_events", 10, 20).block()).contains("query_events");
+    assertThat(
+            tools
+                .searchQueryLog(
+                    "executions",
+                    null,
+                    null,
+                    20,
+                    10,
+                    null,
+                    java.util.List.of(
+                        new ClickHouseAgentTools.QueryLogPredicate(
+                            "query", "contains_ci", "query_events")))
+                .block())
+        .contains("\"success\":true", "query_events");
   }
 
   private void seedAgentRecords(String connectionId) {

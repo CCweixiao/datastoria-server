@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 public class TestDbHelper {
 
   private static final String[] TABLES = {
-    "ds_rca_template",
     "ds_user_state",
     "ds_agent_run_skill",
     "ds_skill_resource",
