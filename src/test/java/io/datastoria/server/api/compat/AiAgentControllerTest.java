@@ -32,6 +32,16 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolResultBlock;
+import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.model.ChatResponse;
+import io.agentscope.core.model.ChatUsage;
+import io.agentscope.core.model.GenerateOptions;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.model.ToolSchema;
 import io.datastoria.server.TestDbHelper;
 import io.datastoria.server.agent.application.ChatRunService;
 import io.datastoria.server.agent.domain.AgentRun;
@@ -163,6 +173,42 @@ class AiAgentControllerTest {
               assertThat(pin.skillRevision()).isZero();
               assertThat(pin.contentChecksum()).matches("[0-9a-f]{64}");
             });
+  }
+
+  @Test
+  void mockModelLoadsDatabaseSkillResourceThroughAgentScope() {
+    webTestClient
+        .post()
+        .uri("/api/ai/skills")
+        .header("x-datastoria-user-email", USER)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {
+              "id": "e2e-skill",
+              "content": "---\\nname: e2e-skill\\ndescription: E2E Skill\\n---\\nDatabase skill body.",
+              "scope": "self",
+              "state": "published",
+              "resources": [
+                {"path":"references/evidence.md","content":"DATABASE_RESOURCE_MARKER"}
+              ]
+            }
+            """)
+        .exchange()
+        .expectStatus()
+        .isCreated();
+    SkillLoadingModel model = new SkillLoadingModel();
+    fakeProvider.setModel(model);
+
+    String sse =
+        postStream(streamBody("sess-1", "mdl-1", "load the e2e skill evidence"), "idem-skill-e2e");
+
+    assertThat(sse).contains("skill loaded");
+    assertThat(model.skillWasAdvertised()).isTrue();
+    assertThat(model.loadedResource()).contains("DATABASE_RESOURCE_MARKER");
+    AgentRun run = runRepository.findByIdempotencyKey(TENANT, USER, "idem-skill-e2e").orElseThrow();
+    assertThat(runSkillRepository.findByRun(TENANT, run.id()))
+        .anySatisfy(pin -> assertThat(pin.skillId()).isEqualTo("e2e-skill"));
   }
 
   @Test
@@ -781,5 +827,98 @@ class AiAgentControllerTest {
         .param("u", user)
         .param("now", NOW.toString())
         .update();
+  }
+
+  private static final class SkillLoadingModel implements Model {
+    private final AtomicInteger calls = new AtomicInteger();
+    private volatile boolean skillWasAdvertised;
+    private volatile String loadedResource = "";
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      int call = calls.incrementAndGet();
+      if (call == 1) {
+        String runtimeSkillId = runtimeSkillId(tools);
+        skillWasAdvertised = true;
+        ToolUseBlock load =
+            ToolUseBlock.builder()
+                .id("load-e2e-resource")
+                .name("load_skill_through_path")
+                .input(
+                    java.util.Map.of("skillId", runtimeSkillId, "path", "references/evidence.md"))
+                .content(
+                    "{\"skillId\":\"" + runtimeSkillId + "\",\"path\":\"references/evidence.md\"}")
+                .state(ToolCallState.FINISHED)
+                .build();
+        return Flux.just(
+            ChatResponse.builder()
+                .content(List.of(load))
+                .finishReason("tool_calls")
+                .metadata(java.util.Map.of())
+                .build());
+      }
+      loadedResource =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(ToolResultBlock.class::isInstance)
+              .map(ToolResultBlock.class::cast)
+              .flatMap(result -> result.getOutput().stream())
+              .filter(TextBlock.class::isInstance)
+              .map(TextBlock.class::cast)
+              .map(TextBlock::getText)
+              .reduce("", (left, right) -> left + right);
+      ChatUsage usage = ChatUsage.builder().inputTokens(2).outputTokens(2).time(0.0).build();
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(TextBlock.builder().text("skill loaded").build()))
+              .build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(usage)
+              .finishReason("stop")
+              .metadata(java.util.Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "skill-loading-model";
+    }
+
+    boolean skillWasAdvertised() {
+      return skillWasAdvertised;
+    }
+
+    String loadedResource() {
+      return loadedResource;
+    }
+
+    private static String runtimeSkillId(List<ToolSchema> tools) {
+      for (ToolSchema tool : tools) {
+        if (!"load_skill_through_path".equals(tool.getName())) {
+          continue;
+        }
+        Object propertiesValue = tool.getParameters().get("properties");
+        if (!(propertiesValue instanceof java.util.Map<?, ?> properties)) {
+          continue;
+        }
+        Object skillIdValue = properties.get("skillId");
+        if (!(skillIdValue instanceof java.util.Map<?, ?> skillId)) {
+          continue;
+        }
+        Object enumValue = skillId.get("enum");
+        if (!(enumValue instanceof List<?> ids)) {
+          continue;
+        }
+        for (Object id : ids) {
+          String value = String.valueOf(id);
+          if (value.startsWith("e2e-skill")) {
+            return value;
+          }
+        }
+      }
+      throw new IllegalStateException("E2E Skill was not advertised by AgentScope");
+    }
   }
 }

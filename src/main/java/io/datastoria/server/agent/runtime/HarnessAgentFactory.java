@@ -34,13 +34,23 @@ import io.datastoria.server.agent.domain.RunContext;
 public final class HarnessAgentFactory {
 
   private final Clock clock;
+  private final AgentToolRegistry toolRegistry;
 
   public HarnessAgentFactory() {
-    this(Clock.systemUTC());
+    this(Clock.systemUTC(), new AgentToolRegistry());
   }
 
   public HarnessAgentFactory(Clock clock) {
+    this(clock, new AgentToolRegistry());
+  }
+
+  public HarnessAgentFactory(AgentToolRegistry toolRegistry) {
+    this(Clock.systemUTC(), toolRegistry);
+  }
+
+  public HarnessAgentFactory(Clock clock, AgentToolRegistry toolRegistry) {
     this.clock = clock;
+    this.toolRegistry = toolRegistry;
   }
 
   public RunnableAgent create(
@@ -64,10 +74,7 @@ public final class HarnessAgentFactory {
       AgentRunCapabilities capabilities,
       List<ChatTurn> history,
       String userText) {
-    Toolkit toolkit = new Toolkit();
-    if (capabilities.tools() != null) {
-      toolkit.registerTool(capabilities.tools());
-    }
+    Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
     HarnessAgent.Builder builder =
         HarnessAgent.builder()
             .name("run-" + context.runId())

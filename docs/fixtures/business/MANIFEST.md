@@ -23,7 +23,7 @@
 | `messages.jsonl` | 消息（含 text/tool-call/tool-result parts） | 6 | `6c49bc200da19b4f4c8ea70abe7f4e49ac1295f203d6c9e41e350ec89ead0859` |
 | `feedback.jsonl` | 反馈事件 | 2 | `fb95623ae944001ec03b0960a7138772e34291de79cb7b22db003c73de2eb70e` |
 | `sessions-share.jsonl` | 分享 token（hash 占位） | 1 | `1cd46e118c0a16466a94f9671bfe3407153425791443bcc19a5467f2d7819fbb` |
-| `skill-catalog.json` | 9 个内置 Skill catalog 元数据 | 9 skills | `fc29b19acefecb417155937b99c7b9c383455479f313fb5ac84cc90709c0a37c` |
+| `skill-catalog.json` | P3 冻结的 9 个内置 Skill 发现快照（历史） | 9 skills | `fc29b19acefecb417155937b99c7b9c383455479f313fb5ac84cc90709c0a37c` |
 | `clickhouse/schema.sql` | 脱敏 ClickHouse 测试 schema + 数据 | — | `37f7c293745131077a6d891f3e681029754c3e85ea553793f24487ef22cb8fcd` |
 
 ## 与 wire-format fixture 的关系
@@ -62,9 +62,11 @@
 
 ### Skill catalog
 
-- 9 个内置 Skill 的 `requiredTools` 字段用于验证 Skill 可用性过滤
-  （`requiredTools` 不满足时 Skill 不可用）。
-- 完整 SKILL.md bundle 在 P5 由导入器加载，checksum 在那时单独冻结。
+- `skill-catalog.json` 保留 P3 时的 Node 发现快照，不再作为 P5 HTTP wire contract。
+- P5 的完整前后端 detail wire contract 为
+  `docs/fixtures/skills/catalog-detail.json`，由 Java API test 与前端 Vitest 共同读取。
+- 9 个完整 bundle 的 Node/Java semantic diff 由 `SkillCatalogSemanticDiffTest` 对
+  `SKILL.md` 和全部资源逐字节执行；可用性再由实际 AgentScope Toolkit registry 判断。
 
 ### ClickHouse 测试数据
 

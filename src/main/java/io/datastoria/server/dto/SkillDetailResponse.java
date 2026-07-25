@@ -12,6 +12,7 @@ public record SkillDetailResponse(
     String scope,
     String version,
     String author,
+    String url,
     String summary,
     boolean hasResources,
     boolean disableSlashCommand,

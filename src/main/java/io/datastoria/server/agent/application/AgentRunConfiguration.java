@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import io.datastoria.server.agent.runtime.AgentToolRegistry;
 import io.datastoria.server.agent.runtime.CancellationRegistry;
 import io.datastoria.server.agent.runtime.HarnessAgentFactory;
 import io.datastoria.server.config.JdbcSchedulerConfig;
@@ -26,8 +27,8 @@ import reactor.core.scheduler.Scheduler;
 public class AgentRunConfiguration {
 
   @Bean
-  HarnessAgentFactory harnessAgentFactory() {
-    return new HarnessAgentFactory();
+  HarnessAgentFactory harnessAgentFactory(AgentToolRegistry toolRegistry) {
+    return new HarnessAgentFactory(toolRegistry);
   }
 
   @Bean

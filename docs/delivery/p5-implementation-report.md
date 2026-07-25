@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 基线：`cd9c297`
-> 状态：**P5.1、P5.2 已完成；P5 整体仍在进行，不得开始 P6 阶段验收**
+> 状态：**P5.1、P5.2、P5.3 已完成；本地 SQLite 路径达到 P5 退出条件**
 
 ## P5.1：受版本控制的 Skill 基线与 SQLite seed
 
@@ -122,15 +122,57 @@ DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -B -ntp -Dtest=LocalClickHouseIT test
 - Java 全量：299/299；
 - 真实 ClickHouse：1/1（本地 `26.5.6.64`）；
 - package、Spotless、`git diff --check`：通过；
-- MySQL SchemaParityTest 因本机无 Docker 未执行测试体（0 tests），因此仍保留为 P5 未完成项。
+- MySQL SchemaParityTest 因本机无 Docker 未执行测试体（0 tests），在 P5.2 时仍列为待确认边界。
 
-## P5 未完成项
+## P5.3：Catalog 契约、动态 Skill 加载与 Toolkit Registry
 
-以下退出条件尚无证据，因此 P5 不能标记完成：
+本切片移除了 requiredTools 的手写固定集合。`AgentToolRegistry` 通过实际 AgentScope
+`Toolkit` 注册 `ClickHouseAgentTools`，Skill 可用性判断与每次 run 的工具实例均来自同一个
+注册入口，避免新增或删除工具后 catalog 与运行时漂移。
 
-1. MySQL revision repository contract（本机无 Docker，可由 CI 执行）。
-2. Node/Java catalog semantic diff 和完整 Skill load E2E（模拟 LLM 即可）。
-3. Toolkit Registry 接替当前临时的 requiredTools 固定集合。
+同时完成以下契约修复和证据：
 
-下一切片继续完成 **P5.3：catalog semantic diff、完整 Skill load E2E 与 Toolkit
-Registry**。在这些条目完成前不把 P4.8 中提前出现的 Skill/工具代码视为 P5/P6 已交付。
+- Java catalog/detail DTO 补齐前端已经消费的 `url` 字段；
+- `docs/fixtures/skills/catalog-detail.json` 成为 Java API 与 TypeScript
+  `SkillDetailResponse`/`CommandManager` 共用的 wire-contract fixture；
+- `SkillCatalogSemanticDiffTest` 逐个比较 9 个 Java classpath bundle 与前端源树的文件集合和
+  Markdown 内容，仅归一化 CRLF、行尾空白和末尾空行；
+- 完整 mock-model E2E 创建并发布数据库 Skill，启动真实 chat run，由 AgentScope 暴露并调用
+  `load_skill_through_path`，读取该 revision 的 `references/evidence.md`，再由第二轮模型响应验证
+  marker 已进入上下文；
+- Agent run 继续在启动时固定 revision/checksum，运行期间不会从浏览器或可变发布指针重新取
+  Skill。
+
+专项测试：
+
+```bash
+./mvnw -B -ntp spotless:apply test \
+  -Dtest='SkillCatalogSemanticDiffTest,AgentToolRegistryTest,\
+AgentSkillApiTest#detailMatchesSharedFrontendCatalogContract,\
+AiAgentControllerTest#mockModelLoadsDatabaseSkillResourceThroughAgentScope'
+```
+
+- Java P5.3 专项：4/4；
+- 前端 Vitest 全量：292/292（56 files）；
+- 前端 typecheck、Prettier：通过。
+
+## P5 最终门禁与边界
+
+```bash
+./mvnw -B -ntp spotless:apply clean verify
+DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -B -ntp -Dtest=LocalClickHouseIT test
+```
+
+- Java 全量：303/303；
+- package、Spotless：通过；
+- 真实 ClickHouse：1/1（本地 `26.5.6.64`）；
+- Skill 正文由数据库 revision 提供，前端只消费 catalog/detail/commands，不参与 Agent
+  Skill 装载；
+- catalog、requiredTools 判断与 AgentScope run 使用同一实际 Toolkit registry。
+
+按当前开发约束继续使用 SQLite，不要求本机连接 MySQL。SQLite V1–V12 migration 和 repository
+contract 已通过；MySQL V11/V12 migration 已同步提交，但 `SchemaParityTest` 因本机无 Docker
+未执行测试体（0 tests），保留为 CI/具备 MySQL 环境时的跨数据库验证项，不阻塞本地进入 P6。
+
+P5 到此完成。P6 必须继续补齐只读 ClickHouse Toolkit 的参数、权限、结果上限和真实数据库
+契约；不能因为 P4.8 已有同名最小工具就直接宣告 P6 完成。

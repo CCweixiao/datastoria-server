@@ -1,5 +1,8 @@
 package io.datastoria.server.api;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -208,6 +211,56 @@ class AgentSkillApiTest {
 
     publish("versioned");
     expectResource("versioned", false, "draft resource");
+  }
+
+  @Test
+  void detailMatchesSharedFrontendCatalogContract() throws Exception {
+    String content =
+        """
+        ---
+        name: catalog-contract
+        description: Shared catalog contract
+        version: 1.2.3
+        required-tools:
+          - execute_sql
+        metadata:
+          author: Contract Author
+          url: https://example.com/catalog-contract
+          show-in-sql-editor-quick-action: true
+        ---
+        Contract summary.""";
+    web.post()
+        .uri("/api/ai/skills")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            java.util.Map.of(
+                "id",
+                "catalog-contract",
+                "content",
+                content,
+                "version",
+                "1.2.3",
+                "scope",
+                "self",
+                "state",
+                "published",
+                "resources",
+                java.util.List.of(
+                    java.util.Map.of("path", "references/rules.md", "content", "Use evidence."))))
+        .exchange()
+        .expectStatus()
+        .isCreated();
+
+    String expected = Files.readString(Path.of("docs/fixtures/skills/catalog-detail.json"));
+    web.get()
+        .uri("/api/ai/skills/catalog-contract")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json(expected);
   }
 
   private void publish(String id) {

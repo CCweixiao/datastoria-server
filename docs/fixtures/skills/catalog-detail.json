@@ -1,0 +1,20 @@
+{
+  "id": "catalog-contract",
+  "name": "catalog-contract",
+  "description": "Shared catalog contract",
+  "source": "database",
+  "status": "available",
+  "state": "published",
+  "scope": "self",
+  "version": "1.2.3",
+  "author": "Contract Author",
+  "url": "https://example.com/catalog-contract",
+  "summary": "Contract summary.",
+  "hasResources": true,
+  "disableSlashCommand": false,
+  "showInSqlEditorQuickAction": true,
+  "requiredTools": ["execute_sql"],
+  "canEdit": true,
+  "content": "---\nname: catalog-contract\ndescription: Shared catalog contract\nversion: 1.2.3\nrequired-tools:\n  - execute_sql\nmetadata:\n  author: Contract Author\n  url: https://example.com/catalog-contract\n  show-in-sql-editor-quick-action: true\n---\nContract summary.",
+  "resourcePaths": ["references/rules.md"]
+}

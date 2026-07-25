@@ -45,6 +45,7 @@ application-prod.yml
 ### Local databases ###
 data/
 .local/
+.agentscope/
 *.db
 *.db-journal
 *.db-wal
