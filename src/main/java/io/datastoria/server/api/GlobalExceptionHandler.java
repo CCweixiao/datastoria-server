@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.MethodNotAllowedException;
 
+import io.datastoria.server.agent.domain.PendingActionConflictException;
+import io.datastoria.server.agent.domain.PendingActionExpiredException;
 import io.datastoria.server.api.error.ClientSecretNotAllowedException;
 import io.datastoria.server.api.error.FeedbackTargetNotFoundException;
 import io.datastoria.server.api.error.NotFoundException;
@@ -54,6 +56,30 @@ public class GlobalExceptionHandler {
                 "Revision conflict",
                 "The resource was modified by another writer. Fetch the latest"
                     + " revision and retry."));
+  }
+
+  @ExceptionHandler(PendingActionConflictException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handlePendingActionConflict(
+      PendingActionConflictException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            problems.forStatus(
+                409,
+                "ACTION_ALREADY_RESOLVED",
+                "Action already resolved",
+                "The action was already resolved with a different decision or response."));
+  }
+
+  @ExceptionHandler(PendingActionExpiredException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handlePendingActionExpired(
+      PendingActionExpiredException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            problems.forStatus(
+                409,
+                "ACTION_EXPIRED",
+                "Action expired",
+                "The action expired before this response was received."));
   }
 
   @ExceptionHandler(ResourceInUseException.class)

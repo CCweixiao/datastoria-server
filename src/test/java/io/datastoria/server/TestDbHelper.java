@@ -9,6 +9,7 @@ public class TestDbHelper {
 
   private static final String[] TABLES = {
     "ds_user_state",
+    "ds_agent_pending_action",
     "ds_agent_run_skill",
     "ds_skill_resource",
     "ds_agent_skill_resource",
