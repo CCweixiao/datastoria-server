@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4 + P4.5（均已通过 review）**
+> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4 + P4.5（已通过 review）+ P4.6（本次）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.5 review 已通过；P4.6–P4.8 未开始。
+> 状态：P4.1–P4.5 review 已通过；**P4.6 已实现，待 review**；P4.7–P4.8 未开始。
 
 ---
 
@@ -769,3 +769,170 @@ docs/delivery/p4-implementation-report.md                                       
 - run 创建于请求、completed/failed 落库（P4.3）、RunCancelled 经 observer 落库；`finish` 注入 title（独立 service）。
 
 **P4.5 review 已通过；不自动开始 P4.6。**
+
+---
+
+# P4.6 — A01 Java Chat API（本次交付，待 review）
+
+## P4.6-0. 范围
+
+实现与 Node A01 兼容的 Java `POST /api/ai/agent`：服务端解析 tenant/user/session/agent/model，
+创建/复用 `AgentRun`，`AgentRunService.start` → `AiSdkStreamEncoder` → AI SDK UI Message Stream SSE。
+**不接真实 provider（fake model 测试）、不改前端 gateway（P4.7）、不做 run resume（P4.8）。**
+
+## P4.6-1. 请求 / 响应契约
+
+**请求**（`POST /api/ai/agent`，compat 家族，`@RequestBody JsonNode` 手解析，对齐
+`frontend/.../remote-chat-request.ts` 的 `validateRemoteChatRequest`）：
+
+| 字段 | P4.6 支持 | 说明 |
+| --- | --- | --- |
+| `sessionId` | ✅ 必填 | 校验属当前 (tenant,user)，否则 404 |
+| `connectionId` | ✅ | 存入 run；ClickHouse 工具未启用（P5） |
+| `message{id,role,parts}` | ✅ | 从 `text` parts 抽取用户文本；`role` 非 user 时由 service 校验 |
+| `modelConfigId` | ✅ 首选 | 服务端按 tenant 解析模型配置 |
+| `model{provider,modelId}` | ✅ 兼容 | 按 `modelKey` best-effort 匹配 tenant 的 enabled 模型 |
+| `model.apiKey` / `connection.password` / 顶层 `apiKey` | ❌ **拒绝** | 400 `CLIENT_SECRET_NOT_ALLOWED`（处理前拒绝，不建 run） |
+| `agentId` | ✅ 可选 | 解析 published revision（tenant 校验）；缺省走内置 prompt |
+| `Idempotency-Key` 头 / `clientRequestId` | ✅ | 幂等键 (tenant,user,key) |
+| `continuation:true` | ❌ | 400（无工具/HITL，P5+） |
+| `generateTitle` / `ephemeral` / `agentContext` | ⚪ 接受未用 | title 生成本阶段未实现（见 §7） |
+
+**响应**：200，固定头（stream-protocol §2）：`Content-Type: text/event-stream`、`Cache-Control: no-cache`、
+`Connection: keep-alive`、`X-Vercel-AI-UI-Message-Stream: v1`、`X-Accel-Buffering: no`；body 为
+encoder 产出的 `data: {json}\n\n` 帧，以 `data: [DONE]\n\n` 终止。
+
+**关键实现**：controller 用 `response.writeWith(frames.map(UTF-8 buffer))` 直接写原始字节——
+若返回 `Flux<String>` + `text/event-stream`，WebFlux 会把每个 String 再当 SSE 事件二次编码（`data:data:`），
+破坏字节契约；直接写 buffer 保留 encoder 的精确帧。
+
+## P4.6-2. 分层
+
+```text
+api.compat.AiAgentController            (AgentScope-free: JsonNode 校验、reject secrets、写 SSE 帧+头)
+  -> agent.application.ChatRunService   (AgentScope-free: 解析/幂等/建 run/接线)
+       -> AgentRunService.start (P4.2)  -> Flux<AgentRunEvent>
+       -> RunLifecycleRecorder          -> tap 事件，终态落库（succeeded/failed）
+       -> AiSdkStreamEncoder (P4.5)     -> Flux<String> 帧
+  agent.runtime.ModelAdapterProvider     (凭据服务端注入缝；NoOp 默认，fake 测试覆盖)
+  agent.runtime.HarnessAgentFactory      (唯一 runtime，P5+ 全关)
+config: AgentRunConfiguration 装配 AgentRunService(=factory+registry+cleanupExecutor+RunCancellationPersister)
+```
+
+## P4.6-3. 幂等行为（client_request_id）
+
+- 范围 `(tenant_id, user_id, idempotency_key)`。**非 lookup-then-create 竞态**：先 lookup 快路径，
+  再 `INSERT`；`UNIQUE(tenant,user,idempotency_key)`（V5）是原子裁决——并发同 key 时第二个 INSERT
+  触发约束，catch 后 re-lookup 找到 winner 并拒。
+- 已有 run 的响应：`RUNNING/QUEUED/WAITING_INPUT` → 409 `RESOURCE_IN_USE`（已有一个 active agent）；
+  `SUCCEEDED/FAILED/CANCELLED` → 409（终态不可重放，事件重放在 P4.8）。
+- 测试：串行（首请求完成后第二请求 409）+ **并发**（两线程同 key → 恰好一个 started、一个 conflict）。
+
+## P4.6-4. Run 状态接线
+
+- 请求接受 → 建 `RUNNING` run（`AgentRunRepository.create`，`agent_revision_id` 非空：无 DB revision 时用
+  sentinel `"builtin-default"`，列无 FK 为逻辑引用）。
+- `RunCompleted` → `RunLifecycleRecorder` 累加 usage（跨 UsageReported）→ `transition(SUCCEEDED, usageJson)`，
+  fire-and-forget 在 jdbc scheduler。
+- `RunFailed` → `transition(FAILED, code+safeMessage)`（`RunFailureCode` 固定串，不含 raw）。
+- cancel/client disconnect → `AgentRunService` doFinally(CANCEL) → `RunCancellationPersister`（observer）
+  → `applyCancellation` → `CANCELLED`。
+- 终态竞争：复用 P4.3 revision 乐观锁（`transition` 条件 UPDATE + re-read），不覆盖其他终态；late cancel
+  到达已终态 run 为安全 no-op。
+
+## P4.6-5. 线程模型
+
+- **JDBC 不阻塞 Netty**：`ChatRunService.stream` 用 `Mono.fromCallable(prepareRun).subscribeOn(JdbcSchedulerConfig.JDBC_SCHEDULER)`
+  跑解析+建 run；`RunLifecycleRecorder` 在同一 bounded scheduler fire-and-forget 终态写；AgentScope `close()`
+  在专用 daemon executor（P4.2）。`RunLifecycleRecorderTest` 断言 transition 线程名 `test-jdbc` ≠ 调用线程。
+- **不手工 subscribe**：controller 返回 `Mono<Void>`，WebFlux 订阅 SSE body（单次），保持 P4.2 single-use/deferred/自动 binding。
+
+## P4.6-6. 测试命令与结果
+
+```
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./mvnw -B -ntp spotless:apply clean verify
+```
+
+- 全量：`Tests run: 268, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.6 新增 **15 测试**（`AiAgentControllerTest` 13 + `RunLifecycleRecorderTest` 2）。
+- P4.1–P4.5 + P3 全部仍通过；`DatastoriaServerApplicationTests` context 加载通过。
+- 无真实网络、无 API key、无真实 provider（`FakeModelAdapterProvider` 注入）。
+
+P4.6 测试覆盖（对齐需求 15）：
+
+| 测试 | 不变量 |
+| --- | --- |
+| happyTextStreamReturnsSseWithFixedHeaders | SSE 帧 + 5 头 + `[DONE]` + `\n\n` 分帧 |
+| reasoningAndAccumulatedUsageStream | reasoning 序列 + usage 累加落 finish |
+| clientModelApiKeyRejectedBeforeAnyRun | `model.apiKey` → 400 且**不建 run** |
+| connectionPasswordRejected | `connection.password` → 400 |
+| missingSessionReturnsNotFound / missingModelReturnsNotFound | 404 |
+| crossTenantSessionReturnsNotFound | 跨租户 session 不可见（404，不泄漏） |
+| providerErrorIsSanitizedInTheStream | error 帧只含固定 safe message，不含 `sk-SECRET`/raw |
+| serialIdempotencyKeyRejectsSecondRequest | 串行同 key → 第二请求 409 |
+| concurrentSameIdempotencyKeyStartsExactlyOneRun | 并发同 key → 恰好一个 run |
+| completedRunWithUsagePersisted / failedRunPersistedWithSafeCodeOnly | 终态落库（succeeded+usage / failed+code，无 raw） |
+| clientDisconnectCancelsRunAndPersistsCancelled | 取消订阅 → provider flux 取消 + run `CANCELLED` |
+| RunLifecycleRecorderTest | usage 累加 + 终态写运行在 jdbc scheduler（非调用线程） |
+
+## P4.6-7. 安全检查
+
+- **客户端凭据不进边界**：`model.apiKey`/`connection.password`/顶层 `apiKey` 在解析前拒绝（`ClientSecretNotAllowedException` 400），
+  不建 run、不日志、不落库。`apiKey 被拒不建 run` 测试断言。
+- **provider 错误脱敏**：`RunFailed` 经 encoder 的 `safeFailureMessage(code)`（不信任 event.message，P4.5 冻结）→
+  固定 `RunFailureCode.safeMessage()`；run 落 `safe_message` 同值；测试断言不含 `sk-`/raw。AgentScope trace log 已关（P4.2）。
+- **凭据服务端注入**：`ModelAdapterProvider` 是唯一缝，NoOp 默认（fail-fast），真实 provider 读 `SecretService.decrypt` 在 P4.8。
+- **租户隔离**：session/model/agent 全 tenant-scoped 校验；跨租户 session → 404。
+- **隔离边界**：controller/service/encoder/repository 不引用 `io.agentscope.*`（仅 `agent.runtime`）。
+- **取消 owner isolation**：P4.2/4.3 不变；disconnect → cancel 上游传播 + owner 校验保留。
+
+## P4.6-8. MySQL / 真实 provider / 前端
+
+- **MySQL 本机未执行**（无 Docker；`SchemaParityTest` Tests run: 0）。P4.6 无 DB schema 变更（用 V5 既有表），
+  CI `mysql-contract` 兜底。
+- **真实 provider smoke 未执行**（P4.8，显式开关下）。本阶段 `NoOpModelAdapterProvider` 默认，真实请求会 fail-fast。
+- **前端**：P4.6 **未改前端文件/fixture**（route + fixture 只读），故未运行前端测试。usage 形状沿用 P4.5 结论（`inputTokens`）。
+
+## P4.6-9. 回滚
+
+- P4.6 新增：controller + DTO + service + recorder + provider/NoOp + AgentRunConfiguration + 3 测试类 + fake provider。
+  无 DDL、无前端改动。
+- 回滚 = 删除上述文件 + 撤销报告 P4.6 段。`NoOpModelAdapterProvider` 为 `@Component`（context 仍加载，真实请求 fail-fast）。
+- 对线上无影响：前端仍走 Node A01（P4.7 才切 Java）。
+
+## P4.6-10. 已知风险 / 未覆盖（不阻断 P4.7）
+
+1. **title 生成未实现**：`finish` 只带 usage，无 `messageMetadata.title`（Node route 的 TransformStream + `SessionTitleGenerator`）。
+   独立可超时、失败不影响主回答的要求留给后续（建议 P4.8 或独立切片）。
+2. **assistant 消息未持久化到 `ds_chat_message`**：P4.6 只持久化 run 记录；刷新回放 Java run 的助手消息需消息持久化
+   （P4.8 或后续切片）。当前前端从流组装消息。
+3. **idempotent 终态重放未实现**：终态 run 重复提交返回 409（非同流重放）；事件重放（`ds_agent_event` / `Last-Event-ID`）在 P4.8。
+4. **`{provider,modelId}` 解析 best-effort**：按 `modelKey` 匹配 enabled 模型，未做 provider key 反查；`modelConfigId` 为首选。
+5. **`Connection: keep-alive` 头**：controller 设置，但 reactor-netty 对 hop-by-hop 头可能不下发；测试不断言该头（断言其余 4 个）。
+6. **真实 provider**：NoOp fail-fast；P4.8 接入。
+
+## P4.6-11. 修改文件
+
+```
+src/main/java/io/datastoria/server/api/compat/AiAgentController.java            (新增)
+src/main/java/io/datastoria/server/api/compat/AgentChatRequest.java             (新增)
+src/main/java/io/datastoria/server/agent/application/ChatRunService.java        (新增)
+src/main/java/io/datastoria/server/agent/application/RunLifecycleRecorder.java  (新增)
+src/main/java/io/datastoria/server/agent/application/AgentRunConfiguration.java (新增)
+src/main/java/io/datastoria/server/agent/runtime/ModelAdapterProvider.java      (新增)
+src/main/java/io/datastoria/server/agent/runtime/NoOpModelAdapterProvider.java  (新增)
+src/test/java/io/datastoria/server/api/compat/AiAgentControllerTest.java        (新增)
+src/test/java/io/datastoria/server/agent/application/RunLifecycleRecorderTest.java (新增)
+src/test/java/io/datastoria/server/agent/testing/FakeModelAdapterProvider.java  (新增)
+docs/delivery/p4-implementation-report.md                                       (追加 P4.6)
+```
+
+## P4.6-12. 下一阶段（P4.7）计划
+
+- 前端 `NEXT_PUBLIC_DATASTORIA_CHAT_BACKEND=node|java` 网关：把 `POST /api/ai/agent` 按开关打到 Java 后端。
+- 确认 `Idempotency-Key` 由前端生成；确认 Java 返回的 SSE 能被未修改的 `DefaultChatTransport` 消费。
+- 跑 Node/Java diff + Playwright（不改前端渲染逻辑）。
+
+**停在 P4.6 review，不自动开始 P4.7。**
+
