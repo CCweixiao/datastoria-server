@@ -8,6 +8,10 @@ import org.springframework.stereotype.Component;
 public class TestDbHelper {
 
   private static final String[] TABLES = {
+    "ds_session_share",
+    "ds_feedback_event",
+    "ds_chat_message",
+    "ds_chat_session",
     "ds_agent_revision",
     "ds_agent_definition",
     "ds_user_model_preference",
