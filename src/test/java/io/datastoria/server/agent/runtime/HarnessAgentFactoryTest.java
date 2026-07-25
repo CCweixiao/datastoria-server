@@ -24,6 +24,7 @@ import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.skill.AgentSkill;
 import io.agentscope.core.tool.Tool;
+import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
 import io.datastoria.server.agent.testing.FakeModelAdapter;
@@ -214,6 +215,123 @@ class HarnessAgentFactoryTest {
         .anyMatch(AgentRunEvent.ToolOutputAvailable::denied);
   }
 
+  @Test
+  void approvalResumeUsesConfirmResultAndContinuesSequence() {
+    String runId = "run-resume-" + UUID.randomUUID();
+    RunContext context = ctx(runId);
+    HarnessAgentFactory factory = new HarnessAgentFactory();
+    ToolCallingModel model = new ToolCallingModel();
+    TestTools tools = new TestTools();
+    AgentRunCapabilities capabilities = askCapabilities(tools);
+
+    List<AgentRunEvent> paused =
+        factory
+            .create(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(),
+                "call the tool")
+            .streamEvents()
+            .collectList()
+            .block();
+    AgentRunEvent.ToolApprovalRequired approval =
+        (AgentRunEvent.ToolApprovalRequired)
+            paused.stream()
+                .filter(AgentRunEvent.ToolApprovalRequired.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+
+    List<AgentRunEvent> resumed =
+        factory
+            .resumeApprovals(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(new ChatTurn("user", "call the tool")),
+                new ApprovalResumeRequest(
+                    approval.sequence(),
+                    approval.replyId(),
+                    List.of(
+                        new ApprovalResumeRequest.Decision(
+                            "permission-call", "server_test_tool", Map.of(), true))))
+            .streamEvents()
+            .collectList()
+            .block();
+
+    assertThat(resumed).isNotNull();
+    assertThat(tools.invocations()).isEqualTo(1);
+    assertThat(resumed).anyMatch(AgentRunEvent.RunCompleted.class::isInstance);
+    assertThat(resumed)
+        .allSatisfy(event -> assertThat(event.sequence()).isGreaterThan(approval.sequence()));
+    assertThat(resumed).noneMatch(AgentRunEvent.RunStarted.class::isInstance);
+  }
+
+  @Test
+  void denialResumeRebuildsPendingStateAfterProcessRestart() {
+    String runId = "run-restart-" + UUID.randomUUID();
+    RunContext context = ctx(runId);
+    ToolCallingModel model = new ToolCallingModel();
+    TestTools tools = new TestTools();
+    AgentRunCapabilities capabilities = askCapabilities(tools);
+    HarnessAgentFactory beforeRestart = new HarnessAgentFactory();
+    List<AgentRunEvent> paused =
+        beforeRestart
+            .create(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(),
+                "call the tool")
+            .streamEvents()
+            .collectList()
+            .block();
+    AgentRunEvent.ToolApprovalRequired approval =
+        (AgentRunEvent.ToolApprovalRequired)
+            paused.stream()
+                .filter(AgentRunEvent.ToolApprovalRequired.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+
+    HarnessAgentFactory afterRestart = new HarnessAgentFactory();
+    List<AgentRunEvent> resumed =
+        afterRestart
+            .resumeApprovals(
+                context,
+                new FakeModelAdapter(model),
+                AgentRuntimeConfig.minimal("sys"),
+                capabilities,
+                List.of(new ChatTurn("user", "call the tool")),
+                new ApprovalResumeRequest(
+                    approval.sequence(),
+                    approval.replyId(),
+                    List.of(
+                        new ApprovalResumeRequest.Decision(
+                            "permission-call", "server_test_tool", Map.of(), false))))
+            .streamEvents()
+            .collectList()
+            .block();
+
+    assertThat(resumed).isNotNull();
+    assertThat(tools.invocations()).isZero();
+    assertThat(resumed).anyMatch(AgentRunEvent.RunCompleted.class::isInstance);
+    assertThat(model.observedDeniedResult()).isTrue();
+  }
+
+  private static AgentRunCapabilities askCapabilities(TestTools tools) {
+    PermissionContextState permissionContext =
+        PermissionContextState.builder()
+            .addAskRule(
+                "server_test_tool",
+                new PermissionRule(
+                    "server_test_tool", null, PermissionBehavior.ASK, "datastoria-test-policy"))
+            .build();
+    return new AgentRunCapabilities(List.of(), List.of(tools), permissionContext);
+  }
+
   static final class TestTools {
     private final AtomicInteger invocations = new AtomicInteger();
 
@@ -230,11 +348,20 @@ class HarnessAgentFactoryTest {
 
   static final class ToolCallingModel implements Model {
     private final AtomicInteger calls = new AtomicInteger();
+    private volatile boolean observedDeniedResult;
 
     @Override
     public Flux<ChatResponse> stream(
         List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
       if (calls.incrementAndGet() > 1) {
+        observedDeniedResult =
+            messages.stream()
+                .flatMap(message -> message.getContent().stream())
+                .filter(io.agentscope.core.message.ToolResultBlock.class::isInstance)
+                .map(io.agentscope.core.message.ToolResultBlock.class::cast)
+                .anyMatch(
+                    result ->
+                        result.getState() == io.agentscope.core.message.ToolResultState.DENIED);
         ChatUsage usage = ChatUsage.builder().inputTokens(1).outputTokens(1).time(0.0).build();
         return Flux.just(
             ChatResponse.builder()
@@ -266,6 +393,10 @@ class HarnessAgentFactoryTest {
     @Override
     public String getModelName() {
       return "permission-test-model";
+    }
+
+    boolean observedDeniedResult() {
+      return observedDeniedResult;
     }
   }
 }

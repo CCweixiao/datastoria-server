@@ -127,6 +127,30 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
   }
 
   @Override
+  public Optional<AgentSkill> findRevision(
+      String tenantId, String userId, String id, long skillRevision) {
+    return jdbc.sql(
+            """
+            SELECT s.id, s.tenant_id, s.owner_user_id, s.scope, s.builtin,
+                   s.created_at, s.updated_at, s.deleted_at,
+                   r.revision AS skill_revision, r.version AS skill_version,
+                   r.skill_md, r.content_checksum, 'pinned' AS effective_state
+            FROM ds_agent_skill s
+            JOIN ds_skill_revision r
+              ON r.tenant_id = s.tenant_id AND r.skill_id = s.id
+             AND r.revision = :skillRevision
+            WHERE s.tenant_id = :tenantId AND s.id = :id
+              AND (s.scope = 'global' OR s.owner_user_id = :userId)
+            """)
+        .param("tenantId", tenantId)
+        .param("userId", userId)
+        .param("id", id)
+        .param("skillRevision", skillRevision)
+        .query(SKILL_MAPPER)
+        .optional();
+  }
+
+  @Override
   @Transactional
   public AgentSkill saveBundle(AgentSkill skill, List<AgentSkillResource> resources) {
     RootState root = findRoot(skill.tenantId(), skill.id()).orElse(null);

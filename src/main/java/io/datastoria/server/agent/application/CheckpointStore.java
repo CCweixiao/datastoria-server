@@ -59,4 +59,9 @@ public final class CheckpointStore {
         .findLatest(tenantId, runId)
         .map(row -> new CheckpointContent(row.codecVersion(), row.stateJson(), row.checksum()));
   }
+
+  /** Loads the latest row when callers also need its sequence and checkpoint type. */
+  public Optional<AgentCheckpoint> loadLatestRow(String tenantId, String runId) {
+    return repository.findLatest(tenantId, runId);
+  }
 }

@@ -15,9 +15,15 @@ import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunSkillPin;
 import io.datastoria.server.agent.domain.AgentRunStatus;
+import io.datastoria.server.agent.domain.CheckpointType;
+import io.datastoria.server.agent.domain.PendingActionCheckpoint;
+import io.datastoria.server.agent.domain.PendingActionStatus;
+import io.datastoria.server.agent.domain.RunContext;
+import io.datastoria.server.agent.domain.RunTransition;
 import io.datastoria.server.agent.runtime.AgentRunCapabilities;
 import io.datastoria.server.agent.runtime.AgentRuntimeConfig;
 import io.datastoria.server.agent.runtime.AgentToolExecutionPolicy;
+import io.datastoria.server.agent.runtime.ApprovalResumeRequest;
 import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
@@ -37,8 +43,10 @@ import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.Ulid;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AgentDefinitionRepository;
+import io.datastoria.server.repository.AgentPendingActionRepository;
 import io.datastoria.server.repository.AgentRevisionRepository;
 import io.datastoria.server.repository.AgentRunRepository;
+import io.datastoria.server.repository.AgentRunSkillRepository;
 import io.datastoria.server.repository.AgentSkillRepository;
 import io.datastoria.server.repository.AuditLogRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
@@ -84,6 +92,8 @@ public class ChatRunService {
   private final AgentRunService agentRunService;
   private final AgentRunCreationService runCreationService;
   private final AgentRunRepository runRepository;
+  private final AgentRunSkillRepository runSkillRepository;
+  private final AgentPendingActionRepository pendingActionRepository;
   private final ChatSessionRepository sessionRepository;
   private final ChatMessageRepository messageRepository;
   private final ModelRepository modelRepository;
@@ -99,12 +109,16 @@ public class ChatRunService {
   private final RunLifecycleRecorder lifecycleRecorder;
   private final Scheduler jdbcScheduler;
   private final ObjectMapper mapper;
+  private final CheckpointStore checkpointStore;
+  private final PendingActionCheckpointCodec pendingCheckpointCodec;
   private final String repositoryRoot;
 
   public ChatRunService(
       AgentRunService agentRunService,
       AgentRunCreationService runCreationService,
       AgentRunRepository runRepository,
+      AgentRunSkillRepository runSkillRepository,
+      AgentPendingActionRepository pendingActionRepository,
       ChatSessionRepository sessionRepository,
       ChatMessageRepository messageRepository,
       ModelRepository modelRepository,
@@ -118,12 +132,16 @@ public class ChatRunService {
       RcaTemplateCatalog rcaTemplateCatalog,
       ModelAdapterProvider modelAdapterProvider,
       RunLifecycleRecorder lifecycleRecorder,
+      CheckpointStore checkpointStore,
+      PendingActionCheckpointCodec pendingCheckpointCodec,
       ObjectMapper mapper,
       @Value("${datastoria.agent.repository-root:${user.dir}}") String repositoryRoot,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.agentRunService = agentRunService;
     this.runCreationService = runCreationService;
     this.runRepository = runRepository;
+    this.runSkillRepository = runSkillRepository;
+    this.pendingActionRepository = pendingActionRepository;
     this.sessionRepository = sessionRepository;
     this.messageRepository = messageRepository;
     this.modelRepository = modelRepository;
@@ -137,6 +155,8 @@ public class ChatRunService {
     this.rcaTemplateCatalog = rcaTemplateCatalog;
     this.modelAdapterProvider = modelAdapterProvider;
     this.lifecycleRecorder = lifecycleRecorder;
+    this.checkpointStore = checkpointStore;
+    this.pendingCheckpointCodec = pendingCheckpointCodec;
     this.mapper = mapper;
     this.repositoryRoot = repositoryRoot;
     this.jdbcScheduler = jdbcScheduler;
@@ -164,6 +184,164 @@ public class ChatRunService {
                       rc.modelConfigId());
               return lifecycleRecorder.tap(ctx, events);
             });
+  }
+
+  /** Restores a permission-paused run and returns its continuation event stream. */
+  public Mono<Flux<AgentRunEvent>> resume(String runId, Identity identity) {
+    return Mono.fromCallable(() -> prepareApprovalResume(runId, identity))
+        .subscribeOn(jdbcScheduler)
+        .map(
+            prepared -> {
+              Flux<AgentRunEvent> events =
+                  agentRunService.resume(prepared.runRequest(), prepared.resume());
+              RunContext rc = prepared.runRequest().context();
+              RunMessageContext messageContext =
+                  new RunMessageContext(
+                      rc.tenantId(),
+                      runId,
+                      rc.userId(),
+                      rc.sessionId(),
+                      rc.messageId(),
+                      rc.modelConfigId());
+              return lifecycleRecorder.tap(messageContext, events);
+            });
+  }
+
+  private PreparedResume prepareApprovalResume(String runId, Identity identity) {
+    AgentRun run =
+        runRepository
+            .find(identity.tenantId(), runId)
+            .filter(found -> identity.userId().equals(found.userId()))
+            .orElseThrow(() -> new NotFoundException("AgentRun", runId));
+    if (run.status() != AgentRunStatus.WAITING_INPUT) {
+      throw new ResourceInUseException("AgentRun", runId);
+    }
+    var checkpointRow =
+        checkpointStore
+            .loadLatestRow(identity.tenantId(), runId)
+            .filter(row -> row.checkpointType() == CheckpointType.PENDING_ACTION)
+            .orElseThrow(() -> new NotFoundException("AgentCheckpoint", runId));
+    PendingActionCheckpoint checkpoint =
+        pendingCheckpointCodec.decode(
+            new io.datastoria.server.agent.domain.CheckpointContent(
+                checkpointRow.codecVersion(), checkpointRow.stateJson(), checkpointRow.checksum()));
+
+    java.util.List<ApprovalResumeRequest.Decision> decisions =
+        checkpoint.toolCalls().stream()
+            .map(
+                call -> {
+                  var action =
+                      pendingActionRepository
+                          .findByToolCall(
+                              identity.tenantId(), identity.userId(), runId, call.toolCallId())
+                          .orElseThrow(
+                              () -> new NotFoundException("AgentPendingAction", call.actionId()));
+                  if (action.status() != PendingActionStatus.APPROVED
+                      && action.status() != PendingActionStatus.DENIED) {
+                    throw new ResourceInUseException("AgentPendingAction", action.id());
+                  }
+                  return new ApprovalResumeRequest.Decision(
+                      call.toolCallId(),
+                      call.toolName(),
+                      parseToolInput(call.inputJson()),
+                      action.status() == PendingActionStatus.APPROVED);
+                })
+            .toList();
+
+    Model model =
+        modelRepository
+            .findById(run.modelId(), identity.tenantId())
+            .orElseThrow(() -> new NotFoundException("Model", run.modelId()));
+    ModelAdapter adapter;
+    try {
+      adapter = modelAdapterProvider.adapterFor(model);
+    } catch (RuntimeException ignored) {
+      throw new ProviderOperationException(
+          "PROVIDER_UNAVAILABLE", 503, "The selected model provider is unavailable");
+    }
+    AgentRuntimeConfig config = resolvePinnedAgentConfig(run, identity.tenantId());
+    RunContext context =
+        new RunContext(
+            run.id(),
+            run.tenantId(),
+            run.userId(),
+            run.sessionId(),
+            run.messageId(),
+            run.idempotencyKey(),
+            run.agentRevisionId(),
+            run.modelId(),
+            run.createdAt());
+    AgentRunCapabilities capabilities = resolvePinnedCapabilities(identity, run, context, adapter);
+    java.util.List<ChatTurn> history =
+        messageRepository.findBySession(run.sessionId(), run.tenantId()).stream()
+            .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
+            .map(message -> new ChatTurn(message.role(), textContent(message)))
+            .filter(turn -> !turn.text().isBlank())
+            .toList();
+
+    runRepository.transition(
+        run.tenantId(), run.id(), AgentRunStatus.RUNNING, RunTransition.starting(Instant.now()));
+    RunRequest request = new RunRequest(context, adapter, config, capabilities, history, "");
+    return new PreparedResume(
+        request,
+        new ApprovalResumeRequest(checkpointRow.sequence(), checkpoint.replyId(), decisions));
+  }
+
+  private AgentRuntimeConfig resolvePinnedAgentConfig(AgentRun run, String tenantId) {
+    if (BUILTIN_DEFAULT_REVISION.equals(run.agentRevisionId())) {
+      return AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT);
+    }
+    AgentRevision revision =
+        agentRevisionRepository
+            .findById(run.agentRevisionId(), tenantId)
+            .orElseThrow(() -> new NotFoundException("AgentRevision", run.agentRevisionId()));
+    return AgentRuntimeConfig.minimal(revision.systemPrompt());
+  }
+
+  private AgentRunCapabilities resolvePinnedCapabilities(
+      Identity identity, AgentRun run, RunContext context, ModelAdapter adapter) {
+    java.util.List<io.datastoria.server.domain.AgentSkill> selectedSkills =
+        runSkillRepository.findByRun(run.tenantId(), run.id()).stream()
+            .map(
+                pin ->
+                    skillRepository
+                        .findRevision(
+                            run.tenantId(), identity.userId(), pin.skillId(), pin.skillRevision())
+                        .filter(skill -> pin.contentChecksum().equals(skill.bundleChecksum()))
+                        .orElseThrow(
+                            () -> new NotFoundException("AgentSkillRevision", pin.skillId())))
+            .toList();
+    java.util.List<io.agentscope.core.skill.AgentSkill> skills = toRuntimeSkills(selectedSkills);
+    AgentToolExecutionPolicy toolPolicy =
+        AgentToolExecutionPolicy.tracked(
+            auditLogRepository, jdbcScheduler, identity, run.id(), run.connectionId());
+    ClickHouseAgentTools clickHouseTools =
+        new ClickHouseAgentTools(
+            clickHouseConnectionService,
+            run.connectionId(),
+            identity,
+            mapper,
+            toolPolicy,
+            rcaTemplateCatalog.findEnabled("high_part_count").orElse(null));
+    Path configuredRoot =
+        repositoryRoot == null || repositoryRoot.isBlank() ? null : Path.of(repositoryRoot);
+    return new AgentRunCapabilities(
+        skills,
+        java.util.List.of(
+            clickHouseTools,
+            new SqlWorkflowAgentTools(
+                adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
+            new RepositoryAgentTools(configuredRoot, mapper, toolPolicy)));
+  }
+
+  private java.util.Map<String, Object> parseToolInput(String inputJson) {
+    try {
+      return mapper.readValue(
+          inputJson,
+          new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+    } catch (Exception e) {
+      throw new IllegalStateException("Pending tool input is invalid", e);
+    }
   }
 
   private PreparedRun prepareRun(AgentChatRequest req, Identity identity) {
@@ -299,27 +477,7 @@ public class ChatRunService {
         skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
             .filter(skill -> skillToolAvailability.isAvailable(skill.content(), skill.id()))
             .toList();
-    java.util.List<io.agentscope.core.skill.AgentSkill> skills =
-        selectedSkills.stream()
-            .map(
-                skill -> {
-                  java.util.Map<String, String> resources =
-                      skillRepository
-                          .findResources(skill.tenantId(), skill.id(), skill.revision())
-                          .stream()
-                          .collect(
-                              java.util.stream.Collectors.toMap(
-                                  io.datastoria.server.domain.AgentSkillResource::path,
-                                  io.datastoria.server.domain.AgentSkillResource::content));
-                  return io.agentscope.core.skill.AgentSkill.builder()
-                      .name(skill.id())
-                      .description(skill.id())
-                      .skillContent(skill.content())
-                      .resources(resources)
-                      .source("datastoria-database")
-                      .build();
-                })
-            .toList();
+    java.util.List<io.agentscope.core.skill.AgentSkill> skills = toRuntimeSkills(selectedSkills);
     java.util.List<AgentRunSkillPin> pins =
         selectedSkills.stream()
             .map(
@@ -353,6 +511,30 @@ public class ChatRunService {
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
                 new RepositoryAgentTools(configuredRoot, mapper, toolPolicy))),
         pins);
+  }
+
+  private java.util.List<io.agentscope.core.skill.AgentSkill> toRuntimeSkills(
+      java.util.List<io.datastoria.server.domain.AgentSkill> selectedSkills) {
+    return selectedSkills.stream()
+        .map(
+            skill -> {
+              java.util.Map<String, String> resources =
+                  skillRepository
+                      .findResources(skill.tenantId(), skill.id(), skill.revision())
+                      .stream()
+                      .collect(
+                          java.util.stream.Collectors.toMap(
+                              io.datastoria.server.domain.AgentSkillResource::path,
+                              io.datastoria.server.domain.AgentSkillResource::content));
+              return io.agentscope.core.skill.AgentSkill.builder()
+                  .name(skill.id())
+                  .description(skill.id())
+                  .skillContent(skill.content())
+                  .resources(resources)
+                  .source("datastoria-database")
+                  .build();
+            })
+        .toList();
   }
 
   private java.util.List<ChatTurn> loadHistory(AgentChatRequest req, String tenant) {
@@ -444,6 +626,8 @@ public class ChatRunService {
   }
 
   private record PreparedRun(String runId, RunRequest runRequest) {}
+
+  private record PreparedResume(RunRequest runRequest, ApprovalResumeRequest resume) {}
 
   private record ResolvedAgent(AgentRuntimeConfig config, String agentRevisionId) {}
 

@@ -40,7 +40,7 @@ public class AgentEventReplayService {
     return Flux.defer(
         () -> {
           AiSdkStreamEncoder encoder = new AiSdkStreamEncoder().withTitle(title);
-          AtomicLong sequence = new AtomicLong();
+          AtomicLong sequence = new AtomicLong(-1L);
           AtomicReference<String> runId = new AtomicReference<>();
           Flux<String> frames =
               events.concatMap(
@@ -52,18 +52,24 @@ public class AgentEventReplayService {
               .concatWith(Mono.fromSupplier(encoder::done))
               .concatMap(
                   frame ->
-                      Mono.fromRunnable(
-                              () ->
-                                  eventRepository.append(
-                                      new PersistedAgentFrame(
-                                          Ulid.next(),
-                                          tenantId,
-                                          runId.get(),
-                                          sequence.incrementAndGet(),
-                                          frame,
-                                          Instant.now())))
+                      Mono.fromCallable(
+                              () -> {
+                                if (sequence.compareAndSet(
+                                    -1L, eventRepository.maxSequence(tenantId, runId.get()))) {
+                                  // Initialized from durable replay state.
+                                }
+                                eventRepository.append(
+                                    new PersistedAgentFrame(
+                                        Ulid.next(),
+                                        tenantId,
+                                        runId.get(),
+                                        sequence.incrementAndGet(),
+                                        frame,
+                                        Instant.now()));
+                                return frame;
+                              })
                           .subscribeOn(jdbcScheduler)
-                          .thenReturn(frame));
+                          .map(String.class::cast));
         });
   }
 

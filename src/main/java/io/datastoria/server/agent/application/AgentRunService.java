@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
+import io.datastoria.server.agent.runtime.ApprovalResumeRequest;
 import io.datastoria.server.agent.runtime.CancellationRegistry;
 import io.datastoria.server.agent.runtime.HarnessAgentFactory;
 import io.datastoria.server.agent.runtime.RunnableAgent;
@@ -68,6 +69,34 @@ public final class AgentRunService {
    * only return this Flux and never manage a Disposable themselves.
    */
   public Flux<AgentRunEvent> start(RunRequest request) {
+    return execute(
+        request,
+        () ->
+            factory.create(
+                request.context(),
+                request.modelAdapter(),
+                request.config(),
+                request.capabilities(),
+                request.history(),
+                request.userText()));
+  }
+
+  /** Resumes one permission-paused run by delivering persisted decisions as ConfirmResults. */
+  public Flux<AgentRunEvent> resume(RunRequest request, ApprovalResumeRequest resume) {
+    return execute(
+        request,
+        () ->
+            factory.resumeApprovals(
+                request.context(),
+                request.modelAdapter(),
+                request.config(),
+                request.capabilities(),
+                request.history(),
+                resume));
+  }
+
+  private Flux<AgentRunEvent> execute(
+      RunRequest request, java.util.function.Supplier<RunnableAgent> agentSupplier) {
     AtomicBoolean subscribed = new AtomicBoolean();
     return Flux.defer(
         () -> {
@@ -76,14 +105,7 @@ public final class AgentRunService {
                 new IllegalStateException("An agent run stream can only be subscribed once"));
           }
 
-          RunnableAgent agent =
-              factory.create(
-                  request.context(),
-                  request.modelAdapter(),
-                  request.config(),
-                  request.capabilities(),
-                  request.history(),
-                  request.userText());
+          RunnableAgent agent = agentSupplier.get();
           String runId = request.context().runId();
           if (!registry.register(request.context(), agent)) {
             closeAsync(agent);

@@ -1,8 +1,12 @@
 package io.datastoria.server.api;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,11 +16,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import io.datastoria.server.agent.application.AgentEventReplayService;
 import io.datastoria.server.agent.application.AgentRunControlService;
 import io.datastoria.server.agent.application.AgentRunControlService.RunSnapshot;
+import io.datastoria.server.agent.application.ChatRunService;
 import io.datastoria.server.agent.domain.AgentPendingAction;
 import io.datastoria.server.agent.domain.PendingActionStatus;
 import io.datastoria.server.agent.domain.PersistedAgentFrame;
@@ -32,9 +39,14 @@ import reactor.core.publisher.Mono;
 public class AgentRunController {
 
   private final AgentRunControlService service;
+  private final ChatRunService chatRuns;
+  private final AgentEventReplayService replay;
 
-  public AgentRunController(AgentRunControlService service) {
+  public AgentRunController(
+      AgentRunControlService service, ChatRunService chatRuns, AgentEventReplayService replay) {
     this.service = service;
+    this.chatRuns = chatRuns;
+    this.replay = replay;
   }
 
   @GetMapping("/{runId}")
@@ -97,10 +109,42 @@ public class AgentRunController {
     return IdentityContext.current().flatMap(identity -> service.cancel(identity, runId));
   }
 
+  @PostMapping("/{runId}:resume")
+  public Mono<Void> resume(
+      @PathVariable String runId,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+      ServerWebExchange exchange) {
+    requireIdempotencyKey(idempotencyKey);
+    return IdentityContext.current()
+        .flatMap(
+            identity ->
+                chatRuns
+                    .resume(runId, identity)
+                    .flatMap(
+                        events ->
+                            writeSse(
+                                exchange,
+                                replay.encodeAndRecord(identity.tenantId(), events, null))));
+  }
+
   private static void requireIdempotencyKey(String value) {
     if (value == null || value.isBlank() || value.length() > 128) {
       throw new IllegalArgumentException("A valid Idempotency-Key is required");
     }
+  }
+
+  private static Mono<Void> writeSse(
+      ServerWebExchange exchange, reactor.core.publisher.Flux<String> frames) {
+    ServerHttpResponse response = exchange.getResponse();
+    response.setStatusCode(HttpStatus.OK);
+    HttpHeaders headers = response.getHeaders();
+    headers.setContentType(MediaType.TEXT_EVENT_STREAM);
+    headers.add("Cache-Control", "no-cache");
+    headers.add("Connection", "keep-alive");
+    headers.add("X-Vercel-AI-UI-Message-Stream", "v1");
+    headers.add("X-Accel-Buffering", "no");
+    return response.writeWith(
+        frames.map(frame -> response.bufferFactory().wrap(frame.getBytes(StandardCharsets.UTF_8))));
   }
 
   public record ResolutionBody(@NotNull JsonNode response) {}

@@ -51,8 +51,13 @@ public final class AgentEventMapper {
   private final Map<String, StringBuilder> toolOutputs = new ConcurrentHashMap<>();
 
   public AgentEventMapper(RunContext context, Clock clock) {
+    this(context, clock, 0L);
+  }
+
+  public AgentEventMapper(RunContext context, Clock clock, long initialSequence) {
     this.context = context;
     this.clock = clock;
+    this.sequence.set(initialSequence);
   }
 
   /**
@@ -65,6 +70,9 @@ public final class AgentEventMapper {
     String runId = context.runId();
     switch (type) {
       case AGENT_START:
+        if (sequence.get() > 0) {
+          return Optional.empty();
+        }
         return Optional.of(
             new AgentRunEvent.RunStarted(
                 runId, seq(), now(), context.sessionId(), context.messageId()));

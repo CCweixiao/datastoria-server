@@ -11,6 +11,8 @@ public interface AgentSkillRepository {
 
   Optional<AgentSkill> findById(String tenantId, String userId, String id, boolean includeDraft);
 
+  Optional<AgentSkill> findRevision(String tenantId, String userId, String id, long skillRevision);
+
   AgentSkill saveBundle(AgentSkill skill, List<AgentSkillResource> resources);
 
   List<AgentSkillResource> findResources(String tenantId, String skillId, long skillRevision);

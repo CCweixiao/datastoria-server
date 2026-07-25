@@ -44,6 +44,19 @@ public class JdbcAgentEventRepository implements AgentEventRepository {
   }
 
   @Override
+  public long maxSequence(String tenantId, String runId) {
+    Long value =
+        jdbc.sql(
+                "SELECT COALESCE(MAX(sequence),0) FROM ds_agent_event"
+                    + " WHERE tenant_id=:tenant AND run_id=:run")
+            .param("tenant", tenantId)
+            .param("run", runId)
+            .query(Long.class)
+            .single();
+    return value == null ? 0L : value;
+  }
+
+  @Override
   public List<PersistedAgentFrame> findAfter(String tenantId, String runId, long sequence) {
     return jdbc.sql(
             "SELECT * FROM ds_agent_event"

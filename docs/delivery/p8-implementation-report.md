@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 起始提交：`1acedf9`
-> 状态：**P8.1 已完成；P8.2 AgentScope approval 暂停边界已完成，恢复执行进行中**
+> 状态：**P8.1 已完成；P8.2 approval 暂停/重启恢复已完成，question suspension 进行中**
 
 ## P8 权威范围
 
@@ -89,6 +89,19 @@ AgentScope 推理/工具循环测试已验证：
 跨进程恢复仍由 DataStoria checkpoint 重建，不能把含 prompt 的 AgentScope 全量 state
 直接写入当前安全 checkpoint。
 
+approval/deny 恢复链路现已完成：
+
+- `POST /api/ai/runs/{runId}:resume` 返回 AI SDK SSE continuation；
+- 仅 owner 且 run 为 `WAITING_INPUT` 时允许恢复，所有 checkpoint tool calls 必须已有
+  APPROVED/DENIED 终态；
+- APPROVED/DENIED 被转换为 AgentScope `ConfirmResult`，批准会执行原工具，拒绝会向模型
+  注入 denied `ToolResultBlock`；
+- 同 JVM 优先使用 run-scoped AgentScope state；Java 重启后仅使用安全 checkpoint 中的
+  tool id/name/input、持久聊天消息、固定 agent/model/skill revisions 重建最小状态；
+- 不把 prompt、provider credential 或 AgentScope 全量 state 写入 checkpoint；
+- continuation mapper 从 checkpoint event sequence 继续，忽略重复 `AgentStart`；
+- SSE 持久帧从 `ds_agent_event` 当前最大 sequence 追加，不会在续流时从 1 重置。
+
 ### P8.2 当前证据
 
 - pending action repository、HTTP controller、AgentScope event mapper、AI SDK encoder 专项：
@@ -97,12 +110,10 @@ AgentScope 推理/工具循环测试已验证：
 - approval 边界集成测试验证 `WAITING_INPUT + pending action + PENDING_ACTION checkpoint`
   原子落库；
 - 暂停原因回归测试覆盖 permission asking、tool suspended、middleware pause；
-- Java 全量：345/345；Spotless 通过。
+- Java 全量：348/348；Spotless 通过。
 
 ## 尚未完成
 
-- approval/deny 后的 AgentScope `ConfirmResult` 恢复执行；
 - `ask_user_question` 服务端 suspension 工具和 question wire frame；
-- `:resume` 与 Java 进程重启恢复；
 - 前端 action API 交互替换 client executor；
 - memory/compaction、session 并发策略和完整 P8 回归。

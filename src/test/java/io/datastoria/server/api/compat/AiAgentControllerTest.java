@@ -44,14 +44,20 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.model.ToolSchema;
 import io.datastoria.server.TestDbHelper;
 import io.datastoria.server.agent.application.ChatRunService;
+import io.datastoria.server.agent.application.RunLifecycleRecorder;
+import io.datastoria.server.agent.application.RunMessageContext;
 import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunStatus;
+import io.datastoria.server.agent.domain.PendingActionStatus;
+import io.datastoria.server.agent.domain.PersistedAgentFrame;
 import io.datastoria.server.agent.testing.FakeModelAdapterProvider;
 import io.datastoria.server.agent.testing.FakeStreamModel;
 import io.datastoria.server.api.error.ResourceInUseException;
 import io.datastoria.server.domain.ChatMessage;
 import io.datastoria.server.identity.Identity;
+import io.datastoria.server.repository.AgentEventRepository;
+import io.datastoria.server.repository.AgentPendingActionRepository;
 import io.datastoria.server.repository.AgentRunRepository;
 import io.datastoria.server.repository.AgentRunSkillRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
@@ -79,6 +85,9 @@ class AiAgentControllerTest {
   @Autowired FakeModelAdapterProvider fakeProvider;
   @Autowired AgentRunRepository runRepository;
   @Autowired AgentRunSkillRepository runSkillRepository;
+  @Autowired AgentPendingActionRepository pendingActions;
+  @Autowired AgentEventRepository agentEvents;
+  @Autowired RunLifecycleRecorder lifecycleRecorder;
   @Autowired ChatMessageRepository messageRepository;
   @Autowired JdbcClient jdbc;
   @Autowired TestDbHelper dbHelper;
@@ -139,6 +148,97 @@ class AiAgentControllerTest {
     // [DONE].
     assertThat(sse).contains("\n\ndata: ");
     assertThat(sse).endsWith("data: [DONE]\n\n");
+  }
+
+  @Test
+  void deniedApprovalResumesFromSafeCheckpointAndCompletesAfterRuntimeRestart() {
+    jdbc.sql(
+            """
+            INSERT INTO ds_agent_run
+              (id,tenant_id,user_id,session_id,message_id,agent_revision_id,model_id,status,
+               connection_id,revision,created_at,updated_at)
+            VALUES
+              ('resume-run',:tenant,:user,'sess-1','resume-assistant','builtin-default','mdl-1',
+               'running','ch-1',0,:now,:now)
+            """)
+        .param("tenant", TENANT)
+        .param("user", USER)
+        .param("now", NOW.toString())
+        .update();
+    messageRepository.save(
+        new ChatMessage(
+            "resume-user",
+            TENANT,
+            "sess-1",
+            USER,
+            "user",
+            "[{\"type\":\"text\",\"text\":\"run risky tool\"}]",
+            null,
+            1,
+            NOW,
+            NOW));
+    lifecycleRecorder
+        .tap(
+            new RunMessageContext(
+                TENANT, "resume-run", USER, "sess-1", "resume-assistant", "mdl-1"),
+            Flux.just(
+                new AgentRunEvent.ToolApprovalRequired(
+                    "resume-run",
+                    7,
+                    NOW,
+                    "resume-reply",
+                    List.of(
+                        new AgentRunEvent.ToolApproval(
+                            "resume-action",
+                            "resume-call",
+                            "execute_sql",
+                            "{\"sql\":\"SELECT 1\"}")))))
+        .blockLast();
+    webTestClient
+        .post()
+        .uri("/api/ai/runs/resume-run/actions/resume-action:deny")
+        .header("x-datastoria-user-email", USER)
+        .header("Idempotency-Key", "deny-resume")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo(PendingActionStatus.DENIED.name());
+    agentEvents.append(
+        new PersistedAgentFrame("old-frame-1", TENANT, "resume-run", 1, "old-1", NOW));
+    agentEvents.append(
+        new PersistedAgentFrame("old-frame-2", TENANT, "resume-run", 2, "old-2", NOW));
+
+    ResumeAfterDenialModel resumeModel = new ResumeAfterDenialModel();
+    fakeProvider.setModel(resumeModel);
+    String sse =
+        webTestClient
+            .post()
+            .uri("/api/ai/runs/resume-run:resume")
+            .header("x-datastoria-user-email", USER)
+            .header("Idempotency-Key", "resume-1")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectHeader()
+            .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(sse).contains("resumed safely", "\"type\":\"finish\"", "data: [DONE]");
+    assertThat(resumeModel.observedDenied()).isTrue();
+    assertThat(agentEvents.maxSequence(TENANT, "resume-run")).isGreaterThan(2);
+    assertThat(agentEvents.findAfter(TENANT, "resume-run", 2))
+        .allSatisfy(frame -> assertThat(frame.sequence()).isGreaterThan(2));
+    assertThat(runRepository.find(TENANT, "resume-run"))
+        .get()
+        .extracting(AgentRun::status)
+        .isEqualTo(AgentRunStatus.SUCCEEDED);
+    assertThat(messageRepository.findById("resume-assistant", TENANT, "sess-1")).isPresent();
   }
 
   @Test
@@ -925,6 +1025,42 @@ class AiAgentControllerTest {
         }
       }
       throw new IllegalStateException("E2E Skill was not advertised by AgentScope");
+    }
+  }
+
+  private static final class ResumeAfterDenialModel implements Model {
+    private volatile boolean observedDenied;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      observedDenied =
+          messages.stream()
+              .flatMap(message -> message.getContent().stream())
+              .filter(ToolResultBlock.class::isInstance)
+              .map(ToolResultBlock.class::cast)
+              .anyMatch(
+                  result -> result.getState() == io.agentscope.core.message.ToolResultState.DENIED);
+      ChatUsage usage = ChatUsage.builder().inputTokens(2).outputTokens(2).time(0.0).build();
+      return Flux.just(
+          ChatResponse.builder()
+              .content(List.of(TextBlock.builder().text("resumed safely").build()))
+              .build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(usage)
+              .finishReason("stop")
+              .metadata(java.util.Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "resume-after-denial";
+    }
+
+    boolean observedDenied() {
+      return observedDenied;
     }
   }
 }

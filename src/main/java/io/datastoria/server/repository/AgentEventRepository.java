@@ -9,5 +9,7 @@ public interface AgentEventRepository {
 
   void append(PersistedAgentFrame frame);
 
+  long maxSequence(String tenantId, String runId);
+
   List<PersistedAgentFrame> findAfter(String tenantId, String runId, long sequence);
 }
