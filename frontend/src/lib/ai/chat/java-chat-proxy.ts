@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getAuthenticatedUserEmail } from "@/auth";
 import { getChatJavaApiBase } from "./chat-backend";
 
@@ -27,6 +28,7 @@ const FORWARDED_RESPONSE_HEADERS = [
   "x-vercel-ai-ui-message-stream",
   "x-accel-buffering",
 ];
+const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
 
 export async function proxyChatToJava(req: Request): Promise<Response> {
   let base: string;
@@ -40,6 +42,12 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
   }
 
   const raw = await req.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_REQUEST_BYTES) {
+    return new Response("Request body too large.", {
+      status: 413,
+      headers: { "content-type": "text/plain" },
+    });
+  }
   let body: unknown;
   try {
     body = JSON.parse(raw);
@@ -49,7 +57,28 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
       headers: { "content-type": "text/plain" },
     });
   }
+  if (containsClientSecrets(body)) {
+    return Response.json(
+      {
+        code: "CLIENT_SECRET_NOT_ALLOWED",
+        title: "Client secret not allowed",
+        detail:
+          "API keys must be stored server-side. Remove the secret field from the request body.",
+      },
+      { status: 400 }
+    );
+  }
+  // Defense in depth: retain the sanitizer even after the explicit rejection above, so future
+  // additions to the accepted request shape cannot accidentally forward a key this version knows.
   stripClientSecrets(body);
+
+  const email = getAuthenticatedUserEmail(req);
+  if (!email) {
+    return new Response("Authentication required", {
+      status: 401,
+      headers: { "content-type": "text/plain" },
+    });
+  }
 
   const idempotencyKey =
     req.headers.get("idempotency-key") || resolveIdempotencyKey(body) || randomKey();
@@ -57,13 +86,15 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "idempotency-key": idempotencyKey,
+    "x-datastoria-user-email": email,
   };
-  const email = getAuthenticatedUserEmail(req);
-  if (email) {
-    headers["x-datastoria-user-email"] = email;
-  }
 
   const abortController = new AbortController();
+  const abortUpstream = () => abortController.abort();
+  req.signal.addEventListener("abort", abortUpstream, { once: true });
+  if (req.signal.aborted) {
+    abortController.abort();
+  }
   let upstream: Response;
   try {
     upstream = await fetch(`${base}/api/ai/agent`, {
@@ -73,6 +104,10 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
       signal: abortController.signal,
     });
   } catch {
+    req.signal.removeEventListener("abort", abortUpstream);
+    if (req.signal.aborted) {
+      return new Response(null, { status: 499 });
+    }
     return new Response("Java chat backend unreachable", {
       status: 502,
       headers: { "content-type": "text/plain" },
@@ -97,29 +132,46 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
   // (disconnect), the ReadableStream cancel hook aborts the upstream fetch so the Java backend
   // cancels the run and stops provider token emission.
   const upstreamBody = upstream.body;
+  const reader = upstreamBody?.getReader();
   const responseBody = new ReadableStream<Uint8Array>({
-    async start(streamController) {
-      if (!upstreamBody) {
+    async pull(streamController) {
+      if (!reader) {
+        req.signal.removeEventListener("abort", abortUpstream);
         streamController.close();
         return;
       }
-      const reader = upstreamBody.getReader();
       try {
-        let result = await reader.read();
-        while (!result.done) {
+        const result = await reader.read();
+        if (result.done) {
+          req.signal.removeEventListener("abort", abortUpstream);
+          streamController.close();
+        } else {
           streamController.enqueue(result.value);
-          result = await reader.read();
         }
-        streamController.close();
       } catch (error) {
+        req.signal.removeEventListener("abort", abortUpstream);
         streamController.error(error);
       }
     },
-    cancel() {
+    async cancel(reason) {
+      req.signal.removeEventListener("abort", abortUpstream);
       abortController.abort();
+      await reader?.cancel(reason).catch(() => undefined);
     },
   });
   return new Response(responseBody, { status: upstream.status, headers: responseHeaders });
+}
+
+function containsClientSecrets(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some(containsClientSecrets);
+  }
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  return Object.entries(node as Record<string, unknown>).some(
+    ([key, value]) => isSensitiveKey(key) || containsClientSecrets(value)
+  );
 }
 
 /** Recursively deletes any client-credential-looking key before forwarding. */
@@ -166,6 +218,10 @@ export function resolveIdempotencyKey(body: unknown): string | null {
     return null;
   }
   const obj = body as Record<string, unknown>;
+  const clientRequestId = typeof obj.clientRequestId === "string" ? obj.clientRequestId.trim() : "";
+  if (clientRequestId) {
+    return clientRequestId;
+  }
   const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
   const message = obj.message as { id?: unknown; parts?: unknown } | undefined;
   const messageId = message && typeof message.id === "string" ? message.id : "";
@@ -193,13 +249,9 @@ function extractUserText(message: { parts?: unknown } | undefined): string {
     .trim();
 }
 
-/** Deterministic non-crypto hash (djb2) — stable for the same input, sufficient for a key. */
+/** Deterministic SHA-256 digest avoids making idempotency correctness depend on a short hash. */
 function stableHash(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(16);
+  return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
 function randomKey(): string {

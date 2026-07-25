@@ -96,8 +96,7 @@ describe("java-chat-proxy", () => {
     expect(headers.get("idempotency-key")).toMatch(/^ds-/);
   });
 
-  it("strips client credentials before forwarding (never sends apiKey/password/token)", async () => {
-    fetchMock.mockResolvedValue(sseResponse(SSE_BODY));
+  it("rejects client credentials before forwarding (never sends apiKey/password/token)", async () => {
     const payload = {
       sessionId: "sess-1",
       connectionId: "ch-1",
@@ -107,15 +106,11 @@ describe("java-chat-proxy", () => {
       accessToken: "tok-LEAK",
     };
 
-    await proxyChatToJava(chatRequest(payload));
+    const response = await proxyChatToJava(chatRequest(payload));
 
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(JSON.stringify(body)).not.toContain("sk-LEAK-123");
-    expect(JSON.stringify(body)).not.toContain("pw-LEAK");
-    expect(JSON.stringify(body)).not.toContain("tok-LEAK");
-    expect(body.model.apiKey).toBeUndefined();
-    expect(body.connection.password).toBeUndefined();
-    expect(body.accessToken).toBeUndefined();
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("CLIENT_SECRET_NOT_ALLOWED");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("derives a stable idempotency key: same request -> same key, different -> different", () => {
@@ -142,6 +137,19 @@ describe("java-chat-proxy", () => {
     );
     const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers);
     expect(headers.get("idempotency-key")).toBe("client-supplied-key");
+  });
+
+  it("uses body clientRequestId when no Idempotency-Key header is present", async () => {
+    fetchMock.mockResolvedValue(sseResponse(SSE_BODY));
+    await proxyChatToJava(
+      chatRequest({
+        sessionId: "sess-1",
+        clientRequestId: "body-request-key",
+        message: { id: "msg-1", role: "user", parts: [] },
+      })
+    );
+    const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers);
+    expect(headers.get("idempotency-key")).toBe("body-request-key");
   });
 
   it("streams the SSE body verbatim and preserves AI SDK headers + 200 status", async () => {
@@ -206,6 +214,64 @@ describe("java-chat-proxy", () => {
 
     expect(capturedSignal).toBeDefined();
     expect(capturedSignal!.aborted).toBe(true);
+  });
+
+  it("aborts an in-flight upstream fetch when the inbound request disconnects", async () => {
+    const inbound = new AbortController();
+    let capturedSignal: AbortSignal | undefined;
+    fetchMock.mockImplementation((_url, init) => {
+      capturedSignal = (init as RequestInit).signal as AbortSignal;
+      return new Promise((_resolve, reject) => {
+        capturedSignal!.addEventListener(
+          "abort",
+          () => reject(new DOMException("aborted", "AbortError")),
+          { once: true }
+        );
+      });
+    });
+    const request = new Request("http://localhost/api/ai/agent", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-datastoria-user-email": "dev@example.com",
+      },
+      body: JSON.stringify({
+        sessionId: "sess-1",
+        message: { id: "msg-1", role: "user", parts: [] },
+      }),
+      signal: inbound.signal,
+    });
+
+    const responsePromise = proxyChatToJava(request);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    inbound.abort();
+    const response = await responsePromise;
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(response.status).toBe(499);
+  });
+
+  it("fails closed when authenticated identity is missing", async () => {
+    const request = new Request("http://localhost/api/ai/agent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "sess-1",
+        message: { id: "msg-1", role: "user", parts: [] },
+      }),
+    });
+
+    const response = await proxyChatToJava(request);
+
+    expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects request bodies larger than 10 MiB before authentication or forwarding", async () => {
+    const response = await proxyChatToJava(chatRequest({ padding: "x".repeat(10 * 1024 * 1024) }));
+
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("returns 502 when the Java backend URL is not configured", async () => {

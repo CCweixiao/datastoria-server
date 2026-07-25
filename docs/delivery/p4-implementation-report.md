@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1–P4.6（已通过 review）+ P4.7（本次）**
+> 本次交付：**P4.1–P4.7（均已通过 review）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.6 review 已通过；**P4.7 已实现，待 review**；P4.8 未开始。
+> 状态：P4.1–P4.7 review 已通过；P4.8 未开始。
 
 ---
 
@@ -960,7 +960,7 @@ review 发现并修复 4 个边界问题：
 
 ---
 
-# P4.7 — 前端 Node/Java Chat Gateway（本次交付，待 review）
+# P4.7 — 前端 Node/Java Chat Gateway（review 已通过）
 
 ## P4.7-0. 范围
 
@@ -985,19 +985,24 @@ POST /api/ai/agent (frontend/src/app/api/ai/agent/route.ts)
 ## P4.7-2. 关键不变量
 
 1. **node 模式零改动**：短路在 `try` 之前；既有 `streamText`/`createUIMessageStreamResponse` 字节不变。
-2. **客户端凭据不发往 Java**：`stripClientSecrets` 递归删除 `apiKey/api_key/password/token/accessToken/
-   refreshToken/authorization/secret/clientSecret`（含嵌套 `model.apiKey`/`connection.password`）再转发。
-   Java 端 (P4.6) 也会拒绝，gateway 是双保险。
+2. **客户端凭据不发往 Java**：gateway 递归识别 `apiKey/api_key/password/token/accessToken/
+   refreshToken/authorization/secret/clientSecret`（含嵌套 `model.apiKey`/`connection.password`），在 fetch 前
+   返回 `400 CLIENT_SECRET_NOT_ALLOWED`；保留递归 sanitizer 作为防御纵深。不得静默剥离后继续执行，否则会
+   掩盖尚未完成凭据迁移的调用方。
 3. **身份转发**：`getAuthenticatedUserEmail(req)`（`proxy.ts` 中间件从 next-auth session 注入到请求头）→ 作为
    `x-datastoria-user-email` 转发。**不**用客户端可控的公开 env 伪造身份。
-4. **稳定 Idempotency-Key**：优先透传客户端 `Idempotency-Key` 头；否则由 `sessionId + message.id`（客户端
-   `uuidv7`，跨重试稳定）派生 `ds-<djb2hex>`；再否则 `sessionId+text`。同一请求（含网络重试）复用同一键。
+4. **稳定 Idempotency-Key**：优先透传客户端 `Idempotency-Key` 头，其次复用 body
+   `clientRequestId`；否则由 `sessionId + message.id`（客户端 `uuidv7`，跨重试稳定）派生
+   `ds-<sha256>`，再否则 `sessionId+text`。同一请求（含网络重试）复用同一键。
 5. **SSE 原样流式**：上游 `Response.body` 经一个 `ReadableStream` 包装逐 chunk `enqueue` 转发（**不缓冲、不解析、
    不重新编码**）；透传 `content-type`/`cache-control`/`connection`/`x-vercel-ai-ui-message-stream`/
    `x-accel-buffering` 头与状态码。Java 非 2xx → 透传状态 + 兼容错误体（不合成内部异常）。
-6. **取消传播**：`AbortController` + `ReadableStream.cancel()` —— 浏览器断开（downstream cancel）→ `abort()` 上游
-   fetch → Java 后端取消 run、停 provider token。`signal` 传入 fetch。
-7. **未修改前端 chat 客户端**：`DefaultChatTransport` 仍打 `/api/ai/agent`；java 模式下网关透明代理，AI SDK 消费
+6. **取消传播**：入站 `req.signal` 与 downstream `ReadableStream.cancel()` 均绑定
+   `AbortController`；断开发生在等待响应头期间或流式读取期间，都会 abort 上游 fetch、cancel upstream
+   reader，使 Java 后端取消 run、停止 provider token。
+7. **边界保持**：Java 模式与 Node A01 一样限制请求体为 10 MiB；缺少中间件注入的认证 email 时在 gateway
+   返回 401，不依赖 Java local profile 的 anonymous 默认值。
+8. **未修改前端 chat 客户端**：`DefaultChatTransport` 仍打 `/api/ai/agent`；java 模式下网关透明代理，AI SDK 消费
    Java SSE（P4.6 已验证 `data: {json}\n\n` + `[DONE]`）。
 
 ## P4.7-3. 测试命令与结果
@@ -1012,8 +1017,9 @@ npx eslint src/lib/ai/chat/ src/app/api/ai/agent/route.ts
 npx prettier --check "src/lib/ai/chat/*.ts" src/app/api/ai/agent/route.ts
 ```
 
-- P4.7 专项：`chat-backend.test.ts`(4) + `java-chat-proxy.test.ts`(9) = **13/13 通过**。
-- 前端全量：**82 files / 432 tests 全通过**。
+- review 修复后 P4.7 专项：`chat-backend.test.ts`(4) + `java-chat-proxy.test.ts`(13) =
+  **17/17 通过**。
+- 前端全量：**82 files / 436 tests 全通过**。
 - typecheck / eslint / prettier：**clean**（修复了一个 TS `Transformer.cancel` 类型缺失 → 改用 `ReadableStream`
   包装，及一个 unused eslint-disable）。
 - Java 回归：`./mvnw test -Dtest=AiAgentControllerTest` → **17/17 通过**（P4.6 未受影响，P4.7 不改 Java）。
@@ -1024,18 +1030,19 @@ P4.7 测试覆盖（对齐需求 9）：
 | --- | --- |
 | chat-backend | 默认 node；仅 `===\"java\"` 选 java；Java URL 去尾斜杠；未配置 fail-fast |
 | proxy forwards endpoint+identity+idempotency | 转发到 `${JAVA_BASE}/api/ai/agent`，带 `x-datastoria-user-email` + `idempotency-key` |
-| proxy strips client credentials | `model.apiKey`/`connection.password`/`accessToken` 不进转发体 |
-| resolveIdempotencyKey stable | 同请求同键、不同 message.id 不同键；客户端头优先透传 |
+| proxy rejects client credentials | `model.apiKey`/`connection.password`/`accessToken` → 400，且不 fetch |
+| resolveIdempotencyKey stable | header/body clientRequestId 优先；派生键使用 SHA-256；同请求同键 |
 | proxy streams SSE verbatim + headers | 状态 200 + 5 头 + body 逐字节相等 |
 | proxy passes through non-2xx | 409 状态 + body 透传，不合成内部异常 |
-| proxy aborts upstream on disconnect | `reader.cancel()` → `signal.aborted===true` |
+| proxy aborts upstream on disconnect | downstream reader cancel 与等待响应头时 inbound abort 均取消上游 |
+| proxy fails closed without identity / oversized body | 缺认证 email → 401；超过 10 MiB → 413；均不 fetch |
 | proxy 502 when URL unset | 未配置返回 502，不 fetch |
 | stripClientSecrets | 嵌套凭据键删除、安全字段保留 |
 
 ## P4.7-4. 安全检查
 
-- **客户端凭据**：`apiKey/password/token/authorization/secret` 递归剥离，绝不发往 Java（测试断言 `sk-LEAK`/`pw-LEAK`/
-  `tok-LEAK` 不在转发体）。
+- **客户端凭据**：`apiKey/password/token/authorization/secret` 在 gateway 显式拒绝并返回
+  `CLIENT_SECRET_NOT_ALLOWED`，绝不发往 Java。
 - **身份**：服务端从请求头解析（中间件已剥离客户端伪造的 `x-datastoria-user-email`），不以公开 env 信任客户端身份。
 - **错误透传**：Java 非 2xx 状态+body 透传，gateway 不合成/不放大后端内部异常（P4.6 已脱敏）。
 - 未改 Java、未改前端 chat 客户端、未改协议 fixture（route/fixture 只读）。
@@ -1077,5 +1084,21 @@ docs/delivery/p4-implementation-report.md                      (追加 P4.7)
 - run resume / 事件重放（`Last-Event-ID`/`ds_agent_event`）+ assistant 消息落 `ds_chat_message` + title 注入。
 - Node↔Java 字节级 diff（contract runner 抓真实字节）。
 
-**停在 P4.7 review，不自动开始 P4.8。**
+**P4.7 review 已通过；不自动开始 P4.8。**
 
+## P4.7-9. Review 修复结论
+
+review 发现并修复以下边界问题：
+
+1. body 已携带 `clientRequestId` 时，原 gateway 仍从 message 派生 header，可能与 body 冲突并被 Java
+   P4.6 拒绝；现优先复用 body key。
+2. 原 gateway 仅在 downstream body 被 cancel 后 abort；客户端等待 Java 响应头期间断开不会取消 fetch。
+   现同时绑定入站 `req.signal`，并在 downstream cancel 时显式 cancel upstream reader。
+3. 原流包装在 `start()` 中持续读取，无 downstream backpressure；现改为 `pull()` 每次读取一个 chunk。
+4. 补回 Node A01 的 10 MiB 请求边界，并在缺少可信认证 email 时 fail closed 为 401。
+5. 原实现静默删除客户端凭据后继续请求，违背 `CLIENT_SECRET_NOT_ALLOWED` 的迁移诊断语义；现显式返回
+   400 且不调用 Java。
+6. 派生幂等键由短 DJB2 摘要升级为 SHA-256，避免碰撞导致不同请求错误去重。
+
+验证：P4.7 专项 17/17、前端全量 82 files / 436 tests 全通过；typecheck、ESLint、Prettier
+均通过。**P4.7 review 通过，可开始 P4.8。**
