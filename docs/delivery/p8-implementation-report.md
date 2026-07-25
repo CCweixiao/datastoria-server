@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 起始提交：`1acedf9`
-> 状态：**P8 已完成，等待合并后最终联调确认**
+> 状态：**P8 已完成并合并到本地 master**
 
 ## P8 权威范围
 
@@ -135,6 +135,7 @@ question suspension 与前端恢复链路也已完成：
 - Java 全量：355/355；Spotless 通过；
 - 前端 Vitest：58 files、302/302；TypeScript typecheck 通过；
 - Next.js production build（webpack）通过；
+- 本地 ClickHouse `LocalClickHouseIT` 实库场景通过；
 - MySQL schema parity 测试因本机无 Docker 未启动容器；SQLite V1–V13 迁移与全部
   repository/API 测试通过。
 
