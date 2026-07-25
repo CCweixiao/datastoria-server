@@ -5,10 +5,11 @@ import java.util.List;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
-import io.datastoria.server.agent.domain.TokenUsage;
+import io.datastoria.server.agent.domain.RunFailureCode;
 
 import reactor.core.publisher.Flux;
 
@@ -34,13 +35,13 @@ import reactor.core.publisher.Flux;
  *   <li>{@code ReasoningBlock{Started,Delta,Ended}} → {@code reasoning-start/delta/end}, sharing
  *       one opaque part id per block.
  *   <li>{@code TextBlock{Started,Delta,Ended}} → {@code text-start/delta/end}, sharing one part id.
- *   <li>{@code UsageReported} → emits nothing; usage is buffered and carried on the {@code finish}
- *       chunk's {@code messageMetadata.usage}.
+ *   <li>{@code UsageReported} → emits nothing; usage is accumulated across model calls and carried
+ *       on the {@code finish} chunk's {@code messageMetadata.usage}.
  *   <li>{@code RunCompleted} → {@code finish-step} then {@code finish}{finishReason="stop",
  *       messageMetadata.usage}.
- *   <li>{@code RunFailed} → {@code error}{errorText = the fixed safe message}. Never the raw
- *       provider exception, prompt, or credential (the {@link AgentRunEvent.RunFailed} already
- *       carries the sanitized message).
+ *   <li>{@code RunFailed} → {@code error}{errorText = fixed safe message derived from its code}.
+ *       The event's message is deliberately ignored, so an incorrectly constructed upstream event
+ *       still cannot expose a provider exception, prompt, or credential.
  *   <li>{@code RunCancelled} → {@code abort}{reason}. Honors the client abort semantic: the encoder
  *       only produces this frame <em>if</em> a {@code RunCancelled} reaches it; a disposed
  *       subscription (client disconnect) never receives one, so nothing is force-written
@@ -56,8 +57,8 @@ import reactor.core.publisher.Flux;
  * promptTokens}/{@code completionTokens} naming; the encoder follows the live frontend behavior
  * (see P4.5 report).
  *
- * <p><b>Stateful / per-run.</b> Holds part-id counters and buffered usage; not thread-safe. {@link
- * #encode(Flux)} creates a fresh encoder per subscription.
+ * <p><b>Stateful / per-run.</b> Holds part-id counters and accumulated usage; not thread-safe.
+ * {@link #encode(Flux)} creates a fresh encoder per subscription.
  */
 public final class AiSdkStreamEncoder {
 
@@ -65,27 +66,29 @@ public final class AiSdkStreamEncoder {
   static final String ABORT_REASON = "client_disconnect";
 
   private final ObjectMapper mapper;
-  private String messageId;
   private boolean started;
   private int textSeq;
   private int reasoningSeq;
   private String currentTextId;
   private String currentReasoningId;
-  private TokenUsage bufferedUsage;
+  private long inputTokens;
+  private long outputTokens;
+  private long cachedTokens;
 
   public AiSdkStreamEncoder() {
     this(new ObjectMapper());
   }
 
   public AiSdkStreamEncoder(ObjectMapper mapper) {
-    this.mapper = mapper;
+    // An application ObjectMapper may have pretty printing enabled. Copy it so encoder-local
+    // settings cannot mutate the shared bean, then force compact one-line JSON required by SSE.
+    this.mapper = mapper.copy().disable(SerializationFeature.INDENT_OUTPUT);
   }
 
   /** Encodes one event into zero or more SSE frames, updating internal state. */
   public List<String> encode(AgentRunEvent event) {
     List<String> frames = new ArrayList<>(2);
     if (event instanceof AgentRunEvent.RunStarted e) {
-      this.messageId = e.messageId();
       if (!started) {
         started = true;
         ObjectNode start = mapper.createObjectNode();
@@ -125,7 +128,9 @@ public final class AiSdkStreamEncoder {
         currentTextId = null;
       }
     } else if (event instanceof AgentRunEvent.UsageReported e) {
-      this.bufferedUsage = e.usage();
+      this.inputTokens += e.usage().inputTokens();
+      this.outputTokens += e.usage().outputTokens();
+      this.cachedTokens += e.usage().cachedTokens();
     } else if (event instanceof AgentRunEvent.RunCompleted) {
       frames.add(frame(simple("finish-step")));
       ObjectNode finish = mapper.createObjectNode();
@@ -137,7 +142,7 @@ public final class AiSdkStreamEncoder {
     } else if (event instanceof AgentRunEvent.RunFailed e) {
       ObjectNode error = mapper.createObjectNode();
       error.put("type", "error");
-      error.put("errorText", e.message());
+      error.put("errorText", safeFailureMessage(e.code()));
       frames.add(frame(error));
     } else if (event instanceof AgentRunEvent.RunCancelled) {
       ObjectNode abort = mapper.createObjectNode();
@@ -191,21 +196,26 @@ public final class AiSdkStreamEncoder {
 
   /** Builds the AI SDK v6 {@code LanguageModelUsage}-shaped object (matches Node A01 output). */
   private ObjectNode usageNode() {
-    int input = bufferedUsage == null ? 0 : bufferedUsage.inputTokens();
-    int output = bufferedUsage == null ? 0 : bufferedUsage.outputTokens();
-    int cached = bufferedUsage == null ? 0 : bufferedUsage.cachedTokens();
     ObjectNode usage = mapper.createObjectNode();
-    usage.put("inputTokens", input);
+    usage.put("inputTokens", inputTokens);
     ObjectNode inDetails = usage.putObject("inputTokenDetails");
-    inDetails.put("noCacheTokens", Math.max(0, input - cached));
-    inDetails.put("cacheReadTokens", cached);
+    inDetails.put("noCacheTokens", Math.max(0L, inputTokens - cachedTokens));
+    inDetails.put("cacheReadTokens", cachedTokens);
     inDetails.put("cacheWriteTokens", 0);
-    usage.put("outputTokens", output);
+    usage.put("outputTokens", outputTokens);
     ObjectNode outDetails = usage.putObject("outputTokenDetails");
     outDetails.put("textTokens", 0);
     outDetails.put("reasoningTokens", 0);
-    usage.put("totalTokens", input + output);
+    usage.put("totalTokens", inputTokens + outputTokens);
     return usage;
+  }
+
+  private static String safeFailureMessage(String code) {
+    try {
+      return RunFailureCode.valueOf(code).safeMessage();
+    } catch (IllegalArgumentException | NullPointerException ignored) {
+      return RunFailureCode.AGENT_INTERNAL.safeMessage();
+    }
   }
 
   private String frame(ObjectNode chunk) {

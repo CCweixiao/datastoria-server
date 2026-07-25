@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.TokenUsage;
@@ -113,6 +114,28 @@ class AiSdkStreamEncoderTest {
   }
 
   @Test
+  void usageIsAccumulatedAcrossModelCalls() {
+    List<String> frames =
+        encodeAll(
+            List.of(
+                started(),
+                new AgentRunEvent.UsageReported("run_1", 2, NOW, new TokenUsage(10, 2, 3, 0d)),
+                new AgentRunEvent.UsageReported("run_1", 3, NOW, new TokenUsage(7, 5, 1, 0d)),
+                new AgentRunEvent.RunCompleted("run_1", 4, NOW)));
+    JsonNode usage =
+        chunks(frames).stream()
+            .filter(c -> "finish".equals(type(c)))
+            .map(c -> c.path("messageMetadata").path("usage"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(usage.path("inputTokens").asLong()).isEqualTo(17);
+    assertThat(usage.path("outputTokens").asLong()).isEqualTo(7);
+    assertThat(usage.path("inputTokenDetails").path("cacheReadTokens").asLong()).isEqualTo(4);
+    assertThat(usage.path("inputTokenDetails").path("noCacheTokens").asLong()).isEqualTo(13);
+    assertThat(usage.path("totalTokens").asLong()).isEqualTo(24);
+  }
+
+  @Test
   void goldenFixtureUsesDeprecatedUsageNaming() {
     // Documents the discrepancy: the fixture freezes promptTokens/completionTokens, but the live
     // frontend (route.ts -> sumTokenUsage) emits inputTokens/outputTokens. Encoder follows the live
@@ -136,9 +159,29 @@ class AiSdkStreamEncoderTest {
     assertThat(types(all)).isEqualTo(fixtureTypes("error.jsonl"));
     JsonNode errorChunk =
         chunks(all).stream().filter(c -> "error".equals(type(c))).findFirst().orElseThrow();
-    assertThat(errorChunk.get("errorText").asText()).isEqualTo("Model rate limit exceeded");
+    assertThat(errorChunk.get("errorText").asText())
+        .isEqualTo("The model is busy. Please retry shortly.");
     // No raw provider stack trace / no prompt leak.
     assertThat(errorChunk.get("errorText").asText()).doesNotContain("sk-").doesNotContain("apiKey");
+  }
+
+  @Test
+  void errorMessageIsDerivedFromCodeAndNeverTrustsEventText() {
+    AgentRunEvent.RunFailed malicious =
+        new AgentRunEvent.RunFailed(
+            "run_1",
+            2,
+            NOW,
+            "UNKNOWN_PROVIDER_CODE",
+            "raw provider failure sk-SECRET prompt fragment");
+    JsonNode error =
+        chunks(encodeAll(List.of(started(), malicious))).stream()
+            .filter(c -> "error".equals(type(c)))
+            .findFirst()
+            .orElseThrow();
+    assertThat(error.path("errorText").asText())
+        .isEqualTo("The agent run failed. Please retry.")
+        .doesNotContain("sk-SECRET", "prompt fragment");
   }
 
   // ---- scenario: cancel ----
@@ -171,6 +214,17 @@ class AiSdkStreamEncoderTest {
         chunks.stream().filter(c -> "text-delta".equals(type(c))).findFirst().orElseThrow();
     // Round-trips exactly through the escaped JSON wire form.
     assertThat(delta.get("delta").asText()).isEqualTo(tricky);
+  }
+
+  @Test
+  void injectedPrettyPrintingMapperCannotBreakSingleLineSseFrames() {
+    ObjectMapper pretty = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    AiSdkStreamEncoder compactEncoder = new AiSdkStreamEncoder(pretty);
+    List<String> frames = compactEncoder.encode(started());
+    assertThat(frames).allMatch(frame -> frame.indexOf('\n') == frame.length() - 2);
+    assertThat(pretty.isEnabled(SerializationFeature.INDENT_OUTPUT))
+        .as("encoder must not mutate the shared mapper")
+        .isTrue();
   }
 
   @Test

@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4（已通过 review）+ P4.5（本次）**
+> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4 + P4.5（均已通过 review）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.4 review 已通过；**P4.5 已实现，待 review**；P4.6–P4.8 未开始。
+> 状态：P4.1–P4.5 review 已通过；P4.6–P4.8 未开始。
 
 ---
 
@@ -622,7 +622,7 @@ docs/delivery/p4-implementation-report.md                                       
 
 ---
 
-# P4.5 — AI SDK UI Message Stream Encoder（本次交付，待 review）
+# P4.5 — AI SDK UI Message Stream Encoder（已通过 review）
 
 ## P4.5-0. 范围
 
@@ -655,13 +655,14 @@ agent.application.AiSdkStreamEncoder   (AgentScope-free)
 | RunStarted | `start`{messageId} + `start-step` | 一次 run 一次 start+step |
 | ReasoningBlockStarted/Delta/Ended | `reasoning-start`/`-delta`/`-end` | 同 block 共享一个 part id（`rsn-<n>`） |
 | TextBlockStarted/Delta/Ended | `text-start`/`-delta`/`-end` | 同 block 共享 part id（`txt-<n>`） |
-| UsageReported | （缓冲，不立即出帧） | usage 进 `finish` 的 messageMetadata |
+| UsageReported | （累加，不立即出帧） | 多次模型调用 usage 求和后进入 `finish` 的 messageMetadata |
 | RunCompleted | `finish-step` + `finish`{finishReason="stop", messageMetadata.usage} | |
-| RunFailed | `error`{errorText = 固定 safe message} | 永不透传 provider/prompt/credential |
+| RunFailed | `error`{errorText = code 对应固定 safe message} | 不信任 event.message，未知 code 降级 AGENT_INTERNAL |
 | RunCancelled | `abort`{reason="client_disconnect"} | 见 §5 取消语义 |
 | 终止 | `data: [DONE]\n\n` | 流始终以此终止 |
 
-- **帧格式**：`"data: " + 紧凑 JSON + "\n\n"`；JSON 由 Jackson 序列化（正确转义 `"` `\` `\n` `\t` 与控制字符）。
+- **帧格式**：`"data: " + 紧凑 JSON + "\n\n"`；JSON 由 encoder 私有 copy 的 Jackson mapper
+  序列化并强制关闭 pretty-print（正确转义 `"` `\` `\n` `\t` 与控制字符，不修改共享 mapper）。
 - **part id**：`txt-<n>` / `rsn-<n>`，block 内 start/delta/end 共享；值不参与语义 diff（协议 §6 忽略）。
 - **增量**：`encode(event)` 只返回当前事件的帧，无 lookahead；`encode(Flux)` 用 `concatMap` 逐事件出帧，
   最后 `concatWith([DONE])`。UsageReported 的 usage 先缓冲、在 RunCompleted 的 `finish` 帧上携带（跨事件状态）。
@@ -678,8 +679,11 @@ agent.application.AiSdkStreamEncoder   (AgentScope-free)
 - **处理**：encoder 按 **实际前端行为** 输出 `inputTokens`/`outputTokens`/`totalTokens`（+ details）。
   `goldenFixtureUsesDeprecatedUsageNaming` 测试显式断言 fixture 用 `promptTokens` 而 encoder 用 `inputTokens`，
   锁定该差异。建议后续 contract runner 抓取真实字节后刷新 fixture（`MANIFEST.md` 已标注 TBD）。
-- usage 数值：`TokenUsage(inputTokens, outputTokens, cachedTokens, ...)` → `inputTokens`/`outputTokens`
-  直映，`cacheReadTokens=cachedTokens`，`noCacheTokens=max(0, input-cached)`，`totalTokens=input+output`。
+- usage 数值：每个 `TokenUsage(inputTokens, outputTokens, cachedTokens, ...)` 累加，匹配 Node
+  `sumTokenUsage`；`cacheReadTokens=ΣcachedTokens`，`noCacheTokens=max(0, Σinput-Σcached)`，
+  `totalTokens=Σinput+Σoutput`。内部以 long 累加，避免多 step 的 int 溢出。
+- error fixture 只参与 type 序列 diff。Java `errorText` 始终由 `RunFailureCode` 重新推导，不信任
+  `RunFailed.message`；未知 code 固定降级 `"The agent run failed. Please retry."`。
 
 ## P4.5-5. 取消语义（满足冻结约束）
 
@@ -696,9 +700,9 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw -B -ntp spotless:apply clean verify
 ```
 
-- 全量：`Tests run: 250, Failures: 0, Errors: 0, Skipped: 0`。
-- P4.5 专项（`AiSdkStreamEncoderTest`，12 用例）：
-  `./mvnw test -Dtest=AiSdkStreamEncoderTest` → 12/12。
+- 全量：`Tests run: 253, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.5 专项（`AiSdkStreamEncoderTest`，15 用例）：
+  `./mvnw test -Dtest=AiSdkStreamEncoderTest` → 15/15。
 - P4.1–P4.4 全部仍通过；未改任何前端文件、未改 `AgentRunService`/事件模型（冻结）。
 - 无真实网络、无 API key、无真实 provider。
 
@@ -708,19 +712,19 @@ P4.5 测试覆盖：
 | --- | --- |
 | textOnly / reasoning 场景 | 精确帧序列 + 与 golden fixture 的 **type 序列一致**（语义 diff） |
 | reasoningPartIdSharedWithinBlock | block 内 start/delta/end 共享同一 id |
-| usageEmittedOnFinish | `finish.messageMetadata.usage` 为 AI SDK v6 `LanguageModelUsage` 形状（inputTokens/outputTokens/totalTokens/details） |
+| usageEmittedOnFinish / usageIsAccumulatedAcrossModelCalls | `finish.messageMetadata.usage` 为 AI SDK v6 shape；多次模型调用按 Node `sumTokenUsage` 累加 |
 | goldenFixtureUsesDeprecatedUsageNaming | **记录 fixture 的 promptTokens vs encoder 的 inputTokens 差异** |
-| error scenario | `start→start-step→error`（无 finish），errorText 为固定 safe 文本、不含 `sk-`/`apiKey` |
+| error scenario / malicious event text | `start→start-step→error`（无 finish）；仅按 code 选择固定 safe 文本，恶意 event.message 被忽略 |
 | cancel scenario | `start→...→abort{client_disconnect}`，与 `cancel.jsonl` 一致 |
-| jsonSpecialCharactersEscaped | `"` `\` `\n` `\t` 经 Jackson 正确转义并可往返 |
+| jsonSpecialCharactersEscaped / pretty mapper | 特殊字符正确转义；外部 mapper 即使启用缩进也无法制造多行 SSE 或被 encoder 修改 |
 | eachTextDeltaItsOwnFrame | 增量：每事件只出自身帧、无 lookahead；usage 缓冲后在 finish 携带 |
 | encodeFlux + done | reactive `encode(Flux)` 逐事件出帧并以 `[DONE]` 终止 |
 
 ## P4.5-7. 安全检查
 
 - **AgentScope 隔离**：encoder/controller/测试不引用 `io.agentscope.*`（仅消费 `AgentRunEvent`）。
-- **错误脱敏**：`error` 帧的 `errorText` 取自 `RunFailed.message`（P4.2 已固定 safeMessage）；测试断言不含
-  `sk-`/`apiKey`。encoder 不接触 provider 原始异常/prompt/credential。
+- **错误脱敏（纵深防御）**：`error` 帧不使用 `RunFailed.message`，而是重新按 `RunFailureCode` 选择固定
+  safe message；未知/非法 code 降级 `AGENT_INTERNAL`。即便上游误构造含 key/prompt 的 event 也不会泄露。
 - **取消安全**：不向已取消订阅写帧（§5）。
 - 未新增端点、未改 DDL、未改前端、未改 P4.2–P4.4 运行时行为。
 
@@ -764,5 +768,4 @@ docs/delivery/p4-implementation-report.md                                       
   保留 P4.2 single-use/deferred/自动 binding；`X-Vercel-AI-UI-Message-Stream: v1` 等响应头按 stream-protocol §2。
 - run 创建于请求、completed/failed 落库（P4.3）、RunCancelled 经 observer 落库；`finish` 注入 title（独立 service）。
 
-**停在 P4.5 review，不自动开始 P4.6。**
-
+**P4.5 review 已通过；不自动开始 P4.6。**
