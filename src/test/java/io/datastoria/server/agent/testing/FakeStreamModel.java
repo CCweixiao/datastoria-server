@@ -1,4 +1,4 @@
-package io.datastoria.server.agent.spike;
+package io.datastoria.server.agent.testing;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -20,43 +20,46 @@ import io.agentscope.core.model.ToolSchema;
 import reactor.core.publisher.Flux;
 
 /**
- * Deterministic, network-free fake {@link Model} for the P4.1 AgentScope compatibility spike
- * (ADR-0004).
+ * Deterministic, network-free fake {@link Model} shared by the AgentScope spike (P4.1) and the
+ * runtime/adapter unit tests (P4.2+). It never opens a socket, reads no {@link
+ * GenerateOptions#getApiKey() API key}, and is fully repeatable.
  *
  * <p>It emits a scripted sequence of {@link ChatResponse} frames — optional reasoning fragments,
- * text fragments, and a terminal usage/finishReason — and records whether the returned {@link Flux}
- * was cancelled upstream. It never opens a socket, reads no {@link GenerateOptions#getApiKey() API
- * key}, and is fully repeatable: the same script yields byte-identical events on every run.
- *
- * <p>P4.1 scope only. P4.2 promotes this boundary to {@code io.datastoria.server.agent} as the
- * production {@code ModelAdapter} contract; this test-only copy exists to prove the AgentScope
- * streaming/cancel contract before any controller code is written.
+ * text fragments, and a terminal usage/finishReason — records whether the returned {@link Flux} was
+ * cancelled upstream, and how many tool schemas were offered. The same script yields byte-identical
+ * events on every run.
  */
 public final class FakeStreamModel implements Model {
 
   private final String modelName;
   private final List<ChatResponse> frames;
   private final Duration perFrameDelay;
+  private final Throwable error;
   private final AtomicBoolean cancelled = new AtomicBoolean();
   private final AtomicInteger streamInvocations = new AtomicInteger();
   private final AtomicInteger lastToolCount = new AtomicInteger(-1);
 
-  private FakeStreamModel(String modelName, List<ChatResponse> frames, Duration perFrameDelay) {
+  private FakeStreamModel(
+      String modelName, List<ChatResponse> frames, Duration perFrameDelay, Throwable error) {
     this.modelName = modelName;
     this.frames = List.copyOf(frames);
     this.perFrameDelay = perFrameDelay;
+    this.error = error;
   }
 
   /**
    * Returns the scripted frames as a {@link Flux}. The {@code .doOnCancel} hook records upstream
-   * cancellation so the spike can prove a disposed {@code streamEvents} subscription propagates to
-   * the model provider flux (the reactive cancel path that backs client disconnect).
+   * cancellation so tests can prove a disposed subscription propagates to the provider flux (the
+   * reactive cancel path backing client disconnect).
    */
   @Override
   public Flux<ChatResponse> stream(
       List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
     streamInvocations.incrementAndGet();
     lastToolCount.set(tools.size());
+    if (error != null) {
+      return Flux.<ChatResponse>error(error).doOnCancel(() -> cancelled.set(true));
+    }
     Flux<ChatResponse> flux = Flux.fromIterable(frames);
     if (!perFrameDelay.isZero()) {
       flux = flux.delayElements(perFrameDelay);
@@ -98,8 +101,9 @@ public final class FakeStreamModel implements Model {
   /** Fluent builder for scripting a deterministic model response. */
   public static final class Builder {
     private final List<ChatResponse> frames = new ArrayList<>();
-    private String modelName = "fake-spike";
+    private String modelName = "fake-model";
     private Duration perFrameDelay = Duration.ZERO;
+    private Throwable error;
 
     public Builder modelName(String modelName) {
       this.modelName = modelName;
@@ -148,11 +152,21 @@ public final class FakeStreamModel implements Model {
       return this;
     }
 
+    /**
+     * Makes {@code stream} signal the given error instead of emitting frames. Used to exercise the
+     * RunFailed error path. The error message may contain sensitive-looking text to prove it is
+     * sanitized before reaching the event stream.
+     */
+    public Builder error(Throwable error) {
+      this.error = error;
+      return this;
+    }
+
     public FakeStreamModel build() {
-      if (frames.isEmpty()) {
+      if (error == null && frames.isEmpty()) {
         throw new IllegalStateException("FakeStreamModel script must contain at least one frame");
       }
-      return new FakeStreamModel(modelName, frames, perFrameDelay);
+      return new FakeStreamModel(modelName, frames, perFrameDelay, error);
     }
   }
 }

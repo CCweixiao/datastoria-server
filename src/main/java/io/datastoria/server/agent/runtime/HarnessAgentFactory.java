@@ -1,0 +1,73 @@
+package io.datastoria.server.agent.runtime;
+
+import java.time.Clock;
+
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.harness.agent.HarnessAgent;
+import io.datastoria.server.agent.domain.RunContext;
+
+/**
+ * Builds a run-scoped {@link RunnableAgent} backed by a minimal-permission {@link HarnessAgent}.
+ *
+ * <p>P4 freezes the HarnessAgent configuration mandated by ADR-0004 §3.5 and
+ * docs/design/harness-agent.md §4: every P5+ capability (filesystem, shell, memory, skills,
+ * subagents, workspace context, tools config) is explicitly disabled, and the residual {@code
+ * wait_async_results} helper that AgentScope 2.0.0 registers regardless is removed, so the
+ * model-boundary tool schema stays empty. No workspace directory is required with every capability
+ * off (verified against the 2.0.0 jar), so P4.2 performs no per-run filesystem I/O.
+ *
+ * <p>AgentScope's {@code AgentTraceMiddleware} is also disabled ({@code
+ * enableAgentTracingLog(false)}): it logs model output and raw exception {@code toString()} at
+ * INFO, which could echo prompt/context fragments or credential-bearing provider errors. Disabling
+ * it does not affect error handling — stream errors are still explicitly consumed into {@code
+ * RunFailed} downstream; DataStoria's own redacted observability (docs/design/harness-agent.md §12)
+ * replaces this verbose trace.
+ *
+ * <p>The user message is normalized to a plain AgentScope {@code Msg} here. Richer UIMessage
+ * normalization (image/tool-result parts) arrives in P4.6; P4 is text-only.
+ */
+public final class HarnessAgentFactory {
+
+  private final Clock clock;
+
+  public HarnessAgentFactory() {
+    this(Clock.systemUTC());
+  }
+
+  public HarnessAgentFactory(Clock clock) {
+    this.clock = clock;
+  }
+
+  public RunnableAgent create(
+      RunContext context, ModelAdapter modelAdapter, AgentRuntimeConfig config, String userText) {
+    HarnessAgent agent =
+        HarnessAgent.builder()
+            .name("run-" + context.runId())
+            .sysPrompt(config.systemPrompt())
+            .model(modelAdapter.modelFor(context))
+            .maxIters(config.maxIters())
+            .disableCompaction()
+            .disableFilesystemTools()
+            .disableShellTool()
+            .disableMemoryTools()
+            .disableMemoryHooks()
+            .disableSessionPersistence()
+            .disableWorkspaceContext()
+            .disableAtPathExpansion()
+            .disableSubagents()
+            .disableDynamicSubagents()
+            .disableDynamicSkills()
+            .disableDefaultWorkspaceSkills()
+            .disableToolsConfig()
+            .enableAgentTracingLog(false)
+            .build();
+    // AgentScope 2.0.0 registers this async helper even with every optional capability off. P4 has
+    // no async tools, so strip it to keep the model boundary tool-free (ADR-0004 §3.5).
+    agent.getToolkit().removeTool("wait_async_results");
+
+    Msg userMsg = Msg.builder().role(MsgRole.USER).textContent(userText).build();
+    return new HarnessRunnableAgent(
+        context.runId(), agent, userMsg, new AgentEventMapper(context, clock));
+  }
+}

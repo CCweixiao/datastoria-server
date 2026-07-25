@@ -25,6 +25,7 @@ import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.ToolSchema;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.datastoria.server.agent.testing.FakeStreamModel;
 
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
