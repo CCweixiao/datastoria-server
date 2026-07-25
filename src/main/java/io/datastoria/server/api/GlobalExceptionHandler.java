@@ -86,9 +86,9 @@ public class GlobalExceptionHandler {
   }
 
   /**
-   * P3 compat exceptions that MUST be plain text to preserve Node wire compatibility
-   * ({@code Invalid limit}, {@code Invalid session share code}, {@code Not found}, etc.). See
-   * {@code docs/api/p3-openapi-extensions.yaml} {@code PlainTextError}.
+   * P3 compat exceptions that MUST be plain text to preserve Node wire compatibility ({@code
+   * Invalid limit}, {@code Invalid session share code}, {@code Not found}, etc.). See {@code
+   * docs/api/p3-openapi-extensions.yaml} {@code PlainTextError}.
    */
   @ExceptionHandler(PlainTextException.class)
   public ResponseEntity<String> handlePlainText(PlainTextException ex) {

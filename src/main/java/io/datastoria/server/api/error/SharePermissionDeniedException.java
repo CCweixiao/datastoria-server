@@ -1,8 +1,8 @@
 package io.datastoria.server.api.error;
 
 /**
- * Thrown when a session-share visitor attempts a write operation (PATCH/DELETE/re-issue/revoke)
- * and the {@code datastoria.session-share.allow-write} flag is {@code false} (the default).
+ * Thrown when a session-share visitor attempts a write operation (PATCH/DELETE/re-issue/revoke) and
+ * the {@code datastoria.session-share.allow-write} flag is {@code false} (the default).
  *
  * <p>Mapped by {@link io.datastoria.server.api.GlobalExceptionHandler} to a {@code 403} RFC 9457
  * ProblemDetail with code {@code SHARE_PERMISSION_DENIED}; see ADR-0001.

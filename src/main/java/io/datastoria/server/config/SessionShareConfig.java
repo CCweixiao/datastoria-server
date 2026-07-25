@@ -38,11 +38,17 @@ public class SessionShareConfig {
   private static final Logger log = LoggerFactory.getLogger(SessionShareConfig.class);
 
   /**
-   * TTL in seconds that, when added to {@code now}, lands on 2100-01-01T00:00:00Z. Preserves Node
-   * compatibility for the default share expiry.
+   * Default share expiry as absolute epoch seconds: {@code 4102444800} == {@code
+   * Instant.parse("2100-01-01T00:00:00Z").getEpochSecond()}. Preserves Node's hard-coded 2100
+   * expiry.
+   *
+   * <p>Despite the property name {@code default-ttl-seconds} (kept for OpenAPI fidelity), the value
+   * is treated as an <em>absolute target timestamp</em>, not a duration. This matches Node, which
+   * hard-codes {@code exp = '2100-01-01T00:00:00Z'} regardless of when the share is issued.
+   * Treating it as a real TTL would shift the expiry further every time a new share is issued.
    *
    * <p>Inline literal is required because {@code @Value} annotation arguments must be constant
-   * expressions. The value 4102444800 equals {@code Instant.parse("2100-01-01T00:00:00Z").getEpochSecond()}.
+   * expressions.
    */
   public static final long DEFAULT_TTL_SECONDS = 4102444800L;
 
@@ -93,7 +99,15 @@ public class SessionShareConfig {
     return signingKey;
   }
 
-  /** TTL (seconds) applied at issuance. */
+  /**
+   * Absolute share expiry ({@link Instant}). Resolved from {@code default-ttl-seconds} (which is
+   * actually an absolute epoch target; see {@link #DEFAULT_TTL_SECONDS}).
+   */
+  public Instant defaultExpiresAt() {
+    return Instant.ofEpochSecond(defaultTtlSeconds);
+  }
+
+  /** Raw configured value (epoch seconds of the default expiry target). */
   public long defaultTtlSeconds() {
     return defaultTtlSeconds;
   }

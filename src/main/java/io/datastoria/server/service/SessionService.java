@@ -22,7 +22,6 @@ import io.datastoria.server.config.SessionShareConfig;
 import io.datastoria.server.domain.ChatMessage;
 import io.datastoria.server.domain.ChatSession;
 import io.datastoria.server.domain.SessionShare;
-import io.datastoria.server.domain.Ulid;
 import io.datastoria.server.dto.AppUIMessage;
 import io.datastoria.server.dto.ChatSessionDTO;
 import io.datastoria.server.dto.CreateSessionRequest;
@@ -34,17 +33,18 @@ import io.datastoria.server.repository.ChatSessionRepository;
 import io.datastoria.server.repository.SessionPage;
 import io.datastoria.server.repository.SessionShareRepository;
 import io.datastoria.server.repository.jdbc.SessionListCursor;
+
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
 /**
- * A03–A07 chat session lifecycle. Every method touches JDBC inside {@link
- * Mono#fromCallable}/{@link Mono#fromRunnable} subscribed on {@code jdbcScheduler}.
+ * A03–A07 chat session lifecycle. Every method touches JDBC inside {@link Mono#fromCallable}/{@link
+ * Mono#fromRunnable} subscribed on {@code jdbcScheduler}.
  *
- * <p>Owner vs share-visitor access is resolved centrally by {@link #resolveAccess}; mutation
- * routes pass {@code writeRequired = true} so a share visitor is denied with {@code
- * SHARE_PERMISSION_DENIED} unless {@link SessionShareConfig#allowWrite()} is set (P3 compat
- * window, ADR-0001).
+ * <p>Owner vs share-visitor access is resolved centrally by {@link #resolveAccess}; mutation routes
+ * pass {@code writeRequired = true} so a share visitor is denied with {@code
+ * SHARE_PERMISSION_DENIED} unless {@link SessionShareConfig#allowWrite()} is set (P3 compat window,
+ * ADR-0001).
  */
 @Service
 public class SessionService {
@@ -56,6 +56,7 @@ public class SessionService {
 
   /** Hard bounds for A03 {@code limit}. */
   static final int MIN_LIMIT = 1;
+
   static final int MAX_LIMIT = 500;
 
   /** Node-compatible default title when none is supplied on A04. */
@@ -103,7 +104,8 @@ public class SessionService {
               int safeLimit = parseLimit(limit);
               Optional<SessionListCursor> parsed = SessionListCursor.parse(cursor);
               if (parsed.isEmpty() && cursor != null && !cursor.isBlank()) {
-                log.warn("malformed cursor ignored — returning page 1 (user={})", identity.userId());
+                log.warn(
+                    "malformed cursor ignored — returning page 1 (user={})", identity.userId());
               }
               SessionPage page =
                   sessionRepo.findPage(
@@ -169,7 +171,8 @@ public class SessionService {
   /** A05 — read a session (owner or share visitor). */
   public Mono<ChatSessionDTO> get(String sessionId, Identity identity, String shareCode) {
     return Mono.fromCallable(
-            () -> ChatSessionDTO.from(resolveAccess(sessionId, identity, shareCode, false).session()))
+            () ->
+                ChatSessionDTO.from(resolveAccess(sessionId, identity, shareCode, false).session()))
         .subscribeOn(jdbcScheduler);
   }
 
@@ -191,8 +194,8 @@ public class SessionService {
   }
 
   /**
-   * A07 — delete (owner only by default). Cascades messages/feedback via FK; share rows are
-   * marked revoked (audit). All in a single transaction.
+   * A07 — delete (owner only by default). Cascades messages/feedback via FK; share rows are marked
+   * revoked (audit). All in a single transaction.
    */
   public Mono<Void> delete(String sessionId, Identity identity, String shareCode) {
     return Mono.<Void>fromRunnable(
@@ -203,7 +206,8 @@ public class SessionService {
                       String tenantId = access.session().tenantId();
                       String id = access.session().id();
                       String userId = access.session().userId();
-                      // Revoke any active shares (no FK on ds_session_share; intentional audit row).
+                      // Revoke any active shares (no FK on ds_session_share; intentional audit
+                      // row).
                       shareRepo.revoke(id, tenantId);
                       // Hard-delete the session; FKs cascade to messages and feedback.
                       sessionRepo.delete(id, tenantId, userId);
@@ -218,14 +222,15 @@ public class SessionService {
    *
    * <p>If a share code is present, the JWT verification path runs in {@link
    * SessionShareService#verify}; on any failure the visitor receives HTTP 403 {@code Invalid
-   * session share code} (plain text). When {@code writeRequired} is true and the caller arrived
-   * via a share, the caller must additionally pass the {@link SessionShareConfig#allowWrite()}
-   * gate; otherwise HTTP 403 {@code SHARE_PERMISSION_DENIED} (ProblemDetail) is raised.
+   * session share code} (plain text). When {@code writeRequired} is true and the caller arrived via
+   * a share, the caller must additionally pass the {@link SessionShareConfig#allowWrite()} gate;
+   * otherwise HTTP 403 {@code SHARE_PERMISSION_DENIED} (ProblemDetail) is raised.
    *
    * <p>Owner flow: a missing session yields HTTP 404 {@code Not found} (plain text), matching
    * Node's behaviour and avoiding cross-tenant enumeration.
    */
-  SessionAccess resolveAccess(String sessionId, Identity identity, String shareCode, boolean writeRequired) {
+  SessionAccess resolveAccess(
+      String sessionId, Identity identity, String shareCode, boolean writeRequired) {
     if (shareCode != null && !shareCode.isBlank()) {
       SessionShareService.VerifiedShare verified = shareService.verify(shareCode, sessionId);
       if (writeRequired && !shareConfig.allowWrite()) {
@@ -286,7 +291,9 @@ public class SessionService {
   }
 
   private void validateCreateRequest(CreateSessionRequest req) {
-    if (req.connectionId() == null || req.connectionId().isBlank() || req.connectionId().length() > 255) {
+    if (req.connectionId() == null
+        || req.connectionId().isBlank()
+        || req.connectionId().length() > 255) {
       throw PlainTextException.badRequest("Invalid connectionId");
     }
     if (req.sessionId() != null) {

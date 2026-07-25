@@ -24,8 +24,8 @@ public interface ChatMessageRepository {
   List<ChatMessage> findBySession(String sessionId, String tenantId);
 
   /**
-   * Whether any message with the given id exists in the session under the caller's identity.
-   * Used by the feedback path to translate "target message missing" into HTTP 404 (ADR-0003).
+   * Whether any message with the given id exists in the session under the caller's identity. Used
+   * by the feedback path to translate "target message missing" into HTTP 404 (ADR-0003).
    */
   boolean exists(String tenantId, String userId, String sessionId, String messageId);
 }

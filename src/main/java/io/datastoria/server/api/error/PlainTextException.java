@@ -5,15 +5,15 @@ import org.springframework.http.MediaType;
 
 /**
  * Marker base for P3 compat exceptions that MUST be serialised as a plain-text body to preserve
- * Node.js wire compatibility (see {@code docs/api/p3-openapi-extensions.yaml},
- * {@code PlainTextError} response).
+ * Node.js wire compatibility (see {@code docs/api/p3-openapi-extensions.yaml}, {@code
+ * PlainTextError} response).
  *
  * <p>Subclasses carry an {@link HttpStatus} and a fixed body string. The {@link
  * io.datastoria.server.api.GlobalExceptionHandler GlobalExceptionHandler} maps every {@code
  * PlainTextException} to {@code text/plain; charset=utf-8} with the configured status and body.
  *
- * <p>This is intentionally separate from the P2 ProblemDetail pathway ({@link NotFoundException}
- * et al.) so the two content types never collide.
+ * <p>This is intentionally separate from the P2 ProblemDetail pathway ({@link NotFoundException} et
+ * al.) so the two content types never collide.
  */
 public class PlainTextException extends RuntimeException {
 

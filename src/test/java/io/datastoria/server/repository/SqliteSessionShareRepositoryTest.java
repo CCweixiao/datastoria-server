@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +48,9 @@ class SqliteSessionShareRepositoryTest {
     repo.issue(newShare("shr_b1", "sess_b", "hash-b1", Instant.parse("2100-01-01T00:00:00Z")));
     // active_key UNIQUE constraint fires on the second INSERT.
     assertThatThrownBy(
-            () -> repo.issue(newShare("shr_b2", "sess_b", "hash-b2", Instant.parse("2100-01-01T00:00:00Z"))))
+            () ->
+                repo.issue(
+                    newShare("shr_b2", "sess_b", "hash-b2", Instant.parse("2100-01-01T00:00:00Z"))))
         .isInstanceOf(DataAccessException.class);
   }
 

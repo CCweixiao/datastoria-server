@@ -13,9 +13,9 @@ import java.util.Optional;
  * YYYY-MM-DD HH:MM:SS.mmm|<session_id>
  * }</pre>
  *
- * <p>The timestamp is UTC, zero-padded, three-digit milliseconds. The cursor encodes the
- * {@code (updated_at, session_id)} of the last row returned so that keyset pagination on
- * {@code (updated_at DESC, session_id DESC)} is stable.
+ * <p>The timestamp is UTC, zero-padded, three-digit milliseconds. The cursor encodes the {@code
+ * (updated_at, session_id)} of the last row returned so that keyset pagination on {@code
+ * (updated_at DESC, session_id DESC)} is stable.
  *
  * <p>Clients MUST URL-encode the value before placing it in a query string (the raw value contains
  * a space and a pipe). A malformed cursor parses to {@link Optional#empty} — the caller then
@@ -49,8 +49,8 @@ public final class SessionListCursor {
   }
 
   /**
-   * Parses a cursor string. Returns empty for null/blank input or any value that does not match
-   * the documented format.
+   * Parses a cursor string. Returns empty for null/blank input or any value that does not match the
+   * documented format.
    */
   public static Optional<SessionListCursor> parse(String raw) {
     if (raw == null || raw.isBlank()) {

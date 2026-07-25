@@ -3,6 +3,7 @@ package io.datastoria.server.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +34,8 @@ class SqliteChatMessageRepositoryTest {
   void saveAndFindBySession() {
     seedSession("sess_a");
     repo.save(message("msg_a1", "sess_a", "user", 1, "[{\"type\":\"text\",\"text\":\"hi\"}]"));
-    repo.save(message("msg_a2", "sess_a", "assistant", 2, "[{\"type\":\"text\",\"text\":\"hi back\"}]"));
+    repo.save(
+        message("msg_a2", "sess_a", "assistant", 2, "[{\"type\":\"text\",\"text\":\"hi back\"}]"));
 
     List<ChatMessage> rows = repo.findBySession("sess_a", TENANT);
     assertThat(rows).hasSize(2);
@@ -69,7 +71,8 @@ class SqliteChatMessageRepositoryTest {
   @Test
   void savePreservesMetadataJson() {
     seedSession("sess_d");
-    String metadata = "{\"usage\":{\"promptTokens\":40,\"completionTokens\":12,\"totalTokens\":52}}";
+    String metadata =
+        "{\"usage\":{\"promptTokens\":40,\"completionTokens\":12,\"totalTokens\":52}}";
     ChatMessage saved =
         new ChatMessage(
             "msg_d1",

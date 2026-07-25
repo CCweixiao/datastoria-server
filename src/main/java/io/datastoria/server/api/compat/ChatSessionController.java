@@ -23,10 +23,10 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.datastoria.server.api.error.PlainTextException;
 import io.datastoria.server.dto.CreateSessionRequest;
 import io.datastoria.server.dto.CreateSessionResponse;
-import io.datastoria.server.dto.RenameSessionRequest;
 import io.datastoria.server.dto.SessionPageDTO;
 import io.datastoria.server.identity.IdentityContext;
 import io.datastoria.server.service.SessionService;
+
 import reactor.core.publisher.Mono;
 
 /**
@@ -34,8 +34,8 @@ import reactor.core.publisher.Mono;
  *
  * <p>Routes preserve Node wire compatibility — error responses are emitted as {@code text/plain}
  * for the documented error cases (see {@link PlainTextException}) and {@code application/json} for
- * success bodies. Mutation routes that reach a share visitor return {@code application/problem+json}
- * with code {@code SHARE_PERMISSION_DENIED}.
+ * success bodies. Mutation routes that reach a share visitor return {@code
+ * application/problem+json} with code {@code SHARE_PERMISSION_DENIED}.
  */
 @RestController
 @RequestMapping("/api/ai/chat/sessions")

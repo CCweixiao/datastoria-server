@@ -9,8 +9,6 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.Optional;
 
-import javax.crypto.SecretKey;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,6 +27,7 @@ import io.datastoria.server.repository.SessionShareRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
@@ -70,7 +69,7 @@ public class SessionShareService {
   private ShareResponse doIssue(String sessionId, Identity owner) {
     ChatSession session = loadOwnedSession(sessionId, owner);
     Instant now = Instant.now();
-    Instant expiresAt = now.plusSeconds(config.defaultTtlSeconds());
+    Instant expiresAt = config.defaultExpiresAt();
     String jwt = signJwt(session, owner, now, expiresAt);
     String tokenHash = sha256Hex(jwt);
 
@@ -164,8 +163,7 @@ public class SessionShareService {
       throw PlainTextException.invalidShareCode();
     }
     if (row.expiresAt() != null && row.expiresAt().isBefore(now)) {
-      log.warn(
-          "share code rejected: row expired at {} (session={})", row.expiresAt(), sessionId);
+      log.warn("share code rejected: row expired at {} (session={})", row.expiresAt(), sessionId);
       throw PlainTextException.invalidShareCode();
     }
 
@@ -184,14 +182,22 @@ public class SessionShareService {
     return new VerifiedShare(row, session);
   }
 
-  /** Sign an HS256 JWT mirroring Node's claims. */
+  /**
+   * Sign an HS256 JWT mirroring Node's claims. A unique {@code jti} (ULID) is added so two shares
+   * issued within the same second for the same session produce different JWTs and therefore
+   * different SHA-256 hashes — the {@code (tenant_id, token_hash)} UNIQUE constraint would
+   * otherwise fire on a rapid re-issue after revocation.
+   */
   private String signJwt(ChatSession session, Identity owner, Instant now, Instant expiresAt) {
     Date iat = Date.from(now);
     Date exp = Date.from(expiresAt);
     return Jwts.builder()
+        .id(io.datastoria.server.domain.Ulid.next())
         .issuer(owner.userId())
         .subject(session.id())
-        .audience().add(SessionShareConfig.AUDIENCE).and()
+        .audience()
+        .add(SessionShareConfig.AUDIENCE)
+        .and()
         .issuedAt(iat)
         .notBefore(iat)
         .expiration(exp)

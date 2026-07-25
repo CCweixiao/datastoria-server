@@ -65,8 +65,7 @@ public class JdbcSessionShareRepository implements SessionShareRepository {
 
   @Override
   public Optional<SessionShare> findByTokenHash(String tokenHash) {
-    return jdbc.sql(
-            "SELECT * FROM ds_session_share WHERE token_hash = :tokenHash LIMIT 1")
+    return jdbc.sql("SELECT * FROM ds_session_share WHERE token_hash = :tokenHash LIMIT 1")
         .param("tokenHash", tokenHash)
         .query(MAPPER)
         .optional();

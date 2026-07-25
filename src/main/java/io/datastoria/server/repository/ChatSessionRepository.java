@@ -26,15 +26,11 @@ public interface ChatSessionRepository {
   Optional<ChatSession> findById(String id, String tenantId, String userId);
 
   /**
-   * Keyset-paginated list ordered by {@code (updated_at DESC, id DESC)}. Pass {@code
-   * connectionId = null} for an unfiltered list; pass a non-null cursor for the next page.
+   * Keyset-paginated list ordered by {@code (updated_at DESC, id DESC)}. Pass {@code connectionId =
+   * null} for an unfiltered list; pass a non-null cursor for the next page.
    */
   SessionPage findPage(
-      String tenantId,
-      String userId,
-      String connectionId,
-      SessionListCursor cursor,
-      int limit);
+      String tenantId, String userId, String connectionId, SessionListCursor cursor, int limit);
 
   /** Renames the session and bumps {@code revision}; throws NotFound if missing. */
   ChatSession rename(String id, String tenantId, String userId, String title);

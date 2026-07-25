@@ -12,11 +12,12 @@ import org.springframework.web.bind.annotation.RestController;
 import io.datastoria.server.dto.ChatMessageDTO;
 import io.datastoria.server.identity.IdentityContext;
 import io.datastoria.server.service.MessageService;
+
 import reactor.core.publisher.Mono;
 
 /**
- * A08 — replay session messages. Owner or share visitor (read). Returns an array ordered by
- * {@code sequence ASC}; empty array when the session has no messages.
+ * A08 — replay session messages. Owner or share visitor (read). Returns an array ordered by {@code
+ * sequence ASC}; empty array when the session has no messages.
  */
 @RestController
 @RequestMapping("/api/ai/chat/sessions/{sessionId}/messages")

@@ -11,7 +11,4 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreateSessionRequest(
-    String connectionId,
-    String sessionId,
-    String title,
-    List<AppUIMessage> messages) {}
+    String connectionId, String sessionId, String title, List<AppUIMessage> messages) {}

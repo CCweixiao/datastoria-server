@@ -9,11 +9,12 @@ import org.springframework.web.bind.annotation.RestController;
 import io.datastoria.server.dto.ShareResponse;
 import io.datastoria.server.identity.IdentityContext;
 import io.datastoria.server.service.SessionShareService;
+
 import reactor.core.publisher.Mono;
 
 /**
- * A09 — issue a session share code (owner only). A09b — revoke the active share (owner only).
- * Share codes are NOT accepted on these routes; only the session owner may issue or revoke.
+ * A09 — issue a session share code (owner only). A09b — revoke the active share (owner only). Share
+ * codes are NOT accepted on these routes; only the session owner may issue or revoke.
  */
 @RestController
 @RequestMapping("/api/ai/sessions/{sessionId}")

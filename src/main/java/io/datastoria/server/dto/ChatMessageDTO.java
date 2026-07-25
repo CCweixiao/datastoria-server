@@ -7,8 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.datastoria.server.domain.ChatMessage;
 
 /**
- * Wire shape for a chat message. {@code parts} and {@code metadata} are {@link JsonNode} so
- * unknown part types round-trip byte-for-byte (A08 wire fixture).
+ * Wire shape for a chat message. {@code parts} and {@code metadata} are {@link JsonNode} so unknown
+ * part types round-trip byte-for-byte (A08 wire fixture).
  *
  * <p>{@code metadata} serialises as JSON {@code null} when the row stored no metadata (Jackson
  * serialises a null {@link JsonNode} reference as {@code null}). When the row stored the JSON

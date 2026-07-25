@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,10 +21,10 @@ import io.datastoria.server.TestDbHelper;
  * regressions before the repository layer lands in P3.3. SchemaParityTest (Testcontainers) covers
  * the MySQL-equivalent assertions in CI.
  *
- * <p>The SQLite Xerial driver does not map native constraint errors to Spring's
- * {@code DataIntegrityViolationException}; the P3 repositories (like P2) use lookup-then-upsert
- * patterns and never rely on exception translation. These tests therefore assert on the raw
- * constraint message rather than the Spring exception type.
+ * <p>The SQLite Xerial driver does not map native constraint errors to Spring's {@code
+ * DataIntegrityViolationException}; the P3 repositories (like P2) use lookup-then-upsert patterns
+ * and never rely on exception translation. These tests therefore assert on the raw constraint
+ * message rather than the Spring exception type.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -94,8 +95,7 @@ class V4SchemaSmokeTest {
     insertMessage("msg_e1", TENANT, "sess_e", USER, "assistant", 1, NOW);
     insertFeedback("fb_e", TENANT, USER, "sess_e", "msg_e1", true, NOW);
     // Same (tenant, user, source, session, message) fails for a new id.
-    assertThatThrownBy(
-            () -> insertFeedback("fb_e2", TENANT, USER, "sess_e", "msg_e1", false, NOW))
+    assertThatThrownBy(() -> insertFeedback("fb_e2", TENANT, USER, "sess_e", "msg_e1", false, NOW))
         .hasMessageContaining("UNIQUE constraint failed");
   }
 
@@ -264,12 +264,7 @@ class V4SchemaSmokeTest {
   }
 
   private void insertShare(
-      String id,
-      String tenant,
-      String session,
-      String owner,
-      String tokenHash,
-      Instant now) {
+      String id, String tenant, String session, String owner, String tokenHash, Instant now) {
     jdbc.sql(
             "INSERT INTO ds_session_share "
                 + "(id, tenant_id, session_id, owner_user_id, token_hash, expires_at, revoked_at, created_at) "

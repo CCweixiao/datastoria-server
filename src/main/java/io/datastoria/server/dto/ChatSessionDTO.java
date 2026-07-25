@@ -20,7 +20,6 @@ public record ChatSessionDTO(
     String chatId, String databaseId, String title, Instant createdAt, Instant updatedAt) {
 
   public static ChatSessionDTO from(ChatSession s) {
-    return new ChatSessionDTO(
-        s.id(), s.connectionId(), s.title(), s.createdAt(), s.updatedAt());
+    return new ChatSessionDTO(s.id(), s.connectionId(), s.title(), s.createdAt(), s.updatedAt());
   }
 }

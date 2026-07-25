@@ -20,6 +20,7 @@ import io.datastoria.server.dto.FeedbackUpsertRequest;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.FeedbackEventRepository;
+
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
@@ -28,8 +29,8 @@ import reactor.core.scheduler.Scheduler;
  *
  * <p>Natural upsert key is {@code (tenantId, userId, source, sessionId, messageId)}; resubmit
  * overwrites every field. When {@code solved=true}, {@code reasonCode} and {@code freeText} are
- * normalised to {@code null}. When {@code solved=false}, {@code reasonCode} is required and must
- * be one of {@link #REASON_CODES} (mirrors Node's Zod {@code superRefine}).
+ * normalised to {@code null}. When {@code solved=false}, {@code reasonCode} is required and must be
+ * one of {@link #REASON_CODES} (mirrors Node's Zod {@code superRefine}).
  *
  * <p>The {@code messageId} must reference an existing message in the session — ADR-0003 makes the
  * "target not found" case return HTTP 404 instead of Node's HTTP 500.
@@ -71,15 +72,20 @@ public class FeedbackService {
     return Mono.fromCallable(
             () -> {
               if (!storeEnabled) {
-                log.info("feedback dropped (store-enabled=false) session={} message={}",
-                    req.sessionId(), req.messageId());
+                log.info(
+                    "feedback dropped (store-enabled=false) session={} message={}",
+                    req.sessionId(),
+                    req.messageId());
                 return RecordedOrAccepted.accepted();
               }
               validate(req);
               if (!messageRepo.exists(
                   identity.tenantId(), identity.userId(), req.sessionId(), req.messageId())) {
                 throw new FeedbackTargetNotFoundException(
-                    "message not found: session=" + req.sessionId() + " message=" + req.messageId());
+                    "message not found: session="
+                        + req.sessionId()
+                        + " message="
+                        + req.messageId());
               }
               FeedbackEvent event = buildEvent(req, identity);
               FeedbackEvent saved = feedbackRepo.upsert(event);
