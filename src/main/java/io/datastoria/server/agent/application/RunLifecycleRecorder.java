@@ -4,15 +4,19 @@ import java.time.Instant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.domain.RunFailureCode;
 import io.datastoria.server.agent.domain.RunTransition;
+import io.datastoria.server.domain.ChatMessage;
 import io.datastoria.server.repository.AgentRunRepository;
+import io.datastoria.server.repository.ChatMessageRepository;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -20,95 +24,186 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Taps an {@link AgentRunEvent} stream and persists the run's terminal status off the calling
- * thread, so blocking JDBC never runs on the Netty event loop:
+ * Taps an {@link AgentRunEvent} stream and persists terminal state off the calling thread, so
+ * blocking JDBC never runs on the Netty event loop:
  *
  * <ul>
  *   <li>{@link AgentRunEvent.UsageReported} → accumulates token usage across model calls.
- *   <li>{@link AgentRunEvent.RunCompleted} → {@code SUCCEEDED} with the accumulated usage JSON.
- *   <li>{@link AgentRunEvent.RunFailed} → {@code FAILED} with the sanitized {@link RunFailureCode}
- *       (never the raw provider message).
+ *   <li>{@link AgentRunEvent.TextDelta} → accumulates assistant text.
+ *   <li>{@link AgentRunEvent.RunCompleted} → {@code SUCCEEDED} (with accumulated usage) AND
+ *       persists the assistant message to {@code ds_chat_message} (tenant/user/session scoped,
+ *       idempotent on message id — retries do not duplicate; empty text is skipped so no hollow
+ *       message is left).
+ *   <li>{@link AgentRunEvent.RunFailed} → {@code FAILED} with the sanitized {@link RunFailureCode}.
+ *       No assistant message is written on failure.
  * </ul>
  *
- * <p>Cancellation is handled separately by {@link RunCancellationPersister} (wired as the {@code
- * AgentRunService} cancellation observer), not here. Terminal transitions reuse the P4.3
- * optimistic-lock {@code revision} check, so a late cancel landing on an already-terminal run is a
- * safe no-op rather than an overwrite.
+ * <p>Cancellation ({@link AgentRunStatus#CANCELLED}) is handled separately by {@link
+ * RunCancellationPersister} (the {@code AgentRunService} cancellation observer); a cancelled run
+ * never reaches {@link AgentRunEvent.RunCompleted}, so no completed assistant message is left.
  *
- * <p>Persistence is fire-and-forget on a bounded scheduler: the SSE stream must not wait for, or be
- * blocked by, the DB write. A failed transition is logged (run id + status only — no prompt,
- * provider text, or credential is present on this path) and left for reconciliation.
- *
- * <p>AgentScope-free. The {@code usage} accumulator is safe because Reactor invokes {@code
- * doOnNext} sequentially per subscriber.
+ * <p>Terminal persistence runs on a bounded JDBC scheduler and completes before the terminal event
+ * is forwarded. Thus receiving {@code finish} is a reliable refresh/replay boundary, while Netty
+ * remains non-blocking. Terminal transitions reuse the P4.3 optimistic lock, so a late cancel
+ * landing on an already-terminal run is a safe no-op. AgentScope-free.
  */
 public final class RunLifecycleRecorder {
 
   private static final Logger log = LoggerFactory.getLogger(RunLifecycleRecorder.class);
 
   private final AgentRunRepository runRepository;
+  private final ChatMessageRepository messageRepository;
+  private final TransactionOperations transactions;
   private final Scheduler jdbcScheduler;
   private final ObjectMapper mapper;
 
-  public RunLifecycleRecorder(AgentRunRepository runRepository) {
-    this(runRepository, Schedulers.boundedElastic(), new ObjectMapper());
-  }
-
-  public RunLifecycleRecorder(AgentRunRepository runRepository, Scheduler jdbcScheduler) {
-    this(runRepository, jdbcScheduler, new ObjectMapper());
+  public RunLifecycleRecorder(
+      AgentRunRepository runRepository, ChatMessageRepository messageRepository) {
+    this(
+        runRepository,
+        messageRepository,
+        TransactionOperations.withoutTransaction(),
+        Schedulers.boundedElastic(),
+        new ObjectMapper());
   }
 
   public RunLifecycleRecorder(
-      AgentRunRepository runRepository, Scheduler jdbcScheduler, ObjectMapper mapper) {
+      AgentRunRepository runRepository,
+      ChatMessageRepository messageRepository,
+      Scheduler jdbcScheduler) {
+    this(
+        runRepository,
+        messageRepository,
+        TransactionOperations.withoutTransaction(),
+        jdbcScheduler,
+        new ObjectMapper());
+  }
+
+  public RunLifecycleRecorder(
+      AgentRunRepository runRepository,
+      ChatMessageRepository messageRepository,
+      TransactionOperations transactions,
+      Scheduler jdbcScheduler) {
+    this(runRepository, messageRepository, transactions, jdbcScheduler, new ObjectMapper());
+  }
+
+  public RunLifecycleRecorder(
+      AgentRunRepository runRepository,
+      ChatMessageRepository messageRepository,
+      TransactionOperations transactions,
+      Scheduler jdbcScheduler,
+      ObjectMapper mapper) {
     this.runRepository = runRepository;
+    this.messageRepository = messageRepository;
+    this.transactions = transactions;
     this.jdbcScheduler = jdbcScheduler;
     this.mapper = mapper;
   }
 
   /** Returns {@code events} unchanged, scheduling terminal persistence off the calling thread. */
-  public Flux<AgentRunEvent> tap(String tenantId, String runId, Flux<AgentRunEvent> events) {
+  public Flux<AgentRunEvent> tap(RunMessageContext ctx, Flux<AgentRunEvent> events) {
     long[] usage = {0, 0, 0}; // inputTokens, outputTokens, cachedTokens
-    return events.doOnNext(
+    StringBuilder text = new StringBuilder();
+    return events.concatMap(
         e -> {
           if (e instanceof AgentRunEvent.UsageReported u) {
             usage[0] += u.usage().inputTokens();
             usage[1] += u.usage().outputTokens();
             usage[2] += u.usage().cachedTokens();
+          } else if (e instanceof AgentRunEvent.TextDelta d) {
+            text.append(d.delta());
           } else if (e instanceof AgentRunEvent.RunCompleted) {
-            dispatch(
-                () ->
-                    runRepository.transition(
-                        tenantId,
-                        runId,
-                        AgentRunStatus.SUCCEEDED,
-                        RunTransition.completing(Instant.now(), usageJson(usage))));
+            String usageJson = usageJson(usage);
+            String assistantText = text.toString();
+            return dispatch(() -> persistCompletion(ctx, assistantText, usageJson)).thenReturn(e);
           } else if (e instanceof AgentRunEvent.RunFailed f) {
             RunFailureCode code = parseFailureCode(f.code());
-            dispatch(
-                () ->
-                    runRepository.transition(
-                        tenantId,
-                        runId,
-                        AgentRunStatus.FAILED,
-                        RunTransition.failing(Instant.now(), code)));
+            return dispatch(
+                    () ->
+                        runRepository.transition(
+                            ctx.tenantId(),
+                            ctx.runId(),
+                            AgentRunStatus.FAILED,
+                            RunTransition.failing(Instant.now(), code)))
+                .thenReturn(e);
           }
+          return Mono.just(e);
         });
   }
 
-  private void dispatch(Runnable jdbcTask) {
-    Mono.fromRunnable(
+  private void persistCompletion(RunMessageContext ctx, String text, String usageJson) {
+    // A concurrent completion in the same session may choose the same next sequence. Retrying the
+    // whole transaction recomputes the sequence after the winner commits, while rolling back the
+    // run transition from the losing attempt.
+    RuntimeException lastFailure = null;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        transactions.executeWithoutResult(
+            ignored -> {
+              runRepository.transition(
+                  ctx.tenantId(),
+                  ctx.runId(),
+                  AgentRunStatus.SUCCEEDED,
+                  RunTransition.completing(Instant.now(), usageJson));
+              persistAssistantMessage(ctx, text, usageJson);
+            });
+        return;
+      } catch (RuntimeException failure) {
+        lastFailure = failure;
+      }
+    }
+    throw lastFailure;
+  }
+
+  /**
+   * Persists the completed assistant message, idempotent on {@code (tenant, session, messageId)}: a
+   * retry with the same run reuses the same message id, so no duplicate is written. The next
+   * session sequence is computed from existing rows; per the design (one active run per session), a
+   * sequence collision is unexpected and is swallowed (the run is already SUCCEEDED).
+   */
+  private void persistAssistantMessage(RunMessageContext ctx, String text, String usageJson) {
+    if (text.isEmpty()) {
+      return; // no assistant content to persist (tool-only runs arrive in P5)
+    }
+    if (messageRepository.findById(ctx.messageId(), ctx.tenantId(), ctx.sessionId()).isPresent()) {
+      return; // idempotent: already persisted by a prior completion of this run
+    }
+    long sequence =
+        messageRepository.findBySession(ctx.sessionId(), ctx.tenantId()).stream()
+                .mapToLong(ChatMessage::sequence)
+                .max()
+                .orElse(0L)
+            + 1L;
+    Instant now = Instant.now();
+    ChatMessage message =
+        new ChatMessage(
+            ctx.messageId(),
+            ctx.tenantId(),
+            ctx.sessionId(),
+            ctx.userId(),
+            "assistant",
+            partsJson(text),
+            "{\"usage\":" + usageJson + "}",
+            sequence,
+            now,
+            now);
+    messageRepository.save(message);
+  }
+
+  private Mono<Void> dispatch(Runnable jdbcTask) {
+    return Mono.fromRunnable(
             () -> {
               try {
                 jdbcTask.run();
               } catch (RuntimeException e) {
-                // Optimistic-lock / illegal-transition outcomes (e.g. a late cancel already
-                // terminated the run) are expected; log the class only — no sensitive payload.
+                // Optimistic-lock / illegal-transition / rare sequence-collision outcomes are
+                // expected; log the class only — no prompt, provider text, or credential here.
                 log.warn(
                     "Run terminal persistence did not apply: {}", e.getClass().getSimpleName());
               }
             })
         .subscribeOn(jdbcScheduler)
-        .subscribe();
+        .then();
   }
 
   private String usageJson(long[] usage) {
@@ -121,6 +216,18 @@ public final class RunLifecycleRecorder {
       return mapper.writeValueAsString(node);
     } catch (JsonProcessingException e) {
       return "{}";
+    }
+  }
+
+  private String partsJson(String text) {
+    try {
+      ArrayNode parts = mapper.createArrayNode();
+      var part = parts.addObject();
+      part.put("type", "text");
+      part.put("text", text);
+      return mapper.writeValueAsString(parts);
+    } catch (JsonProcessingException e) {
+      return "[{\"type\":\"text\",\"text\":\"\"}]";
     }
   }
 

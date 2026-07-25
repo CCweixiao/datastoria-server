@@ -136,6 +136,14 @@ class AiSdkStreamEncoderTest {
   }
 
   @Test
+  void oneHundredFreshStreamsRemainByteStable() {
+    List<String> expected = encodeAll(textOnlyEvents());
+    for (int run = 0; run < 100; run++) {
+      assertThat(encodeAll(textOnlyEvents())).isEqualTo(expected);
+    }
+  }
+
+  @Test
   void goldenFixtureUsesDeprecatedUsageNaming() {
     // Documents the discrepancy: the fixture freezes promptTokens/completionTokens, but the live
     // frontend (route.ts -> sumTokenUsage) emits inputTokens/outputTokens. Encoder follows the live

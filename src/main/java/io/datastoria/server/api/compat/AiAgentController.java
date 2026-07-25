@@ -15,8 +15,10 @@ import org.springframework.web.server.ServerWebExchange;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import io.datastoria.server.agent.application.AgentEventReplayService;
 import io.datastoria.server.agent.application.AiSdkStreamEncoder;
 import io.datastoria.server.agent.application.ChatRunService;
+import io.datastoria.server.agent.application.SessionTitleService;
 import io.datastoria.server.api.error.ClientSecretNotAllowedException;
 import io.datastoria.server.api.error.PlainTextException;
 import io.datastoria.server.identity.IdentityContext;
@@ -43,15 +45,23 @@ import reactor.core.publisher.Mono;
 public class AiAgentController {
 
   private final ChatRunService service;
+  private final SessionTitleService titleService;
+  private final AgentEventReplayService replayService;
 
-  public AiAgentController(ChatRunService service) {
+  public AiAgentController(
+      ChatRunService service,
+      SessionTitleService titleService,
+      AgentEventReplayService replayService) {
     this.service = service;
+    this.titleService = titleService;
+    this.replayService = replayService;
   }
 
   @PostMapping
   public Mono<Void> chat(
       @RequestBody(required = false) JsonNode raw,
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+      @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
       ServerWebExchange exchange) {
     if (raw == null) {
       throw PlainTextException.badRequest("Invalid JSON in request body");
@@ -64,8 +74,53 @@ public class AiAgentController {
     // re-encode each string as an SSE event (double "data:" framing); writing buffers directly
     // preserves the byte-exact AI SDK UI Message Stream the frontend expects.
     return IdentityContext.current()
-        .flatMap(identity -> service.stream(req, identity))
-        .flatMap(events -> writeSse(exchange, AiSdkStreamEncoder.encode(events)));
+        .flatMap(
+            identity -> {
+              if (lastEventId != null && !lastEventId.isBlank()) {
+                if (req.clientRequestId() == null) {
+                  throw PlainTextException.badRequest(
+                      "Idempotency-Key is required for event replay");
+                }
+                long after = parseLastEventId(lastEventId);
+                return writeSse(
+                    exchange, replayService.replay(identity, req.clientRequestId(), after));
+              }
+              return service.stream(req, identity)
+                  .flatMap(
+                      events ->
+                          writeSse(
+                              exchange,
+                              replayService.encodeAndRecord(
+                                  identity.tenantId(), events, provisionalTitle(req))));
+            });
+  }
+
+  private static long parseLastEventId(String value) {
+    try {
+      long parsed = Long.parseLong(value);
+      if (parsed < 0) {
+        throw new NumberFormatException();
+      }
+      return parsed;
+    } catch (NumberFormatException ignored) {
+      throw PlainTextException.badRequest("Last-Event-ID must be a non-negative integer");
+    }
+  }
+
+  /**
+   * Builds a provisional session title from the first words of the user message (mirrors Node A01's
+   * {@code buildProvisionalTitle}). Synchronous and cannot hang, so it needs no timeout; a real
+   * LLM-generated title (separate model call with its own timeout) is a later concern. Derived only
+   * from the user's own text — no prompt fragment beyond the first 8 words, no credential, no
+   * provider error reaches it.
+   */
+  private String provisionalTitle(AgentChatRequest req) {
+    try {
+      return titleService.generateProvisional(req.userText(), req.generateTitle());
+    } catch (RuntimeException ignored) {
+      // Title is optional metadata. Its failure must never fail the primary answer.
+      return null;
+    }
   }
 
   /** Rejects any client-supplied credential before any processing or logging. */

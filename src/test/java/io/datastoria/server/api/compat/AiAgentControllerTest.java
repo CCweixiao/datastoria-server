@@ -2,8 +2,12 @@ package io.datastoria.server.api.compat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -36,8 +40,10 @@ import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.testing.FakeModelAdapterProvider;
 import io.datastoria.server.agent.testing.FakeStreamModel;
 import io.datastoria.server.api.error.ResourceInUseException;
+import io.datastoria.server.domain.ChatMessage;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AgentRunRepository;
+import io.datastoria.server.repository.ChatMessageRepository;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -61,6 +67,7 @@ class AiAgentControllerTest {
   @Autowired ChatRunService chatRunService;
   @Autowired FakeModelAdapterProvider fakeProvider;
   @Autowired AgentRunRepository runRepository;
+  @Autowired ChatMessageRepository messageRepository;
   @Autowired JdbcClient jdbc;
   @Autowired TestDbHelper dbHelper;
 
@@ -110,13 +117,45 @@ class AiAgentControllerTest {
             .returnResult()
             .getResponseBody();
 
-    assertThat(sse).contains("\"type\":\"start\"").contains("\"messageId\":\"msg-1\"");
+    assertThat(sse)
+        .contains("\"type\":\"start\"")
+        .contains("\"messageId\":")
+        .doesNotContain("\"messageId\":\"msg-1\"");
     assertThat(sse).contains("\"type\":\"text-delta\"").contains("Hello");
     assertThat(sse).contains("\"type\":\"finish\"").contains("\"inputTokens\":1");
     // Full SSE framing preserved end-to-end: frames are \n\n-separated and the stream ends with
     // [DONE].
     assertThat(sse).contains("\n\ndata: ");
     assertThat(sse).endsWith("data: [DONE]\n\n");
+  }
+
+  @Test
+  void terminalRunReplaysExactFramesAfterLastEventId() {
+    String body = streamBody("sess-1", "mdl-1", "hello");
+    String original = postStream(body, "idem-replay");
+    List<String> frames =
+        java.util.Arrays.stream(original.split("(?<=\\n\\n)"))
+            .filter(frame -> !frame.isBlank())
+            .toList();
+
+    String replayed =
+        webTestClient
+            .post()
+            .uri("/api/ai/agent")
+            .header("x-datastoria-user-email", USER)
+            .header("Idempotency-Key", "idem-replay")
+            .header("Last-Event-ID", "2")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(body)
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(replayed).isEqualTo(String.join("", frames.subList(2, frames.size())));
+    assertThat(runRepository.findBySession(TENANT, "sess-1")).hasSize(1);
   }
 
   @Test
@@ -421,6 +460,174 @@ class AiAgentControllerTest {
     AgentRun run = awaitRun("idem-disconnect", AgentRunStatus.CANCELLED);
     assertThat(run).as("run persisted as cancelled").isNotNull();
     assertThat(run.status()).isEqualTo(AgentRunStatus.CANCELLED);
+  }
+
+  @Test
+  void titleInjectedFromUserText() {
+    String sse = postStream(streamBody("sess-1", "mdl-1", "analyze slow queries now"), null);
+    // Provisional title = first <=8 words of the user text, on finish.messageMetadata.title.
+    assertThat(sse).contains("\"title\":\"analyze slow queries now\"");
+  }
+
+  @Test
+  void titleOmittedWhenGenerationDisabled() {
+    String body =
+        streamBody("sess-1", "mdl-1", "analyze slow queries now")
+            .replaceFirst("\\}$", ",\"generateTitle\":false}");
+    String sse = postStream(body, null);
+
+    assertThat(sse).doesNotContain("\"title\":");
+  }
+
+  @Test
+  void assistantMessagePersistedOnCompletion() throws Exception {
+    fakeProvider.setModel(FakeStreamModel.builder().text("Hello").finish(1, 1).build());
+    postStream(streamBody("sess-1", "mdl-1", "hi"), "idem-msg");
+    AgentRun run = awaitRun("idem-msg", AgentRunStatus.SUCCEEDED);
+    assertThat(run).isNotNull();
+
+    ChatMessage msg = awaitAssistantMessage(run.messageId());
+    assertThat(msg).as("assistant message persisted on completion").isNotNull();
+    assertThat(msg.role()).isEqualTo("assistant");
+    assertThat(msg.tenantId()).isEqualTo(TENANT);
+    assertThat(msg.sessionId()).isEqualTo("sess-1");
+    assertThat(msg.partsJson()).contains("Hello");
+    assertThat(msg.metadataJson()).contains("\"usage\"");
+  }
+
+  @Test
+  void assistantReplyUsesDistinctIdAndDoesNotOverwriteUserMessage() throws Exception {
+    Instant now = Instant.now();
+    messageRepository.save(
+        new ChatMessage(
+            "msg-1",
+            TENANT,
+            "sess-1",
+            USER,
+            "user",
+            "[{\"type\":\"text\",\"text\":\"original user text\"}]",
+            null,
+            1L,
+            now,
+            now));
+
+    postStream(streamBody("sess-1", "mdl-1", "hi"), "idem-distinct-reply");
+    AgentRun run = awaitRun("idem-distinct-reply", AgentRunStatus.SUCCEEDED);
+    assertThat(run).isNotNull();
+    ChatMessage assistant = awaitAssistantMessage(run.messageId());
+
+    assertThat(run.messageId()).isNotEqualTo("msg-1");
+    assertThat(assistant).isNotNull();
+    assertThat(assistant.role()).isEqualTo("assistant");
+    assertThat(messageRepository.findById("msg-1", TENANT, "sess-1"))
+        .get()
+        .extracting(ChatMessage::role, ChatMessage::partsJson)
+        .containsExactly("user", "[{\"type\":\"text\",\"text\":\"original user text\"}]");
+  }
+
+  @Test
+  void persistedTextHistoryIsSuppliedToTheNextModelRun() {
+    Instant now = Instant.now();
+    messageRepository.save(
+        new ChatMessage(
+            "old-user",
+            TENANT,
+            "sess-1",
+            USER,
+            "user",
+            "[{\"type\":\"text\",\"text\":\"first question\"}]",
+            null,
+            1L,
+            now,
+            now));
+    messageRepository.save(
+        new ChatMessage(
+            "old-assistant",
+            TENANT,
+            "sess-1",
+            USER,
+            "assistant",
+            "[{\"type\":\"text\",\"text\":\"first answer\"}]",
+            null,
+            2L,
+            now,
+            now));
+
+    postStream(streamBody("sess-1", "mdl-1", "follow up"), "idem-history");
+
+    assertThat(fakeProvider.model().lastMessages())
+        .extracting(message -> message.getRole().name(), message -> message.getTextContent())
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple("SYSTEM", "You are a helpful assistant."),
+            org.assertj.core.groups.Tuple.tuple("USER", "first question"),
+            org.assertj.core.groups.Tuple.tuple("ASSISTANT", "first answer"),
+            org.assertj.core.groups.Tuple.tuple("USER", "follow up"));
+  }
+
+  @Test
+  void assistantMessageSkippedOnFailure() throws Exception {
+    fakeProvider.setModel(
+        FakeStreamModel.builder().error(new IllegalStateException("boom sk-X")).build());
+    postStream(streamBody("sess-1", "mdl-1", "hi"), "idem-failmsg");
+    awaitRun("idem-failmsg", AgentRunStatus.FAILED);
+    Thread.sleep(200); // allow any (no-op) message persistence; none should occur
+    assertThat(
+            messageRepository.findBySession("sess-1", TENANT).stream()
+                .filter(message -> "assistant".equals(message.role()))
+                .toList())
+        .as("no hollow completed assistant message on failure")
+        .isEmpty();
+  }
+
+  @Test
+  void javaSseTypeSequenceMatchesGoldenFixture() throws Exception {
+    // Protocol parity: the Java A01 SSE chunk-type sequence must match the frozen Node golden
+    // fixture (semantic diff per stream-protocol §6 — types/order/terminator, not random ids).
+    fakeProvider.setModel(
+        FakeStreamModel.builder().text("Hello").text(" world").finish(12, 3).build());
+    String sse = postStream(streamBody("sess-1", "mdl-1", "hi"), null);
+    assertThat(sseChunkTypes(sse)).isEqualTo(fixtureTypes("text-only.jsonl"));
+    assertThat(sse).endsWith("data: [DONE]\n\n");
+  }
+
+  private ChatMessage awaitAssistantMessage(String messageId) throws Exception {
+    long deadline = System.currentTimeMillis() + 4000;
+    while (System.currentTimeMillis() < deadline) {
+      Optional<ChatMessage> m = messageRepository.findById(messageId, TENANT, "sess-1");
+      if (m.isPresent()) {
+        return m.get();
+      }
+      Thread.sleep(40);
+    }
+    return null;
+  }
+
+  private static List<String> sseChunkTypes(String sse) throws Exception {
+    List<String> types = new ArrayList<>();
+    for (String frame : sse.split("\n\n")) {
+      String payload = frame.trim();
+      if (payload.isEmpty() || payload.endsWith("[DONE]")) {
+        continue;
+      }
+      if (payload.startsWith("data: ")) {
+        payload = payload.substring("data: ".length());
+      } else if (payload.startsWith("data:")) {
+        payload = payload.substring("data:".length());
+      }
+      types.add(MAPPER.readTree(payload).get("type").asText());
+    }
+    return types;
+  }
+
+  private static List<String> fixtureTypes(String file) throws Exception {
+    List<String> types = new ArrayList<>();
+    for (String line : Files.readAllLines(Path.of("docs/fixtures/stream/" + file))) {
+      if (line.isBlank()) {
+        continue;
+      }
+      types.add(MAPPER.readTree(line).get("type").asText());
+    }
+    return types;
   }
 
   // ---- helpers ----

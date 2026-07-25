@@ -24,6 +24,10 @@ public final class FakeModelAdapterProvider implements ModelAdapterProvider {
     this.model = Objects.requireNonNull(model);
   }
 
+  public FakeStreamModel model() {
+    return model;
+  }
+
   public void reset() {
     this.model = FakeStreamModel.builder().text("Hello").finish(1, 1).build();
     this.adapterFailure = null;

@@ -139,6 +139,22 @@ describe("java-chat-proxy", () => {
     expect(headers.get("idempotency-key")).toBe("client-supplied-key");
   });
 
+  it("forwards Last-Event-ID for an idempotent Java replay", async () => {
+    fetchMock.mockResolvedValue(sseResponse(SSE_BODY));
+    await proxyChatToJava(
+      chatRequest(
+        {
+          sessionId: "sess-1",
+          message: { id: "msg-1", role: "user", parts: [] },
+        },
+        { "idempotency-key": "replay-key", "last-event-id": "3" }
+      )
+    );
+    const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers);
+    expect(headers.get("idempotency-key")).toBe("replay-key");
+    expect(headers.get("last-event-id")).toBe("3");
+  });
+
   it("uses body clientRequestId when no Idempotency-Key header is present", async () => {
     fetchMock.mockResolvedValue(sseResponse(SSE_BODY));
     await proxyChatToJava(

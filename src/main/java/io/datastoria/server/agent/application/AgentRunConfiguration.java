@@ -6,6 +6,7 @@ import java.util.concurrent.Executors;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import io.datastoria.server.agent.runtime.CancellationRegistry;
 import io.datastoria.server.agent.runtime.HarnessAgentFactory;
@@ -61,7 +62,9 @@ public class AgentRunConfiguration {
   @Bean
   RunLifecycleRecorder runLifecycleRecorder(
       AgentRunRepository runRepository,
+      io.datastoria.server.repository.ChatMessageRepository messageRepository,
+      TransactionTemplate transactions,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
-    return new RunLifecycleRecorder(runRepository, jdbcScheduler);
+    return new RunLifecycleRecorder(runRepository, messageRepository, transactions, jdbcScheduler);
   }
 }

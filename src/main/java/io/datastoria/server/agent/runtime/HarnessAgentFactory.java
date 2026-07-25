@@ -1,10 +1,13 @@
 package io.datastoria.server.agent.runtime;
 
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.RunContext;
 
 /**
@@ -41,6 +44,15 @@ public final class HarnessAgentFactory {
 
   public RunnableAgent create(
       RunContext context, ModelAdapter modelAdapter, AgentRuntimeConfig config, String userText) {
+    return create(context, modelAdapter, config, List.of(), userText);
+  }
+
+  public RunnableAgent create(
+      RunContext context,
+      ModelAdapter modelAdapter,
+      AgentRuntimeConfig config,
+      List<ChatTurn> history,
+      String userText) {
     HarnessAgent agent =
         HarnessAgent.builder()
             .name("run-" + context.runId())
@@ -66,8 +78,13 @@ public final class HarnessAgentFactory {
     // no async tools, so strip it to keep the model boundary tool-free (ADR-0004 §3.5).
     agent.getToolkit().removeTool("wait_async_results");
 
-    Msg userMsg = Msg.builder().role(MsgRole.USER).textContent(userText).build();
+    List<Msg> messages = new ArrayList<>();
+    for (ChatTurn turn : history) {
+      MsgRole role = "assistant".equals(turn.role()) ? MsgRole.ASSISTANT : MsgRole.USER;
+      messages.add(Msg.builder().role(role).textContent(turn.text()).build());
+    }
+    messages.add(Msg.builder().role(MsgRole.USER).textContent(userText).build());
     return new HarnessRunnableAgent(
-        context.runId(), agent, userMsg, new AgentEventMapper(context, clock));
+        context.runId(), agent, messages, new AgentEventMapper(context, clock));
   }
 }

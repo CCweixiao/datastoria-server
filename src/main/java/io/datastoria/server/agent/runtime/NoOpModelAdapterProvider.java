@@ -1,7 +1,5 @@
 package io.datastoria.server.agent.runtime;
 
-import org.springframework.stereotype.Component;
-
 import io.datastoria.server.domain.Model;
 
 /**
@@ -11,7 +9,6 @@ import io.datastoria.server.domain.Model;
  * P4.8. Tests register their own {@code @Primary} {@code FakeModelAdapterProvider}, which wins
  * injection over this plain candidate.
  */
-@Component
 public class NoOpModelAdapterProvider implements ModelAdapterProvider {
 
   @Override

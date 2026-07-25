@@ -74,9 +74,18 @@ public final class AiSdkStreamEncoder {
   private long inputTokens;
   private long outputTokens;
   private long cachedTokens;
+  private String title;
 
   public AiSdkStreamEncoder() {
     this(new ObjectMapper());
+  }
+
+  /**
+   * Sets a provisional title emitted on the {@code finish} chunk's {@code messageMetadata.title}.
+   */
+  public AiSdkStreamEncoder withTitle(String title) {
+    this.title = title;
+    return this;
   }
 
   public AiSdkStreamEncoder(ObjectMapper mapper) {
@@ -138,6 +147,9 @@ public final class AiSdkStreamEncoder {
       finish.put("finishReason", "stop");
       ObjectNode metadata = finish.putObject("messageMetadata");
       metadata.set("usage", usageNode());
+      if (title != null && !title.isBlank()) {
+        metadata.put("title", title);
+      }
       frames.add(frame(finish));
     } else if (event instanceof AgentRunEvent.RunFailed e) {
       ObjectNode error = mapper.createObjectNode();
@@ -164,9 +176,18 @@ public final class AiSdkStreamEncoder {
    * once per run (mirrors the single-use {@code AgentRunService} Flux).
    */
   public static Flux<String> encode(Flux<AgentRunEvent> events) {
+    return encode(events, null);
+  }
+
+  /**
+   * Incrementally encodes a run's event stream into SSE frames and appends the {@code [DONE]}
+   * terminator, optionally injecting a provisional {@code title} on the {@code finish} chunk. A
+   * fresh encoder is used per subscription, so the returned Flux is safe to subscribe once per run.
+   */
+  public static Flux<String> encode(Flux<AgentRunEvent> events, String title) {
     return Flux.defer(
         () -> {
-          AiSdkStreamEncoder encoder = new AiSdkStreamEncoder();
+          AiSdkStreamEncoder encoder = new AiSdkStreamEncoder().withTitle(title);
           return events
               .concatMap(e -> Flux.fromIterable(encoder.encode(e)))
               .concatWith(Flux.just(encoder.done()));

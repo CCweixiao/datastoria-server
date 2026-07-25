@@ -88,6 +88,10 @@ export async function proxyChatToJava(req: Request): Promise<Response> {
     "idempotency-key": idempotencyKey,
     "x-datastoria-user-email": email,
   };
+  const lastEventId = req.headers.get("last-event-id");
+  if (lastEventId) {
+    headers["last-event-id"] = lastEventId;
+  }
 
   const abortController = new AbortController();
   const abortUpstream = () => abortController.abort();

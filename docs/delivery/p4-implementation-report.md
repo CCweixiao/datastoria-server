@@ -4,7 +4,7 @@
 > 本次交付：**P4.1–P4.7（均已通过 review）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.7 review 已通过；P4.8 未开始。
+> 状态：P4.1–P4.8 已实现并完成本地 review；可在开始 P5 前进行前后端联调。
 
 ---
 
@@ -20,7 +20,7 @@
 - 流事件与取消测试（`AgentScopeSpikeTest`）
 - 明确的阻断项（见 §8）
 
-**P4.2–P4.8 未实现**：内部 Harness 模型、Run/Checkpoint DDL 与 repository、AI SDK encoder、
+**历史切片说明**：内部 Harness 模型、Run/Checkpoint DDL 与 repository、AI SDK encoder、
 A01 Java chat API、前端 gateway、端到端验证均未开始。任何“完成”字样仅指 P4.1。
 
 ## 1. AgentScope 锁定版本
@@ -1102,3 +1102,74 @@ review 发现并修复以下边界问题：
 
 验证：P4.7 专项 17/17、前端全量 82 files / 436 tests 全通过；typecheck、ESLint、Prettier
 均通过。**P4.7 review 通过，可开始 P4.8。**
+
+# P4.8：真实 Provider、事件重放与联调收口
+
+## P4.8-1. Review 结论
+
+P4.8 已把 P4 的最小 Harness 从 fake-only 测试链补齐为可联调的生产链：
+
+1. **真实 provider**：引入 AgentScope 官方
+   `agentscope-extensions-model-openai:2.0.0`，生产 `ModelAdapterProvider` 支持 OpenAI 及
+   OpenAI-compatible Chat Completions endpoint。模型级 secret 优先于 provider 级 secret，
+   且只通过服务端 `SecretService.decrypt` 解析；浏览器请求仍拒绝任何 credential 字段。
+2. **多轮与刷新回放**：运行前从 `ds_chat_message` 按顺序重建 user/assistant 纯文本历史，
+   排除本轮已落库的 user message；成功终态与 assistant message 在同一事务中完成。
+3. **断线续传**：V6 新增 `ds_agent_event`，逐帧保存实际发送的 AI SDK SSE 字节。客户端使用相同
+   `Idempotency-Key` 并携带 `Last-Event-ID: N` 时，从第 `N+1` 帧继续，不重新调用模型、不创建新
+   run。Node gateway 原样转发 `Last-Event-ID`。
+4. **标题隔离**：标题生成是独立、确定性的 provisional service；`generateTitle:false` 生效，
+   标题异常不影响主回答。
+5. **流完成边界**：run 终态和 assistant message 持久化完成后才向下游发送 terminal event，
+   因而收到 `finish`/`[DONE]` 后立即刷新可读。
+6. **稳定性**：新增 100 次 fresh stream 字节稳定性测试；assistant message 使用独立 ULID，
+   不覆盖用户 message。
+
+## P4.8-2. 数据库与兼容契约
+
+- SQLite/MySQL 均新增 V6 `ds_agent_event(id, tenant_id, run_id, sequence, frame_text,
+  created_at)`；`(tenant_id, run_id, sequence)` 唯一，run/session 删除时级联清理。
+- 重放查询同时受 tenant、user、idempotency key 约束；跨租户或跨用户不能读取事件。
+- 普通请求的 AI SDK SSE 字节格式未改变。`Last-Event-ID` 是已成功消费的 frame sequence，
+  `0` 表示从头重放。
+- 活跃 run 的重复提交仍返回 409；终态 run 只有显式携带 `Last-Event-ID` 才进入重放路径。
+
+## P4.8-3. 前后端联调入口（P5 前即可开始）
+
+1. 在设置页创建 OpenAI/OpenAI-compatible provider，将 API key 保存为服务端 secret，并创建
+   enabled model；请求只传 `modelConfigId`，不传 API key。
+2. 启动 Java：
+
+   ```bash
+   export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+   ./mvnw spring-boot:run
+   ```
+
+3. 启动前端 gateway：
+
+   ```bash
+   cd frontend
+   CHAT_BACKEND=java \
+   SESSION_BACKEND=java \
+   NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
+   npm run dev
+   ```
+
+4. 联调验收：发送两轮纯文本对话；确认浏览器网络请求没有 API key；第二轮模型收到历史；
+   `[DONE]` 后刷新能看到 assistant message；用相同幂等键和 `Last-Event-ID` 验证剩余帧重放。
+5. 回滚只需将 `CHAT_BACKEND` 切回 Node；不删除 Java run/message/event 数据。
+
+## P4.8-4. 测试与限制
+
+- P4.8 recorder/controller/runtime 专项（含多轮、落库、重放、100 次流稳定性）已通过；Java
+  `clean verify` 全量 283/283，Spotless 232 个 Java 文件及 `pom.xml` 通过。
+- `OpenAiModelAdapterProviderTest` 验证模型级 secret 优先、服务端解密、官方 streaming model
+  构造及不支持 provider 的 fail-fast。
+- Node gateway 测试验证真实字节透传、取消传播、凭据拒绝、稳定幂等键及
+  `Last-Event-ID` 转发；前端全量 82 files / 437 tests，typecheck、ESLint、Prettier 通过。
+- 真实 provider smoke 是显式联网验收，不进入常规 CI，也不读取开发者环境变量作为“伪通过”；
+  本地无可用测试 key 时记录为未执行，而不是 skipped-as-success。
+- 本机无 Docker 时 MySQL `SchemaParityTest` 执行 0 项；SQLite V1–V6 全部执行，MySQL V6 由
+  Docker/CI 补验。
+
+**P4.8 完成后停止；不自动开始 P5。当前分支已具备 P5 前前后端联调条件。**

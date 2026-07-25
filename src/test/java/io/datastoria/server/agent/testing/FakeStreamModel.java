@@ -38,6 +38,7 @@ public final class FakeStreamModel implements Model {
   private final AtomicBoolean cancelled = new AtomicBoolean();
   private final AtomicInteger streamInvocations = new AtomicInteger();
   private final AtomicInteger lastToolCount = new AtomicInteger(-1);
+  private volatile List<Msg> lastMessages = List.of();
 
   private FakeStreamModel(
       String modelName, List<ChatResponse> frames, Duration perFrameDelay, Throwable error) {
@@ -57,6 +58,7 @@ public final class FakeStreamModel implements Model {
       List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
     streamInvocations.incrementAndGet();
     lastToolCount.set(tools.size());
+    lastMessages = List.copyOf(messages);
     if (error != null) {
       return Flux.<ChatResponse>error(error).doOnCancel(() -> cancelled.set(true));
     }
@@ -87,11 +89,17 @@ public final class FakeStreamModel implements Model {
     return lastToolCount.get();
   }
 
+  /** Messages supplied to the most recent model call, for multi-turn context assertions. */
+  public List<Msg> lastMessages() {
+    return lastMessages;
+  }
+
   /** Reset cancellation/invocation counters so a fresh run is observable. */
   public void resetStats() {
     cancelled.set(false);
     streamInvocations.set(0);
     lastToolCount.set(-1);
+    lastMessages = List.of();
   }
 
   public static Builder builder() {

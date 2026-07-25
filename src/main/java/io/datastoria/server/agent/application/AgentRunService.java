@@ -78,7 +78,11 @@ public final class AgentRunService {
 
           RunnableAgent agent =
               factory.create(
-                  request.context(), request.modelAdapter(), request.config(), request.userText());
+                  request.context(),
+                  request.modelAdapter(),
+                  request.config(),
+                  request.history(),
+                  request.userText());
           String runId = request.context().runId();
           if (!registry.register(request.context(), agent)) {
             closeAsync(agent);

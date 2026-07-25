@@ -1,5 +1,6 @@
 package io.datastoria.server.agent.runtime;
 
+import java.util.List;
 import java.util.Optional;
 
 import io.agentscope.core.message.Msg;
@@ -22,20 +23,21 @@ final class HarnessRunnableAgent implements RunnableAgent {
 
   private final String runId;
   private final HarnessAgent agent;
-  private final Msg userMsg;
+  private final List<Msg> messages;
   private final AgentEventMapper mapper;
 
-  HarnessRunnableAgent(String runId, HarnessAgent agent, Msg userMsg, AgentEventMapper mapper) {
+  HarnessRunnableAgent(
+      String runId, HarnessAgent agent, List<Msg> messages, AgentEventMapper mapper) {
     this.runId = runId;
     this.agent = agent;
-    this.userMsg = userMsg;
+    this.messages = List.copyOf(messages);
     this.mapper = mapper;
   }
 
   @Override
   public Flux<AgentRunEvent> streamEvents() {
     return agent
-        .streamEvents(userMsg)
+        .streamEvents(messages)
         .doOnCancel(agent::interrupt)
         .map(mapper::toEvent)
         .filter(Optional::isPresent)
