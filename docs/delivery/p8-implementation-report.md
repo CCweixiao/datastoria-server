@@ -74,18 +74,29 @@ AgentScope 的 `AGENT_RESULT` 并不总是终态。映射层现按 `GenerateReas
 `PERMISSION_ASKING`、`TOOL_SUSPENDED`、middleware/reasoning/acting pause 不再产生
 `RunCompleted`，避免 `WAITING_INPUT` 被错误覆盖为 `SUCCEEDED`。
 
+Harness 现通过显式 `(userId, runId)` `RuntimeContext` 调用 AgentScope，而不再使用
+会落入默认 session 的弃用重载。AgentScope 可变状态按 run 隔离；DataStoria chat session
+继续由持久消息重建，避免一个暂停 run 污染同一聊天中的后续 run。服务端注册的现有只读
+工具由 DataStoria policy 显式 ALLOW；run capability 也可注入 ASK/DENY 规则。真实
+AgentScope 推理/工具循环测试已验证：
+
+- ALLOW 会执行工具并正常结束；
+- ASK 不执行工具，产生 approval event 且不产生 `RunCompleted`；
+- DENY 不执行工具，向 Agent 返回 denied tool result 后可继续结束。
+
 ### P8.2 当前证据
 
 - pending action repository、HTTP controller、AgentScope event mapper、AI SDK encoder 专项：
   36/36；
+- AgentScope 真实 ALLOW/ASK/DENY 与 run-scoped `RuntimeContext`：6/6；
 - approval 边界集成测试验证 `WAITING_INPUT + pending action + PENDING_ACTION checkpoint`
   原子落库；
 - 暂停原因回归测试覆盖 permission asking、tool suspended、middleware pause；
-- Java 全量：343/343；Spotless 通过。
+- Java 全量：345/345；Spotless 通过。
 
 ## 尚未完成
 
-- AgentScope permission policy 的真实 ALLOW/ASK/DENY 配置与恢复执行；
+- approval/deny 后的 AgentScope `ConfirmResult` 恢复执行；
 - `ask_user_question` 服务端 suspension 工具和 question wire frame；
 - `:resume` 与 Java 进程重启恢复；
 - 前端 action API 交互替换 client executor；

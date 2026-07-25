@@ -4,8 +4,12 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.permission.PermissionBehavior;
+import io.agentscope.core.permission.PermissionContextState;
+import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.datastoria.server.agent.application.ChatTurn;
@@ -75,12 +79,17 @@ public final class HarnessAgentFactory {
       List<ChatTurn> history,
       String userText) {
     Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
+    PermissionContextState permissionContext =
+        capabilities.permissionContext() == null
+            ? allowRegisteredServerTools(toolkit)
+            : capabilities.permissionContext();
     HarnessAgent.Builder builder =
         HarnessAgent.builder()
             .name("run-" + context.runId())
             .sysPrompt(config.systemPrompt())
             .model(modelAdapter.modelFor(context))
             .toolkit(toolkit)
+            .permissionContext(permissionContext)
             .maxIters(config.maxIters());
     if (!capabilities.skills().isEmpty()) {
       builder.skillRepository(new InMemoryAgentSkillRepository(capabilities.skills()));
@@ -114,6 +123,27 @@ public final class HarnessAgentFactory {
     }
     messages.add(Msg.builder().role(MsgRole.USER).textContent(userText).build());
     return new HarnessRunnableAgent(
-        context.runId(), agent, messages, new AgentEventMapper(context, clock));
+        context.runId(),
+        agent,
+        messages,
+        new AgentEventMapper(context, clock),
+        RuntimeContext.builder()
+            .userId(context.userId())
+            // AgentScope state is run-scoped. Chat history is reconstructed by DataStoria.
+            .sessionId(context.runId())
+            .build());
+  }
+
+  private PermissionContextState allowRegisteredServerTools(Toolkit toolkit) {
+    PermissionContextState.Builder permissions = PermissionContextState.builder();
+    toolkit
+        .getToolNames()
+        .forEach(
+            name ->
+                permissions.addAllowRule(
+                    name,
+                    new PermissionRule(
+                        name, null, PermissionBehavior.ALLOW, "datastoria-server-policy")));
+    return permissions.build();
   }
 }
