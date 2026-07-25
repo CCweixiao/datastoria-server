@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
@@ -29,6 +28,7 @@ import io.agentscope.harness.agent.HarnessAgent;
 
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
 /**
  * P4.1 AgentScope Java compatibility spike (ADR-0004). Proves, with a deterministic fake model and
@@ -128,17 +128,16 @@ class AgentScopeSpikeTest {
 
   /**
    * De-risks the mandated runtime ({@link HarnessAgent}, docs/design/harness-agent.md): it builds
-   * with a temp workspace + disabled compaction, and its {@code streamEvents} produces the same
-   * terminal events and concatenated text as {@link ReActAgent} (it composes a ReActAgent
-   * internally). The decision of ReActAgent-vs-HarnessAgent for P4's no-skill/no-tool scope is
-   * recorded in ADR-0004.
+   * with a temp workspace and every P5+ capability explicitly disabled. Its {@code streamEvents}
+   * produces the same terminal events and concatenated text as {@link ReActAgent}, and the fake
+   * model verifies that no tool schema reaches the model.
    */
   @Test
   void harnessAgentBuildsAndStreams(@TempDir Path workspace) {
     FakeStreamModel model =
         FakeStreamModel.builder().text("Hello").text(", world!").finish(3, 5).build();
 
-    try (HarnessAgent agent =
+    HarnessAgent agent =
         HarnessAgent.builder()
             .name("spike-harness")
             .sysPrompt("You are a helpful assistant.")
@@ -146,7 +145,24 @@ class AgentScopeSpikeTest {
             .maxIters(3)
             .workspace(workspace)
             .disableCompaction()
-            .build()) {
+            .disableFilesystemTools()
+            .disableShellTool()
+            .disableMemoryTools()
+            .disableMemoryHooks()
+            .disableSessionPersistence()
+            .disableWorkspaceContext()
+            .disableAtPathExpansion()
+            .disableSubagents()
+            .disableDynamicSubagents()
+            .disableDynamicSkills()
+            .disableDefaultWorkspaceSkills()
+            .disableToolsConfig()
+            .build();
+    // AgentScope 2.0.0 registers this async helper even when all optional capabilities are off.
+    // P4 has no async tools, so remove it explicitly to keep the model boundary tool-free.
+    agent.getToolkit().removeTool("wait_async_results");
+
+    try (agent) {
       List<AgentEvent> events = agent.streamEvents(userMessage("hi")).collectList().block();
 
       assertThat(events).as("events").isNotNull();
@@ -154,12 +170,13 @@ class AgentScopeSpikeTest {
           .endsWith(
               AgentEventType.MODEL_CALL_END, AgentEventType.AGENT_RESULT, AgentEventType.AGENT_END);
       assertThat(joinText(events)).isEqualTo("Hello, world!");
+      assertThat(model.lastToolCount()).as("P4 minimal Harness exposes no tools").isZero();
     }
   }
 
   /** A failing model {@link Flux} propagates through {@code streamEvents} as {@code onError}. */
   @Test
-  void modelErrorPropagatesAsOnError() throws Exception {
+  void modelErrorPropagatesAsOnError() {
     Model model =
         new Model() {
           @Override
@@ -175,23 +192,19 @@ class AgentScopeSpikeTest {
         };
     ReActAgent agent = reactAgentFor(model);
 
-    AtomicReference<Throwable> error = new AtomicReference<>();
-    CountDownLatch terminal = new CountDownLatch(1);
-    agent
-        .streamEvents(userMessage("go"))
-        .doOnError(error::set)
-        .doOnError(t -> terminal.countDown())
-        .subscribe();
-    assertThat(terminal.await(10, TimeUnit.SECONDS)).as("stream terminates on error").isTrue();
-
-    Throwable cause = error.get();
-    while (cause != null && cause.getCause() != null) {
-      cause = cause.getCause();
-    }
-    assertThat(cause)
-        .as("root cause preserved through AgentScope streamEvents")
-        .isInstanceOfSatisfying(
-            IllegalStateException.class, e -> assertThat(e.getMessage()).contains("Boom"));
+    StepVerifier.create(agent.streamEvents(userMessage("go")))
+        .expectNextCount(2)
+        .expectErrorMatches(
+            error -> {
+              Throwable cause = error;
+              while (cause.getCause() != null) {
+                cause = cause.getCause();
+              }
+              return cause instanceof IllegalStateException
+                  && cause.getMessage() != null
+                  && cause.getMessage().contains("Boom");
+            })
+        .verify(Duration.ofSeconds(10));
   }
 
   /**

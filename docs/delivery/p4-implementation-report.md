@@ -4,7 +4,7 @@
 > 本次交付：**仅 P4.1 — AgentScope 兼容性 Spike**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：停在 P4.1 review；P4.2–P4.8 尚未开始。
+> 状态：P4.1 review 已通过；可开始 P4.2，P4.2–P4.8 尚未实现。
 
 ## 0. 范围说明（P4.1 only）
 
@@ -54,8 +54,8 @@ A01 Java chat API、前端 gateway、端到端验证均未开始。任何“完�
    为协作式、仅在多步步间生效，单步纯文本响应中不会中止 mid-stream（ADR-0004 §3.3）。
    → DataStoria 取消策略：dispose 订阅（省 token）+ `interrupt()`（协作收尾）。
 4. **错误传播**：`Flux.error` 经 `streamEvents` 以 `onError` 透出且根因保留 → 映射为 `RunFailed`。
-5. **ReActAgent vs HarnessAgent**：两者均验证可用；P4 建议用 `ReActAgent`（最小），`HarnessAgent`
-   留待 P5 引入 skill/sandbox。**需 review 确认**（ADR-0004 §3.5）。
+5. **唯一 runtime**：P4 固定使用 `HarnessAgent`。最小 builder 显式关闭 filesystem、shell、
+   memory、skill 和 subagent 等 P5+ 能力，测试断言传给 fake model 的 tool schema 数量为 0。
 
 ## 4. 测试命令与结果
 
@@ -87,11 +87,10 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 - 回滚 = 移除 `pom.xml` 中 `agentscope.version` 及两个 dependency、删除
   `src/test/.../agent/spike/`、撤销 ADR/报告。无数据迁移、无端点变更。
 
-## 8. 阻断项（合并前需 review 确认）
+## 8. 已知后续风险（不阻断 P4.2）
 
-1. **运行时选择**：P4 用 `ReActAgent` 还是 `HarnessAgent`？（ADR-0004 §3.5；建议 ReActAgent）
-2. reactor 降级（3.8.2→3.7.19）当前无异常；P4.2 起若用更复杂特性需复跑全量回归。
-3. 真实 provider smoke 与 MySQL contract 均未在本机执行（见 §6），属后续阶段事项。
+1. reactor 降级（3.8.2→3.7.19）当前无异常；P4.2 起若用更复杂特性需复跑全量回归。
+2. 真实 provider smoke 与 MySQL contract 均未在本机执行（见 §6），属后续阶段事项。
 
 ## 9. 修改文件
 

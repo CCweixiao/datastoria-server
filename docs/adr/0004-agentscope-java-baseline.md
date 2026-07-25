@@ -137,24 +137,25 @@ Spike 实测两种取消语义：
 （`IllegalStateException: provider Boom` 未被吞）。`AgentScopeSpikeTest#modelErrorPropagatesAsOnError`
 已证明。DataStoria 在 P4.2 把根因映射为脱敏的 `RunFailed`（不向浏览器透传 provider 原文）。
 
-> 已知噪声：错误路径下 Reactor 会打印一条 `Operator called default onErrorDropped`，是
-> AgentScope 内部次级 error 信号在终止后被丢弃所致，不影响结果。P4.2 可用
-> `Hooks.onErrorDropped(...)` 静音或保留为 debug 观测。
+测试使用 `StepVerifier` 消费并断言终止错误，不安装全局 Reactor hook，也不会产生
+`onErrorDropped`。P4.2 同样必须在流边界显式消费并映射错误。
 
-### 3.5 ReActAgent vs HarnessAgent（需 review 决策）
+### 3.5 HarnessAgent 是 P4 唯一运行时
 
 - `docs/design/harness-agent.md` 指定 `HarnessAgent` 为唯一运行时。
-- `HarnessAgent` 组合一个 `ReActAgent`（`getDelegate()`），并增加 workspace / sandbox /
-  subagent / skill / plan-mode / MCP / compaction —— **这些全是 P5+ 范围**，P4 的“最小
-  Harness”（无 skill、无工具、无 sandbox、无多 Agent）用不到。
-- Spike 同时验证两者：`HarnessAgent.builder().model(fake).workspace(tmp).disableCompaction().build()`
-  构建成功，其 `streamEvents` 终止序列与 `ReActAgent` 一致
-  （`AgentScopeSpikeTest#harnessAgentBuildsAndStreams`）。
+- `HarnessAgent` 组合一个 `ReActAgent`，但 DataStoria 生产代码不得直接使用其 delegate 绕过
+  Harness runtime。
+- 默认 builder 会注册 filesystem、shell、memory、skill 和 subagent 工具，不符合 P4 的
+  “无 Skill、无业务工具”范围。因此 P4 factory 必须显式调用
+  `disableFilesystemTools/disableShellTool/disableMemoryTools/disableMemoryHooks/`
+  `disableSessionPersistence/disableWorkspaceContext/disableAtPathExpansion/disableSubagents/`
+  `disableDynamicSubagents/disableDynamicSkills/disableDefaultWorkspaceSkills/disableToolsConfig`。
+- AgentScope `2.0.0` 即使关闭上述能力仍会注册 `wait_async_results`；P4 无 async tool，factory
+  构建后必须通过 `agent.getToolkit().removeTool("wait_async_results")` 显式移除。
+- Spike 已验证上述最小配置可以正常流式，并断言传给 `Model.stream` 的 tool schema 数量为 0。
 
-**建议（请 review 确认）**：P4 运行时用 `ReActAgent`（core only，最小、稳定、无 workspace
-开销），`HarnessAgent` 在 P5 引入 skill/sandbox 时再切换。两者共享同一 `streamEvents /
-interrupt / Model` 契约，Spike 结论可直接迁移。若 review 要求严格遵循设计文档用
-`HarnessAgent`，则保留 `agentscope-harness` 依赖并按 §3.5 的 builder 形式装配即可，无技术阻塞。
+**决策**：P4 起始终使用 `HarnessAgent` 作为唯一 runtime。P5+ 逐项开启 Skill、sandbox、
+subagent 和业务工具；不得依赖默认开启状态。
 
 ### 3.6 memory / checkpoint
 
@@ -203,9 +204,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 
 ## 8. P4.1 阻断项（review 必读）
 
-1. **ReActAgent vs HarnessAgent**（§3.5）：需 review 确认 P4 采用哪个运行时。建议 ReActAgent，
-   两者已同时验证，非技术阻塞。
-2. **reactor 降级风险**（§3.1）：当前正常；P4.2 若引入更复杂 AgentScope 特性需复跑全量回归。
-3. **真实 provider smoke 未执行**（§5）：P4.1 范围内不执行，留待 P4.6 且仅在显式开关下运行。
-4. **MySQL contract 本机未执行**：与 P3 一致，无 Docker 时 Testcontainers 自动跳过，CI
+1. **reactor 降级风险**（§3.1）：当前正常；P4.2 若引入更复杂 AgentScope 特性需复跑全量回归。
+2. **真实 provider smoke 未执行**（§5）：P4.1 范围内不执行，留待 P4.6 且仅在显式开关下运行。
+3. **MySQL contract 本机未执行**：与 P3 一致，无 Docker 时 Testcontainers 自动跳过，CI
    `mysql-contract` job 兜底；P4.1 未新增数据库变更，不产生新 MySQL 风险。

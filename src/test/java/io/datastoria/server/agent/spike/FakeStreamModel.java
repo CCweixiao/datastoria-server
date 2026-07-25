@@ -39,6 +39,7 @@ public final class FakeStreamModel implements Model {
   private final Duration perFrameDelay;
   private final AtomicBoolean cancelled = new AtomicBoolean();
   private final AtomicInteger streamInvocations = new AtomicInteger();
+  private final AtomicInteger lastToolCount = new AtomicInteger(-1);
 
   private FakeStreamModel(String modelName, List<ChatResponse> frames, Duration perFrameDelay) {
     this.modelName = modelName;
@@ -55,6 +56,7 @@ public final class FakeStreamModel implements Model {
   public Flux<ChatResponse> stream(
       List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
     streamInvocations.incrementAndGet();
+    lastToolCount.set(tools.size());
     Flux<ChatResponse> flux = Flux.fromIterable(frames);
     if (!perFrameDelay.isZero()) {
       flux = flux.delayElements(perFrameDelay);
@@ -77,10 +79,16 @@ public final class FakeStreamModel implements Model {
     return streamInvocations.get();
   }
 
+  /** Number of tool schemas offered on the most recent {@link #stream} call. */
+  public int lastToolCount() {
+    return lastToolCount.get();
+  }
+
   /** Reset cancellation/invocation counters so a fresh run is observable. */
   public void resetStats() {
     cancelled.set(false);
     streamInvocations.set(0);
+    lastToolCount.set(-1);
   }
 
   public static Builder builder() {
