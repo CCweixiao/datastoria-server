@@ -9,9 +9,9 @@ import io.datastoria.server.agent.domain.AgentCheckpoint;
  * Persistent access to {@code ds_agent_checkpoint}. Every method is scoped by {@code tenantId}.
  *
  * <p><b>Upsert semantics:</b> {@link #save} inserts at {@code (tenantId, runId, sequence)} or, if a
- * row already exists at that key, overwrites {@code stateJson}/{@code codecVersion}/{@code
- * checksum} and bumps {@code updatedAt} (created_at is preserved). The latest checkpoint for a run
- * is the row with the greatest sequence.
+ * row already exists at that key, overwrites {@code checkpointType}/{@code stateJson}/{@code
+ * codecVersion}/{@code checksum} and bumps {@code updatedAt} (created_at is preserved). The latest
+ * checkpoint for a run is the row with the greatest sequence.
  */
 public interface AgentCheckpointRepository {
 

@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2（已通过 review）+ P4.3（本次）**
+> 本次交付：**P4.1 + P4.2 + P4.3（均已通过 review）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1、P4.2 review 已通过；**P4.3 已实现，待 review**；P4.4–P4.8 未开始。
+> 状态：P4.1、P4.2、P4.3 review 已通过；P4.4–P4.8 未开始。
 
 ---
 
@@ -296,7 +296,7 @@ docs/delivery/p4-implementation-report.md                                  (追�
 
 ---
 
-# P4.3 — Agent Run / Checkpoint 数据模型（本次交付，待 review）
+# P4.3 — Agent Run / Checkpoint 数据模型（已通过 review）
 
 ## P4.3-0. 范围
 
@@ -319,7 +319,7 @@ opaque JSON payload，验证存储/读取/覆盖/顺序语义。**不涉及 P5+ 
 | Domain + 状态机 | `agent.domain`：`AgentRunStatus`（7 态 + 迁移表）、`AgentRun`、`AgentCheckpoint`、`CheckpointType`、`RunTransition`、`IllegalRunTransitionException`（均 AgentScope-free） | ✅ |
 | Repository | `AgentRunRepository` / `AgentCheckpointRepository` 接口 + `JdbcAgentRunRepository` / `JdbcAgentCheckpointRepository`（`JdbcClient`，全查询带 `tenant_id`） | ✅ |
 | 取消 observer 持久化 | `agent.application.RunCancellationPersister`（`Consumer<RunCancelled>`，复用 P4.2 observer 缝隙，JDBC 在专用 executor 执行不阻塞 Netty） | ✅ |
-| 测试 | V5SchemaSmokeTest(7) + SqliteAgentRunRepositoryTest(13) + SqliteAgentCheckpointRepositoryTest(4) + RunCancellationPersisterTest(2) = 26；+ MysqlRepositoryIT 新增 2（MySQL） | ✅ |
+| 测试 | V5SchemaSmokeTest(8) + SqliteAgentRunRepositoryTest(13) + SqliteAgentCheckpointRepositoryTest(5) + RunCancellationPersisterTest(2) = 28；+ MysqlRepositoryIT 新增 2（MySQL） | ✅ |
 
 ## P4.3-2. 关键设计决策
 
@@ -343,13 +343,16 @@ opaque JSON payload，验证存储/读取/覆盖/顺序语义。**不涉及 P5+ 
    发出的 `RunCancelled`，经专用 daemon executor 调 `applyCancellation` 持久化 `cancelled`（JDBC 不阻塞
    event loop）；**不向已取消的 Flux 回推事件**。late cancel 到达已终态 run 为安全 no-op（return false，
    不抛）。AgentRunService 未改动（冻结）。
-7. **checkpoint 语义**：按 `(tenant,run,sequence)` **upsert**——同 sequence 覆盖（保留 `created_at`、
-   bump `updated_at`），新 sequence 追加；latest = max(sequence)。采用项目既有 lookup-then-upsert 约定，
+7. **checkpoint 语义**：按 `(tenant,run,sequence)` **原子 upsert**——同 sequence 覆盖
+   `checkpoint_type/state_json/codec_version/checksum`（保留 `created_at`、bump `updated_at`），新 sequence
+   追加；latest = max(sequence)。实现采用跨方言 update-then-insert，若并发 INSERT 冲突则重试 UPDATE，
    不用方言专属 `ON CONFLICT`/`ON DUPLICATE KEY`。
 8. **checkpoint 隔离边界**：`state_json` 为 opaque 字符串（DataStoria adapter 产出），repository 永不引用
    AgentScope `State`；adapter 必须排除 prompt / API key / provider credential（约束写在接口与 DDL 注释）。
-9. **无 `@Transactional`**：遵循项目既有约定（main 代码无 `@Transactional`），靠条件 UPDATE + DB 约束 +
-   lookup-then-upsert 保证正确性；时间戳统一走 `SqlTimestamps`（SQLite ISO-8601 / MySQL datetime(6)）。
+9. **checkpoint 完整性**：双方言 DDL 均约束 `state_json NOT NULL`、`checkpoint_type IN
+   ('run_state','pending_action')`；领域对象同步 fail-fast，防止产生不可恢复的空 checkpoint。
+10. **无 `@Transactional`**：遵循项目既有约定（main 代码无 `@Transactional`），靠条件 UPDATE + DB
+   约束 + 原子 upsert 保证正确性；时间戳统一走 `SqlTimestamps`（SQLite ISO-8601 / MySQL datetime(6)）。
 
 ## P4.3-3. 测试命令与结果
 
@@ -358,10 +361,10 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw -B -ntp spotless:apply clean verify
 ```
 
-- 全量：`Tests run: 219, Failures: 0, Errors: 0, Skipped: 0`。
-- P4.3 新增 SQLite/persister 测试 **26 个**（V5SchemaSmokeTest 7 + SqliteAgentRunRepositoryTest 13 +
-  SqliteAgentCheckpointRepositoryTest 4 + RunCancellationPersisterTest 2），专项：
-  `./mvnw test -Dtest='V5SchemaSmokeTest,SqliteAgentRunRepositoryTest,SqliteAgentCheckpointRepositoryTest,RunCancellationPersisterTest'` → 26/26。
+- 全量：`Tests run: 221, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.3 新增 SQLite/persister 测试 **28 个**（V5SchemaSmokeTest 8 + SqliteAgentRunRepositoryTest 13 +
+  SqliteAgentCheckpointRepositoryTest 5 + RunCancellationPersisterTest 2），专项：
+  `./mvnw test -Dtest='V5SchemaSmokeTest,SqliteAgentRunRepositoryTest,SqliteAgentCheckpointRepositoryTest,RunCancellationPersisterTest'` → 28/28。
 - P4.1/P4.2 全部测试仍通过（生命周期未改动）。
 - 无真实网络、无 API key、无真实 provider。
 
@@ -369,9 +372,9 @@ P4.3 测试覆盖矩阵：
 
 | 测试 | 不变量 |
 | --- | --- |
-| V5SchemaSmokeTest | status CHECK、idempotency 唯一、checkpoint sequence 唯一、`json_valid`、FK CASCADE（删 run→checkpoint、删 session→run+checkpoint） |
+| V5SchemaSmokeTest | status CHECK、idempotency 唯一、checkpoint sequence 唯一、`json_valid`、非空 state/type CHECK、FK CASCADE（删 run→checkpoint、删 session→run+checkpoint） |
 | SqliteAgentRunRepositoryTest | create/find 往返、**租户隔离**、idempotency-key 跨租户/用户、session 排序、**合法迁移**、**非法终态迁移被拒**、**终态幂等**、NotFound/cross-tenant、**并发终态不互相覆盖**、observer cancel、late-cancel 不复活终态 |
-| SqliteAgentCheckpointRepositoryTest | append、**overwrite 保留 created_at**、latest=max(seq)、**租户隔离** |
+| SqliteAgentCheckpointRepositoryTest | append、**并发同 sequence 原子收敛**、overwrite 保留 created_at、latest=max(seq)、**租户隔离** |
 | RunCancellationPersisterTest | observer→cancelled、幂等、未知 run 安全 |
 
 ## P4.3-4. 安全检查
@@ -452,5 +455,4 @@ docs/delivery/p4-implementation-report.md                                       
 - 真实 AgentScope `State` ↔ `state_json` 的 DataStoria adapter（序列化、checksum、codec_version）。
 - run 事件持久化（`ds_agent_event`，doc §8 可选表）用于断线续传 / `Last-Event-ID` 重放。
 
-**停在 P4.3 review，不自动开始 P4.4。**
-
+**P4.3 review 已通过；不自动开始 P4.4。**

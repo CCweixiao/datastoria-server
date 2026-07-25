@@ -3,6 +3,9 @@ package io.datastoria.server.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,6 +91,37 @@ class SqliteAgentCheckpointRepositoryTest {
     assertThat(repo.findAllByRun(TENANT, "run_other")).isEmpty();
     // Correct tenant sees it.
     assertThat(repo.findLatest("tenant-other", "run_other")).isPresent();
+  }
+
+  @Test
+  void concurrentSaveAtSameSequenceConvergesWithoutUniqueKeyFailure() throws Exception {
+    var start = new CountDownLatch(1);
+    var pool = Executors.newFixedThreadPool(2);
+    try {
+      var first =
+          pool.submit(
+              () -> {
+                start.await();
+                repo.save(checkpoint("cp_race_1", TENANT, "run_main", 1, "{\"writer\":1}"));
+                return null;
+              });
+      var second =
+          pool.submit(
+              () -> {
+                start.await();
+                repo.save(checkpoint("cp_race_2", TENANT, "run_main", 1, "{\"writer\":2}"));
+                return null;
+              });
+      start.countDown();
+      first.get(10, TimeUnit.SECONDS);
+      second.get(10, TimeUnit.SECONDS);
+    } finally {
+      pool.shutdownNow();
+    }
+
+    var checkpoints = repo.findAllByRun(TENANT, "run_main");
+    assertThat(checkpoints).hasSize(1);
+    assertThat(checkpoints.get(0).stateJson()).isIn("{\"writer\":1}", "{\"writer\":2}");
   }
 
   // ---- helpers ----

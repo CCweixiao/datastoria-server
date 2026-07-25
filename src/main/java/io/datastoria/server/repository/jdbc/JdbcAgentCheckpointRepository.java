@@ -13,10 +13,11 @@ import io.datastoria.server.agent.domain.CheckpointType;
 import io.datastoria.server.repository.AgentCheckpointRepository;
 
 /**
- * JDBC implementation of {@link AgentCheckpointRepository} for {@code ds_agent_checkpoint}. Uses
- * the project's lookup-then-upsert convention (no dialect-specific {@code ON CONFLICT}/{@code ON
+ * JDBC implementation of {@link AgentCheckpointRepository} for {@code ds_agent_checkpoint}. Uses a
+ * dialect-neutral update-then-insert upsert (no dialect-specific {@code ON CONFLICT}/{@code ON
  * DUPLICATE KEY}): {@link #save} overwrites the row at {@code (tenantId, runId, sequence)} if it
- * exists (preserving {@code created_at}), otherwise inserts. All reads filter by {@code tenant_id}.
+ * exists (preserving {@code created_at}), otherwise inserts. An insert race retries the update. All
+ * reads filter by {@code tenant_id}.
  *
  * <p>{@code stateJson} is opaque to this layer — never an AgentScope {@code State} type — and the
  * adapter that produces it must exclude prompt, API key, and provider credential.
@@ -46,32 +47,11 @@ public class JdbcAgentCheckpointRepository implements AgentCheckpointRepository 
 
   @Override
   public void save(AgentCheckpoint c) {
-    boolean exists =
-        jdbc.sql(
-                    "SELECT COUNT(*) FROM ds_agent_checkpoint"
-                        + " WHERE tenant_id = :tenant AND run_id = :run AND sequence = :seq")
-                .param("tenant", c.tenantId())
-                .param("run", c.runId())
-                .param("seq", c.sequence())
-                .query(Long.class)
-                .single()
-            > 0L;
-    if (exists) {
-      jdbc.sql(
-              "UPDATE ds_agent_checkpoint"
-                  + " SET state_json = :state, codec_version = :codec, checksum = :checksum,"
-                  + " updated_at = :now"
-                  + " WHERE tenant_id = :tenant AND run_id = :run AND sequence = :seq")
-          .param("state", c.stateJson())
-          .param("codec", c.codecVersion())
-          .param("checksum", c.checksum())
-          .param("now", SqlTimestamps.toParam(Instant.now()))
-          .param("tenant", c.tenantId())
-          .param("run", c.runId())
-          .param("seq", c.sequence())
-          .update();
-    } else {
-      Instant now = Instant.now();
+    Instant now = Instant.now();
+    if (updateExisting(c, now) == 1) {
+      return;
+    }
+    try {
       jdbc.sql(
               "INSERT INTO ds_agent_checkpoint"
                   + " (id, tenant_id, run_id, sequence, checkpoint_type, state_json, codec_version,"
@@ -87,7 +67,33 @@ public class JdbcAgentCheckpointRepository implements AgentCheckpointRepository 
           .param("checksum", c.checksum())
           .param("now", SqlTimestamps.toParam(now))
           .update();
+    } catch (RuntimeException insertFailure) {
+      // Another writer may have inserted the same logical checkpoint after our UPDATE found no
+      // row. Retrying UPDATE makes the operation an atomic, dialect-neutral upsert. If no row now
+      // exists, the INSERT failed for a different reason (FK / JSON / other constraint), so retain
+      // the original failure instead of hiding it.
+      if (updateExisting(c, Instant.now()) == 1) {
+        return;
+      }
+      throw insertFailure;
     }
+  }
+
+  private int updateExisting(AgentCheckpoint c, Instant updatedAt) {
+    return jdbc.sql(
+            "UPDATE ds_agent_checkpoint"
+                + " SET checkpoint_type = :type, state_json = :state, codec_version = :codec,"
+                + " checksum = :checksum, updated_at = :now"
+                + " WHERE tenant_id = :tenant AND run_id = :run AND sequence = :seq")
+        .param("type", c.checkpointType().dbValue())
+        .param("state", c.stateJson())
+        .param("codec", c.codecVersion())
+        .param("checksum", c.checksum())
+        .param("now", SqlTimestamps.toParam(updatedAt))
+        .param("tenant", c.tenantId())
+        .param("run", c.runId())
+        .param("seq", c.sequence())
+        .update();
   }
 
   @Override

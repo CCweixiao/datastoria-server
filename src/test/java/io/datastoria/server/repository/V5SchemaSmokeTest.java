@@ -121,6 +121,20 @@ class V5SchemaSmokeTest {
   }
 
   @Test
+  void checkpointRejectsNullStateAndUnknownType() {
+    insertSession("sess_type", TENANT, USER);
+    insertRun("run_type", TENANT, USER, "sess_type", "running", "idem-type");
+    assertThatThrownBy(
+            () -> insertCheckpointWithType("cp_null", TENANT, "run_type", 1, "run_state", null))
+        .hasMessageContaining("NOT NULL constraint failed");
+    assertThatThrownBy(
+            () ->
+                insertCheckpointWithType(
+                    "cp_type", TENANT, "run_type", 1, "unexpected", "{\"v\":1}"))
+        .hasMessageContaining("CHECK constraint failed");
+  }
+
+  @Test
   void deletingRunCascadesToCheckpoints() {
     insertSession("sess_f", TENANT, USER);
     insertRun("run_f", TENANT, USER, "sess_f", "running", "idem-f");
@@ -198,15 +212,21 @@ class V5SchemaSmokeTest {
 
   private void insertCheckpoint(
       String id, String tenant, String run, long sequence, String stateJson) {
+    insertCheckpointWithType(id, tenant, run, sequence, "run_state", stateJson);
+  }
+
+  private void insertCheckpointWithType(
+      String id, String tenant, String run, long sequence, String type, String stateJson) {
     jdbc.sql(
             "INSERT INTO ds_agent_checkpoint "
                 + "(id, tenant_id, run_id, sequence, checkpoint_type, state_json, codec_version, "
                 + " checksum, created_at, updated_at) "
-                + "VALUES (:id,:t,:r,:seq,'run_state',:sj,'v1',NULL,:now,:now)")
+                + "VALUES (:id,:t,:r,:seq,:type,:sj,'v1',NULL,:now,:now)")
         .param("id", id)
         .param("t", tenant)
         .param("r", run)
         .param("seq", sequence)
+        .param("type", type)
         .param("sj", stateJson)
         .param("now", NOW.toString())
         .update();

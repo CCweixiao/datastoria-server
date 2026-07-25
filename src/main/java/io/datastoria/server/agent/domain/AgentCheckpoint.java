@@ -1,6 +1,7 @@
 package io.datastoria.server.agent.domain;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Opaque, DataStoria-adapter-serialized run state (docs/design/database-data-model.md §8). The
@@ -28,5 +29,11 @@ public record AgentCheckpoint(
     if (sequence <= 0) {
       throw new IllegalArgumentException("checkpoint sequence must be > 0");
     }
+    Objects.requireNonNull(id, "checkpoint id");
+    Objects.requireNonNull(tenantId, "checkpoint tenantId");
+    Objects.requireNonNull(runId, "checkpoint runId");
+    Objects.requireNonNull(checkpointType, "checkpoint checkpointType");
+    Objects.requireNonNull(stateJson, "checkpoint stateJson");
+    Objects.requireNonNull(codecVersion, "checkpoint codecVersion");
   }
 }
