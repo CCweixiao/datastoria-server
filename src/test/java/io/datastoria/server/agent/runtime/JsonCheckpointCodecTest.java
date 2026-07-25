@@ -3,8 +3,6 @@ package io.datastoria.server.agent.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Map;
-
 import org.junit.jupiter.api.Test;
 
 import io.datastoria.server.agent.domain.CheckpointContent;
@@ -15,15 +13,14 @@ import io.datastoria.server.agent.domain.UnsupportedCodecVersionException;
 /**
  * Unit tests for {@link JsonCheckpointCodec}: normal round-trip, deterministic canonical output,
  * illegal-version rejection, checksum tamper detection (both stateJson and checksum), and sensitive
- * field redaction. No Spring, no DB, no AgentScope.
+ * closed-schema secret exclusion. No Spring, no DB, no AgentScope.
  */
 class JsonCheckpointCodecTest {
 
   private final JsonCheckpointCodec codec = new JsonCheckpointCodec();
 
   private static CheckpointState sample() {
-    return new CheckpointState(
-        "sess-1", "user-1", "reply-9", 3, "harmless summary", false, Map.of("phase", "reasoning"));
+    return new CheckpointState("sess-1", "user-1", "reply-9", 3, false);
   }
 
   @Test
@@ -48,12 +45,12 @@ class JsonCheckpointCodecTest {
   @Test
   void stateJsonIsCanonicalSortedObject() {
     CheckpointContent content = codec.encode(sample());
-    // Record components in declaration order; metadata map keys sorted.
+    // Record components are serialized in declaration order.
     assertThat(content.stateJson())
         .startsWith("{\"sessionId\":\"sess-1\",\"userId\":\"user-1\",\"replyId\":\"reply-9\"")
         .contains("\"currentIteration\":3")
-        .contains("\"summary\":\"harmless summary\"")
-        .contains("\"metadata\":{\"phase\":\"reasoning\"}");
+        .contains("\"shutdownInterrupted\":false")
+        .doesNotContain("summary", "metadata", "context");
   }
 
   @Test
@@ -69,7 +66,7 @@ class JsonCheckpointCodecTest {
   @Test
   void decodeDetectsTamperedStateJson() {
     CheckpointContent valid = codec.encode(sample());
-    String tampered = valid.stateJson().replace("harmless summary", "EVIL summary");
+    String tampered = valid.stateJson().replace("\"currentIteration\":3", "\"currentIteration\":4");
     CheckpointContent tamperedContent =
         new CheckpointContent(valid.codecVersion(), tampered, valid.checksum());
 
@@ -99,27 +96,19 @@ class JsonCheckpointCodecTest {
   }
 
   @Test
-  void sensitiveMetadataKeysAreRedacted() {
-    CheckpointState state =
-        new CheckpointState(
-            "s", "u", "r", 0, null, false, Map.of("api_key", "sk-SECRET-123", "safeFlag", "ok"));
-
-    CheckpointContent content = codec.encode(state);
-
-    assertThat(content.stateJson()).contains("[REDACTED]");
-    assertThat(content.stateJson()).doesNotContain("sk-SECRET-123");
-    assertThat(content.stateJson()).contains("\"safeFlag\":\"ok\"");
-    // Redacted value survives round-trip.
-    CheckpointState decoded = codec.decode(content);
-    assertThat(decoded.metadata().get("api_key")).isEqualTo("[REDACTED]");
-    assertThat(decoded.metadata().get("safeFlag")).isEqualTo("ok");
+  void schemaHasNoFreeFormSecretCarryingFields() {
+    CheckpointContent content = codec.encode(sample());
+    assertThat(content.stateJson()).doesNotContain("summary", "metadata", "context");
   }
 
   @Test
   void checkpointContentRejectsBlankFields() {
-    assertThatThrownBy(() -> new CheckpointContent("ds-checkpoint-v1", "", "abc"))
+    String validChecksum = "a".repeat(64);
+    assertThatThrownBy(() -> new CheckpointContent("ds-checkpoint-v1", "", validChecksum))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new CheckpointContent("  ", "{}", "abc"))
+    assertThatThrownBy(() -> new CheckpointContent("  ", "{}", validChecksum))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new CheckpointContent("ds-checkpoint-v1", "{}", "abc"))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

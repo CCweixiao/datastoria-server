@@ -48,11 +48,12 @@ CREATE TABLE ds_agent_checkpoint (
     checkpoint_type varchar(32)   NOT NULL,
     state_json      json          NOT NULL,
     codec_version   varchar(32)   NOT NULL,
-    checksum        varchar(128)  NULL,
+    checksum        varchar(64)   NOT NULL,
     created_at      datetime(6)   NOT NULL,
     updated_at      datetime(6)   NOT NULL,
     CONSTRAINT chk_checkpoint_sequence CHECK (sequence > 0),
     CONSTRAINT chk_checkpoint_type CHECK (checkpoint_type IN ('run_state','pending_action')),
+    CONSTRAINT chk_checkpoint_checksum CHECK (checksum REGEXP '^[0-9a-f]{64}$'),
     CONSTRAINT fk_checkpoint_run FOREIGN KEY (tenant_id, run_id)
         REFERENCES ds_agent_run(tenant_id, id) ON DELETE CASCADE,
     UNIQUE KEY uk_checkpoint_run_sequence (tenant_id, run_id, sequence)

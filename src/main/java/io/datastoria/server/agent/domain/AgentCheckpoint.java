@@ -35,5 +35,6 @@ public record AgentCheckpoint(
     Objects.requireNonNull(checkpointType, "checkpoint checkpointType");
     Objects.requireNonNull(stateJson, "checkpoint stateJson");
     Objects.requireNonNull(codecVersion, "checkpoint codecVersion");
+    Objects.requireNonNull(checksum, "checkpoint checksum");
   }
 }

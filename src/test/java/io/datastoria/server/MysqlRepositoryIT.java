@@ -227,7 +227,7 @@ class MysqlRepositoryIT {
             CheckpointType.RUN_STATE,
             "{\"v\":1}",
             "v1",
-            "c1",
+            "1".repeat(64),
             now,
             now));
     // Overwrite at sequence 1 (new id, new content).
@@ -240,7 +240,7 @@ class MysqlRepositoryIT {
             CheckpointType.RUN_STATE,
             "{\"v\":2}",
             "v1",
-            "c2",
+            "2".repeat(64),
             now,
             now));
     // Append at sequence 2.
@@ -253,7 +253,7 @@ class MysqlRepositoryIT {
             CheckpointType.RUN_STATE,
             "{\"v\":3}",
             "v1",
-            "c3",
+            "3".repeat(64),
             now,
             now));
 

@@ -1,7 +1,5 @@
 package io.datastoria.server.agent.runtime;
 
-import java.util.Map;
-
 import io.agentscope.core.state.AgentState;
 import io.agentscope.core.state.State;
 import io.datastoria.server.agent.domain.CheckpointCodec;
@@ -10,11 +8,10 @@ import io.datastoria.server.agent.domain.CheckpointState;
 
 /**
  * {@link CheckpointStateAdapter} for AgentScope {@link AgentState}. Extracts only the safe control
- * scalars (session/user/reply ids, iteration, summary, shutdown flag) into a {@link
- * CheckpointState} — the conversation {@code context} (the message list that carries the prompt and
- * any tool results) is deliberately <b>not</b> serialized. Conversation replay comes from {@code
- * ds_chat_message}; the checkpoint only resumes agent control state (docs/design/harness-agent.md
- * §10).
+ * scalars (session/user/reply ids, iteration and shutdown flag) into a {@link CheckpointState}.
+ * Free-form {@code context}, {@code summary} and metadata are deliberately <b>not</b> serialized:
+ * each can carry prompts, tool results or credentials. Conversation replay comes from {@code
+ * ds_chat_message}; the checkpoint only resumes agent control state.
  *
  * <p>On {@link #restore}, the {@code context} is left empty: a resuming run (P4.8) repopulates
  * messages from the product message table before the next model call. Permission/tool/task context
@@ -41,9 +38,7 @@ public final class AgentScopeCheckpointAdapter implements CheckpointStateAdapter
             agentState.getUserId(),
             agentState.getReplyId(),
             agentState.getCurIter(),
-            agentState.getSummary(),
-            agentState.isShutdownInterrupted(),
-            Map.of());
+            agentState.isShutdownInterrupted());
     return codec.encode(safe);
   }
 
@@ -55,7 +50,6 @@ public final class AgentScopeCheckpointAdapter implements CheckpointStateAdapter
         .userId(state.userId())
         .replyId(state.replyId())
         .curIter(state.currentIteration())
-        .summary(state.summary())
         .shutdownInterrupted(state.shutdownInterrupted())
         .build();
   }

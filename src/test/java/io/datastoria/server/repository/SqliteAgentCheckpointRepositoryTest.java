@@ -55,19 +55,19 @@ class SqliteAgentCheckpointRepositoryTest {
 
   @Test
   void saveOverwritesAtSameSequencePreservingCreatedAt() {
-    repo.save(checkpoint("cp_over", TENANT, "run_main", 1, "{\"v\":1}", "checksum-1"));
+    repo.save(checkpoint("cp_over", TENANT, "run_main", 1, "{\"v\":1}", "1".repeat(64)));
     AgentCheckpoint first = repo.findBySequence(TENANT, "run_main", 1).orElseThrow();
     assertThat(first.stateJson()).isEqualTo("{\"v\":1}");
-    assertThat(first.checksum()).isEqualTo("checksum-1");
+    assertThat(first.checksum()).isEqualTo("1".repeat(64));
     Instant createdFirst = first.createdAt();
 
     // Overwrite at the same (tenant, run, sequence) with new content + checksum, new id.
-    repo.save(checkpoint("cp_over2", TENANT, "run_main", 1, "{\"v\":99}", "checksum-99"));
+    repo.save(checkpoint("cp_over2", TENANT, "run_main", 1, "{\"v\":99}", "9".repeat(64)));
     var all = repo.findAllByRun(TENANT, "run_main");
     assertThat(all).hasSize(1); // still a single row at sequence 1
     AgentCheckpoint overwritten = all.get(0);
     assertThat(overwritten.stateJson()).isEqualTo("{\"v\":99}");
-    assertThat(overwritten.checksum()).isEqualTo("checksum-99");
+    assertThat(overwritten.checksum()).isEqualTo("9".repeat(64));
     assertThat(overwritten.createdAt()).isEqualTo(createdFirst); // created_at preserved
     assertThat(overwritten.updatedAt()).isAfterOrEqualTo(overwritten.createdAt());
   }
@@ -155,7 +155,7 @@ class SqliteAgentCheckpointRepositoryTest {
 
   private AgentCheckpoint checkpoint(
       String id, String tenant, String run, long sequence, String stateJson) {
-    return checkpoint(id, tenant, run, sequence, stateJson, "checksum-" + sequence);
+    return checkpoint(id, tenant, run, sequence, stateJson, "a".repeat(64));
   }
 
   private AgentCheckpoint checkpoint(

@@ -3,14 +3,9 @@ package io.datastoria.server.agent.runtime;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Iterator;
-import java.util.Locale;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 
 import io.datastoria.server.agent.domain.CheckpointCodec;
 import io.datastoria.server.agent.domain.CheckpointContent;
@@ -27,9 +22,9 @@ import io.datastoria.server.agent.domain.UnsupportedCodecVersionException;
  * <p>Checksum is SHA-256 over {@code "<codecVersion>\n<canonicalStateJson>"} (hex), binding the
  * payload to its codec version. Decode rejects unknown versions and any checksum mismatch.
  *
- * <p>Sensitive keys (api key, secret, credential, password, token, authorization) are recursively
- * redacted before serialization as defense-in-depth; {@link CheckpointState} itself carries no
- * secrets. The serialized output MUST NOT contain prompt, API key, or provider credential text.
+ * <p>{@link CheckpointState} is a closed schema containing only identifiers, counters and flags.
+ * Free-form summary, context and metadata are excluded structurally, rather than relying on
+ * best-effort secret-pattern redaction.
  *
  * <p>AgentScope-free — uses only Jackson and the JDK. Lives in the runtime layer alongside the
  * adapter that bridges to AgentScope {@code State}.
@@ -48,8 +43,7 @@ public final class JsonCheckpointCodec implements CheckpointCodec {
 
   @Override
   public CheckpointContent encode(CheckpointState state) {
-    CheckpointState redacted = redact(state);
-    String stateJson = canonicalize(redacted);
+    String stateJson = canonicalize(state);
     String checksum = checksum(CURRENT_VERSION, stateJson);
     return new CheckpointContent(CURRENT_VERSION, stateJson, checksum);
   }
@@ -62,7 +56,9 @@ public final class JsonCheckpointCodec implements CheckpointCodec {
     CheckpointState parsed = parse(content.stateJson());
     String canonical = canonicalize(parsed);
     String expected = checksum(content.codecVersion(), canonical);
-    if (!expected.equals(content.checksum())) {
+    if (!MessageDigest.isEqual(
+        expected.getBytes(StandardCharsets.US_ASCII),
+        content.checksum().getBytes(StandardCharsets.US_ASCII))) {
       throw new ChecksumMismatchException();
     }
     return parsed;
@@ -82,64 +78,6 @@ public final class JsonCheckpointCodec implements CheckpointCodec {
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new IllegalStateException("Checkpoint stateJson is not valid JSON", e);
     }
-  }
-
-  /** Re-derives the canonical form from an existing JSON string (absorbs DB re-formatting). */
-  private String canonicalize(String stateJson) {
-    try {
-      return mapper.writeValueAsString(mapper.readValue(stateJson, CheckpointState.class));
-    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-      throw new IllegalStateException("Checkpoint stateJson is not valid JSON", e);
-    }
-  }
-
-  private CheckpointState redact(CheckpointState state) {
-    if (state.metadata().isEmpty()) {
-      return state;
-    }
-    try {
-      JsonNode tree = mapper.valueToTree(state);
-      redactSensitive(tree);
-      return mapper.treeToValue(tree, CheckpointState.class);
-    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-      throw new IllegalStateException("Failed to redact checkpoint state", e);
-    }
-  }
-
-  /**
-   * Recursively replaces the value of any sensitive-looking key with {@code "[REDACTED]"}. Operates
-   * on keys only, so legitimate values are untouched unless the field name itself signals a secret.
-   */
-  private static void redactSensitive(JsonNode node) {
-    if (node.isObject()) {
-      ObjectNode obj = (ObjectNode) node;
-      Iterator<String> fields = obj.fieldNames();
-      while (fields.hasNext()) {
-        String field = fields.next();
-        if (isSensitiveKey(field)) {
-          obj.set(field, TextNode.valueOf("[REDACTED]"));
-        } else {
-          redactSensitive(obj.get(field));
-        }
-      }
-    } else if (node.isArray()) {
-      for (JsonNode child : node) {
-        redactSensitive(child);
-      }
-    }
-  }
-
-  private static boolean isSensitiveKey(String key) {
-    if (key == null || key.isBlank()) {
-      return false;
-    }
-    String normalized = key.toLowerCase(Locale.ROOT).replace("_", "").replace("-", "");
-    return normalized.contains("apikey")
-        || normalized.contains("secret")
-        || normalized.contains("credential")
-        || normalized.contains("password")
-        || normalized.contains("token")
-        || normalized.contains("authorization");
   }
 
   private static String checksum(String codecVersion, String canonicalStateJson) {

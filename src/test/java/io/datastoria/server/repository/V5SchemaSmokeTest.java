@@ -109,11 +109,12 @@ class V5SchemaSmokeTest {
                         "INSERT INTO ds_agent_checkpoint "
                             + "(id, tenant_id, run_id, sequence, checkpoint_type, state_json, "
                             + " codec_version, checksum, created_at, updated_at) "
-                            + "VALUES (:id,:t,:r,1,'run_state',:sj,'v1',NULL,:now,:now)")
+                            + "VALUES (:id,:t,:r,1,'run_state',:sj,'v1',:checksum,:now,:now)")
                     .param("id", "cp_e")
                     .param("t", TENANT)
                     .param("r", "run_e")
                     .param("sj", "not-json")
+                    .param("checksum", "a".repeat(64))
                     .param("now", NOW.toString())
                     .update())
         .hasMessageContaining("CHECK constraint failed")
@@ -131,6 +132,24 @@ class V5SchemaSmokeTest {
             () ->
                 insertCheckpointWithType(
                     "cp_type", TENANT, "run_type", 1, "unexpected", "{\"v\":1}"))
+        .hasMessageContaining("CHECK constraint failed");
+  }
+
+  @Test
+  void checkpointRequiresSha256Checksum() {
+    insertSession("sess_checksum", TENANT, USER);
+    insertRun("run_checksum", TENANT, USER, "sess_checksum", "running", "idem-checksum");
+    assertThatThrownBy(
+            () ->
+                jdbc.sql(
+                        "INSERT INTO ds_agent_checkpoint "
+                            + "(id, tenant_id, run_id, sequence, checkpoint_type, state_json, "
+                            + " codec_version, checksum, created_at, updated_at) "
+                            + "VALUES ('cp_checksum',:t,:r,1,'run_state','{}','v1','bad',:now,:now)")
+                    .param("t", TENANT)
+                    .param("r", "run_checksum")
+                    .param("now", NOW.toString())
+                    .update())
         .hasMessageContaining("CHECK constraint failed");
   }
 
@@ -221,13 +240,14 @@ class V5SchemaSmokeTest {
             "INSERT INTO ds_agent_checkpoint "
                 + "(id, tenant_id, run_id, sequence, checkpoint_type, state_json, codec_version, "
                 + " checksum, created_at, updated_at) "
-                + "VALUES (:id,:t,:r,:seq,:type,:sj,'v1',NULL,:now,:now)")
+                + "VALUES (:id,:t,:r,:seq,:type,:sj,'v1',:checksum,:now,:now)")
         .param("id", id)
         .param("t", tenant)
         .param("r", run)
         .param("seq", sequence)
         .param("type", type)
         .param("sj", stateJson)
+        .param("checksum", "a".repeat(64))
         .param("now", NOW.toString())
         .update();
   }

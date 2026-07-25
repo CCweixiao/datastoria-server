@@ -53,15 +53,10 @@ public final class CheckpointStore {
     repository.save(row);
   }
 
-  /**
-   * Loads the latest checkpoint content for a run under {@code tenantId}, or empty. Rows lacking a
-   * checksum (the column is nullable for non-adapter producers) are skipped rather than wrapped
-   * into an invalid {@link CheckpointContent}.
-   */
+  /** Loads the latest checkpoint content for a run under {@code tenantId}, or empty. */
   public Optional<CheckpointContent> loadLatest(String tenantId, String runId) {
     return repository
         .findLatest(tenantId, runId)
-        .filter(row -> row.checksum() != null && !row.checksum().isBlank())
         .map(row -> new CheckpointContent(row.codecVersion(), row.stateJson(), row.checksum()));
   }
 }

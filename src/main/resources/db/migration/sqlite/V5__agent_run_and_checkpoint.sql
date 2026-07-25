@@ -61,7 +61,7 @@ CREATE TABLE ds_agent_checkpoint (
     checkpoint_type TEXT NOT NULL CHECK (checkpoint_type IN ('run_state','pending_action')),
     state_json      TEXT NOT NULL CHECK (json_valid(state_json)),
     codec_version   TEXT NOT NULL,
-    checksum        TEXT,
+    checksum        TEXT NOT NULL CHECK (length(checksum) = 64 AND checksum NOT GLOB '*[^0-9a-f]*'),
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
     FOREIGN KEY (tenant_id, run_id) REFERENCES ds_agent_run(tenant_id, id)

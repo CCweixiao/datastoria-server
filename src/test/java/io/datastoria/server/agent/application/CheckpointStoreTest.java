@@ -69,14 +69,16 @@ class CheckpointStoreTest {
 
   @Test
   void overwriteAtSameSequenceReplacesState() {
-    CheckpointContent first = adapter.checkpoint(agentState("sess_main", "summary-1", 1));
-    CheckpointContent second = adapter.checkpoint(agentState("sess_main", "summary-2", 2));
+    CheckpointContent first = adapter.checkpoint(agentState("sess_main", "secret-summary-1", 1));
+    CheckpointContent second = adapter.checkpoint(agentState("sess_main", "secret-summary-2", 2));
     store.save(TENANT, "run_main", 1, CheckpointType.RUN_STATE, first);
     store.save(TENANT, "run_main", 1, CheckpointType.RUN_STATE, second); // overwrite seq 1
 
     CheckpointContent loaded = store.loadLatest(TENANT, "run_main").orElseThrow();
     assertThat(loaded.stateJson()).isEqualTo(second.stateJson());
-    assertThat(loaded.stateJson()).contains("summary-2").doesNotContain("summary-1");
+    assertThat(loaded.stateJson())
+        .contains("\"currentIteration\":2")
+        .doesNotContain("secret-summary-1", "secret-summary-2", "summary");
   }
 
   @Test
@@ -100,7 +102,7 @@ class CheckpointStoreTest {
 
     assertThat(restored.getSessionId()).isEqualTo("sess-1");
     assertThat(restored.getCurIter()).isEqualTo(3);
-    assertThat(restored.getSummary()).isEqualTo("harmless summary");
+    assertThat(restored.getSummary()).isEmpty();
     assertThat(restored.getContext()).isEmpty();
   }
 
@@ -114,7 +116,7 @@ class CheckpointStoreTest {
         .userId(USER)
         .replyId("reply-1")
         .curIter(3)
-        .summary("harmless summary")
+        .summary("summary contains prompt sk-SUMMARY-SECRET")
         .shutdownInterrupted(false)
         .context(List.of(secretMessage))
         .build();

@@ -16,7 +16,7 @@ import io.datastoria.server.agent.domain.CheckpointContent;
 /**
  * Unit tests for {@link AgentScopeCheckpointAdapter}: the conversation {@code context} (which
  * carries the prompt and any secrets inside messages) is excluded from the serialized checkpoint;
- * only safe control scalars are kept; restore round-trips those scalars. No DB.
+ * summary is excluded as another free-form secret carrier; only safe control scalars are kept.
  */
 class AgentScopeCheckpointAdapterTest {
 
@@ -34,7 +34,7 @@ class AgentScopeCheckpointAdapterTest {
         .userId("user-1")
         .replyId("reply-9")
         .curIter(3)
-        .summary("harmless summary")
+        .summary("summary repeats prompt and key sk-SUMMARY-SECRET")
         .shutdownInterrupted(false)
         .context(List.of(secretMessage))
         .build();
@@ -48,8 +48,11 @@ class AgentScopeCheckpointAdapterTest {
     assertThat(json).doesNotContain("my secret prompt");
     assertThat(json).doesNotContain("sk-SECRET-123");
     assertThat(json).doesNotContain("context"); // the message list is never serialized
-    // Safe scalar is retained.
-    assertThat(json).contains("harmless summary").contains("\"currentIteration\":3");
+    assertThat(json)
+        .doesNotContain("summary repeats prompt")
+        .doesNotContain("sk-SUMMARY-SECRET")
+        .doesNotContain("summary")
+        .contains("\"currentIteration\":3");
   }
 
   @Test
@@ -63,7 +66,7 @@ class AgentScopeCheckpointAdapterTest {
     assertThat(restoredState.getUserId()).isEqualTo("user-1");
     assertThat(restoredState.getReplyId()).isEqualTo("reply-9");
     assertThat(restoredState.getCurIter()).isEqualTo(3);
-    assertThat(restoredState.getSummary()).isEqualTo("harmless summary");
+    assertThat(restoredState.getSummary()).isEmpty();
     // Context is not restored from the checkpoint (replayed from ds_chat_message in P4.8).
     assertThat(restoredState.getContext()).isEmpty();
   }
