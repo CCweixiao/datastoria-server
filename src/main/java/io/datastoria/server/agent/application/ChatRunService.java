@@ -683,7 +683,7 @@ public class ChatRunService {
       return text.toString();
     } catch (Exception ignored) {
       // Persisted malformed parts must not leak or prevent a new run; repository/API validation
-      // owns data integrity. Unknown/non-text UI parts are intentionally not sent in text-only P4.
+      // owns data integrity. Unknown display-only UI parts are intentionally not sent to models.
       return "";
     }
   }
@@ -762,7 +762,8 @@ public class ChatRunService {
         || status == AgentRunStatus.WAITING_INPUT) {
       throw new ResourceInUseException("AgentRun", runId); // 409: an agent is already active
     }
-    // Terminal runs cannot be replayed yet (event replay is P4.8).
+    // Terminal frame replay is served when Last-Event-ID is supplied; a fresh duplicate remains a
+    // conflict.
     throw new ResourceInUseException("AgentRun", runId);
   }
 

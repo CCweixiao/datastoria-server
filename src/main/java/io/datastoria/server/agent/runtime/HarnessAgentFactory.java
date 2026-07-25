@@ -433,7 +433,11 @@ public final class HarnessAgentFactory {
     } else {
       source = new URLSource(url, attachment.mediaType());
     }
-    return DataBlock.builder().source(source).name(attachment.filename()).build();
+    String name =
+        attachment.filename() == null || attachment.filename().isBlank()
+            ? "image"
+            : attachment.filename();
+    return DataBlock.builder().source(source).name(name).build();
   }
 
   private String writeToolInput(Map<String, Object> input) {

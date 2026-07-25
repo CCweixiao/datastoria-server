@@ -16,8 +16,9 @@ import com.fasterxml.jackson.databind.JsonNode;
  * {@code generateTitle}/{@code ephemeral} are accepted for wire compatibility.
  *
  * <p><b>Forbidden</b> (rejected before this record is built): {@code model.apiKey}, {@code
- * connection.password}, any top-level {@code apiKey}. {@code continuation:true} is rejected (no
- * tool/HITL flow yet). ClickHouse {@code connection} tools are disabled (P5).
+ * connection.password}, any top-level {@code apiKey}. Legacy client-side {@code continuation:true}
+ * is rejected because tool approvals/questions resume through the durable action/resume API.
+ * ClickHouse tools are resolved and executed only by the Java AgentScope runtime.
  */
 public record AgentChatRequest(
     String sessionId,
