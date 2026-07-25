@@ -2,7 +2,7 @@
 
 > 分支：`codex/p5-skill-readonly`
 > 基线：`cd9c297`
-> 状态：**P5.1 已完成；P5 整体仍在进行，不得开始 P6 阶段验收**
+> 状态：**P5.1、P5.2 已完成；P5 整体仍在进行，不得开始 P6 阶段验收**
 
 ## P5.1：受版本控制的 Skill 基线与 SQLite seed
 
@@ -79,16 +79,58 @@ Content-Type 的缺陷；controller 现默认补 `default_format=JSON`。
 基数决定；UUID、Date、UInt、Enum8 使用原生窄类型；重复字符串使用 LowCardinality；无非必要
 Nullable；月分区用于测试 query log/事件生命周期。
 
+## P5.2：不可变 Skill revision、发布指针与 Run pin
+
+V12 为 SQLite/MySQL 同步增加 revision-scoped 存储：
+
+- `ds_skill_revision` 保存不可变的 `SKILL.md`、元数据、required tools、checksum 和 review
+  状态；
+- `ds_skill_resource` 以 `(tenant_id, skill_id, skill_revision, resource_path)` 固定资源内容；
+- `ds_agent_skill.published_revision/draft_revision` 只充当可变指针；
+- `ds_agent_run_skill` 保存 run 启动时实际选中的 Skill revision 和 content checksum。
+
+`JdbcAgentSkillRepository` 的读取均通过 published/draft 指针连接不可变 revision。内容更新默认
+创建新 draft；对外读取继续返回旧 published 内容与资源，显式 publish 后才原子切换指针。V8
+旧数据在 V12 migration 中回填为 revision 及 revision-scoped resource，原兼容资源表暂时保留
+供旧调用迁移。
+
+`ChatRunService` 在创建 run 前完成可用 Skill 解析，随后由
+`AgentRunCreationService` 在同一事务中写入 `ds_agent_run` 和全部 pin。任何 pin 写入失败都会
+回滚 run，避免 RUNNING 半成品；运行期只使用这次解析出的 AgentScope Skill 集合，不会被后续
+发布切换影响。
+
+专项自动化覆盖：
+
+- published v0 / draft v1 的内容和资源隔离，publish 后切换；
+- 自定义可用 Skill 的 revision/checksum 随真实 mock-model chat run 持久化；
+- 无效 pin 外键导致 run 与 pin 整体回滚；
+- V1–V12 SQLite migration、原 Agent run 状态机和 P4 controller 回归。
+
+```bash
+./mvnw -B -ntp spotless:apply test \
+  -Dtest='SqliteAgentRunRepositoryTest,AgentSkillApiTest,\
+AiAgentControllerTest#runPinsSelectedSkillRevisionAndChecksum,V4SchemaSmokeTest,V5SchemaSmokeTest'
+```
+
+最终门禁：
+
+```bash
+./mvnw -B -ntp spotless:apply clean verify
+DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -B -ntp -Dtest=LocalClickHouseIT test
+```
+
+- Java 全量：299/299；
+- 真实 ClickHouse：1/1（本地 `26.5.6.64`）；
+- package、Spotless、`git diff --check`：通过；
+- MySQL SchemaParityTest 因本机无 Docker 未执行测试体（0 tests），因此仍保留为 P5 未完成项。
+
 ## P5 未完成项
 
 以下退出条件尚无证据，因此 P5 不能标记完成：
 
-1. `ds_skill_revision` / revision-scoped resource 的不可变 bundle 模型，以及 published/draft
-   pointer。
-2. Agent run 对实际 Skill revision 的持久化 pin；运行中发布新版本不影响该 run 的并发测试。
-3. MySQL revision repository contract（本机无 Docker，可由 CI 执行）。
-4. Node/Java catalog semantic diff 和完整 Skill load E2E（模拟 LLM 即可）。
-5. Toolkit Registry 接替当前临时的 requiredTools 固定集合。
+1. MySQL revision repository contract（本机无 Docker，可由 CI 执行）。
+2. Node/Java catalog semantic diff 和完整 Skill load E2E（模拟 LLM 即可）。
+3. Toolkit Registry 接替当前临时的 requiredTools 固定集合。
 
-下一切片为 **P5.2：不可变 Skill revision、published pointer 与 run pinning**。在这些条目完成前
-不把 P4.8 中提前出现的 Skill/工具代码视为 P5/P6 已交付。
+下一切片继续完成 **P5.3：catalog semantic diff、完整 Skill load E2E 与 Toolkit
+Registry**。在这些条目完成前不把 P4.8 中提前出现的 Skill/工具代码视为 P5/P6 已交付。

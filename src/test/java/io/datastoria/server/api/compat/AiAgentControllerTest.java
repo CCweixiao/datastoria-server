@@ -43,6 +43,7 @@ import io.datastoria.server.api.error.ResourceInUseException;
 import io.datastoria.server.domain.ChatMessage;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.AgentRunRepository;
+import io.datastoria.server.repository.AgentRunSkillRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
 
 import reactor.core.publisher.Flux;
@@ -67,6 +68,7 @@ class AiAgentControllerTest {
   @Autowired ChatRunService chatRunService;
   @Autowired FakeModelAdapterProvider fakeProvider;
   @Autowired AgentRunRepository runRepository;
+  @Autowired AgentRunSkillRepository runSkillRepository;
   @Autowired ChatMessageRepository messageRepository;
   @Autowired JdbcClient jdbc;
   @Autowired TestDbHelper dbHelper;
@@ -127,6 +129,40 @@ class AiAgentControllerTest {
     // [DONE].
     assertThat(sse).contains("\n\ndata: ");
     assertThat(sse).endsWith("data: [DONE]\n\n");
+  }
+
+  @Test
+  void runPinsSelectedSkillRevisionAndChecksum() {
+    webTestClient
+        .post()
+        .uri("/api/ai/skills")
+        .header("x-datastoria-user-email", USER)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {
+              "id": "run-test",
+              "content": "---\\nname: run-test\\ndescription: Run test\\n---\\nUse evidence.",
+              "scope": "self",
+              "state": "published"
+            }
+            """)
+        .exchange()
+        .expectStatus()
+        .isCreated();
+    postStream(streamBody("sess-1", "mdl-1", "hello"), "idem-skill-pins");
+
+    AgentRun run = runRepository.findBySession(TENANT, "sess-1").get(0);
+    var pins = runSkillRepository.findByRun(TENANT, run.id());
+
+    assertThat(pins)
+        .filteredOn(pin -> "run-test".equals(pin.skillId()))
+        .singleElement()
+        .satisfies(
+            pin -> {
+              assertThat(pin.skillRevision()).isZero();
+              assertThat(pin.contentChecksum()).matches("[0-9a-f]{64}");
+            });
   }
 
   @Test

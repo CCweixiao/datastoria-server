@@ -1,6 +1,6 @@
 package io.datastoria.server.service;
 
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -63,7 +63,9 @@ public class AgentSkillService {
                       skill ->
                           catalog(
                               skill,
-                              !repository.findResources(skill.tenantId(), skill.id()).isEmpty()))
+                              !repository
+                                  .findResources(skill.tenantId(), skill.id(), skill.revision())
+                                  .isEmpty()))
                   .toList();
             })
         .subscribeOn(jdbcScheduler);
@@ -75,7 +77,7 @@ public class AgentSkillService {
               builtinSkillProvisioner.provision(identity.tenantId());
               AgentSkill skill = require(id, identity, includeDraft);
               List<String> paths =
-                  repository.findResources(skill.tenantId(), skill.id()).stream()
+                  repository.findResources(skill.tenantId(), skill.id(), skill.revision()).stream()
                       .map(AgentSkillResource::path)
                       .toList();
               SkillCatalogResponse catalog = catalog(skill, !paths.isEmpty());
@@ -108,7 +110,7 @@ public class AgentSkillService {
               builtinSkillProvisioner.provision(identity.tenantId());
               AgentSkill skill = require(id, identity, includeDraft);
               AgentSkillResource resource =
-                  repository.findResources(skill.tenantId(), skill.id()).stream()
+                  repository.findResources(skill.tenantId(), skill.id(), skill.revision()).stream()
                       .filter(candidate -> candidate.path().equals(path))
                       .findFirst()
                       .orElseThrow(() -> new NotFoundException("AgentSkillResource", path));
@@ -130,39 +132,44 @@ public class AgentSkillService {
               metadataParser.parse(request.content(), id);
               builtinSkillProvisioner.provision(identity.tenantId());
               rejectBuiltinMutation(id, identity);
-              AgentSkill saved =
-                  repository.upsert(
-                      new AgentSkill(
-                          id,
-                          identity.tenantId(),
-                          identity.userId(),
-                          request.content(),
-                          request.action() != null
-                              ? "published"
-                              : defaultValue(request.state(), "draft"),
-                          defaultValue(request.scope(), "self"),
-                          request.version(),
-                          null,
-                          false,
-                          0,
-                          null,
-                          null,
-                          null));
-              List<AgentSkillResource> resources = new ArrayList<>();
-              for (SkillResourceRequest resource : safe(request.resources())) {
-                validateResourcePath(resource.path());
-                resources.add(
-                    new AgentSkillResource(
-                        identity.tenantId(),
-                        saved.id(),
-                        resource.path(),
-                        resource.content(),
-                        null,
-                        null));
+              AgentSkill existing =
+                  repository
+                      .findById(identity.tenantId(), identity.userId(), id, true)
+                      .orElse(null);
+              LinkedHashMap<String, AgentSkillResource> resources = new LinkedHashMap<>();
+              if (existing != null) {
+                repository
+                    .findResources(existing.tenantId(), existing.id(), existing.revision())
+                    .forEach(resource -> resources.put(resource.path(), resource));
               }
               List<String> deletedPaths = safe(request.deletedResourcePaths());
               deletedPaths.forEach(AgentSkillService::validateResourcePath);
-              repository.replaceResources(identity.tenantId(), saved.id(), resources, deletedPaths);
+              deletedPaths.forEach(resources::remove);
+              for (SkillResourceRequest resource : safe(request.resources())) {
+                validateResourcePath(resource.path());
+                resources.put(
+                    resource.path(),
+                    new AgentSkillResource(
+                        identity.tenantId(), id, resource.path(), resource.content(), null, null));
+              }
+              repository.saveBundle(
+                  new AgentSkill(
+                      id,
+                      identity.tenantId(),
+                      identity.userId(),
+                      request.content(),
+                      request.action() != null
+                          ? "published"
+                          : defaultValue(request.state(), "draft"),
+                      defaultValue(request.scope(), existing == null ? "self" : existing.scope()),
+                      defaultValue(request.version(), existing == null ? null : existing.version()),
+                      null,
+                      false,
+                      existing == null ? 0 : existing.revision(),
+                      null,
+                      null,
+                      null),
+                  List.copyOf(resources.values()));
             })
         .subscribeOn(jdbcScheduler)
         .then();

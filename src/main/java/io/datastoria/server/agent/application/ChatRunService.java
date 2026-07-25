@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunEvent;
+import io.datastoria.server.agent.domain.AgentRunSkillPin;
 import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.runtime.AgentRunCapabilities;
 import io.datastoria.server.agent.runtime.AgentRuntimeConfig;
@@ -74,6 +75,7 @@ public class ChatRunService {
   static final String BUILTIN_DEFAULT_REVISION = "builtin-default";
 
   private final AgentRunService agentRunService;
+  private final AgentRunCreationService runCreationService;
   private final AgentRunRepository runRepository;
   private final ChatSessionRepository sessionRepository;
   private final ChatMessageRepository messageRepository;
@@ -91,6 +93,7 @@ public class ChatRunService {
 
   public ChatRunService(
       AgentRunService agentRunService,
+      AgentRunCreationService runCreationService,
       AgentRunRepository runRepository,
       ChatSessionRepository sessionRepository,
       ChatMessageRepository messageRepository,
@@ -106,6 +109,7 @@ public class ChatRunService {
       ObjectMapper mapper,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.agentRunService = agentRunService;
+    this.runCreationService = runCreationService;
     this.runRepository = runRepository;
     this.sessionRepository = sessionRepository;
     this.messageRepository = messageRepository;
@@ -242,8 +246,9 @@ public class ChatRunService {
             null,
             now,
             now);
+    ResolvedCapabilities resolvedCapabilities = resolveCapabilities(req, identity, runId);
     try {
-      runRepository.create(run);
+      runCreationService.create(run, resolvedCapabilities.skillPins());
     } catch (RuntimeException conflict) {
       // The UNIQUE(tenant,user,idempotency_key) constraint is the atomic arbiter for a concurrent
       // duplicate; lookup-then-create alone would race. Re-resolve and reject the loser.
@@ -260,21 +265,27 @@ public class ChatRunService {
             context,
             adapter,
             agent.config(),
-            resolveCapabilities(req, identity),
+            resolvedCapabilities.capabilities(),
             loadHistory(req, tenant),
             req.userText());
     return new PreparedRun(runId, runRequest);
   }
 
-  private AgentRunCapabilities resolveCapabilities(AgentChatRequest req, Identity identity) {
+  private ResolvedCapabilities resolveCapabilities(
+      AgentChatRequest req, Identity identity, String runId) {
     builtinSkillProvisioner.provision(identity.tenantId());
-    java.util.List<io.agentscope.core.skill.AgentSkill> skills =
+    java.util.List<io.datastoria.server.domain.AgentSkill> selectedSkills =
         skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
             .filter(skill -> skillToolAvailability.isAvailable(skill.content(), skill.id()))
+            .toList();
+    java.util.List<io.agentscope.core.skill.AgentSkill> skills =
+        selectedSkills.stream()
             .map(
                 skill -> {
                   java.util.Map<String, String> resources =
-                      skillRepository.findResources(skill.tenantId(), skill.id()).stream()
+                      skillRepository
+                          .findResources(skill.tenantId(), skill.id(), skill.revision())
+                          .stream()
                           .collect(
                               java.util.stream.Collectors.toMap(
                                   io.datastoria.server.domain.AgentSkillResource::path,
@@ -288,9 +299,22 @@ public class ChatRunService {
                       .build();
                 })
             .toList();
-    return new AgentRunCapabilities(
-        skills,
-        new ClickHouseAgentTools(clickHouseConnectionService, req.connectionId(), identity));
+    java.util.List<AgentRunSkillPin> pins =
+        selectedSkills.stream()
+            .map(
+                skill ->
+                    new AgentRunSkillPin(
+                        identity.tenantId(),
+                        runId,
+                        skill.id(),
+                        skill.revision(),
+                        skill.bundleChecksum()))
+            .toList();
+    return new ResolvedCapabilities(
+        new AgentRunCapabilities(
+            skills,
+            new ClickHouseAgentTools(clickHouseConnectionService, req.connectionId(), identity)),
+        pins);
   }
 
   private java.util.List<ChatTurn> loadHistory(AgentChatRequest req, String tenant) {
@@ -384,4 +408,7 @@ public class ChatRunService {
   private record PreparedRun(String runId, RunRequest runRequest) {}
 
   private record ResolvedAgent(AgentRuntimeConfig config, String agentRevisionId) {}
+
+  private record ResolvedCapabilities(
+      AgentRunCapabilities capabilities, java.util.List<AgentRunSkillPin> skillPins) {}
 }

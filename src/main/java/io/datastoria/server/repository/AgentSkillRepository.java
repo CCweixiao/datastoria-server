@@ -11,15 +11,9 @@ public interface AgentSkillRepository {
 
   Optional<AgentSkill> findById(String tenantId, String userId, String id, boolean includeDraft);
 
-  AgentSkill upsert(AgentSkill skill);
+  AgentSkill saveBundle(AgentSkill skill, List<AgentSkillResource> resources);
 
-  void replaceResources(
-      String tenantId,
-      String skillId,
-      List<AgentSkillResource> resources,
-      List<String> deletedPaths);
-
-  List<AgentSkillResource> findResources(String tenantId, String skillId);
+  List<AgentSkillResource> findResources(String tenantId, String skillId, long skillRevision);
 
   void publish(String tenantId, String userId, String id);
 

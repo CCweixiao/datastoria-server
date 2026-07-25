@@ -142,4 +142,100 @@ class AgentSkillApiTest {
         .expectStatus()
         .isBadRequest();
   }
+
+  @Test
+  void publishedRevisionAndResourcesStayVisibleWhileNewDraftIsEdited() {
+    web.post()
+        .uri("/api/ai/skills")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {
+              "id": "versioned",
+              "content": "---\\nname: versioned\\ndescription: Version one\\n---\\nPublished body.",
+              "scope": "self",
+              "state": "draft",
+              "resources": [{"path":"references/rules.md","content":"published resource"}]
+            }
+            """)
+        .exchange()
+        .expectStatus()
+        .isCreated();
+    publish("versioned");
+
+    web.patch()
+        .uri("/api/ai/skills/versioned")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {
+              "content": "---\\nname: versioned\\ndescription: Version two\\n---\\nDraft body.",
+              "state": "draft",
+              "resources": [{"path":"references/rules.md","content":"draft resource"}]
+            }
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    web.get()
+        .uri("/api/ai/skills/versioned")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.description")
+        .isEqualTo("Version one")
+        .jsonPath("$.content")
+        .isEqualTo("---\nname: versioned\ndescription: Version one\n---\nPublished body.");
+    expectResource("versioned", false, "published resource");
+
+    web.get()
+        .uri("/api/ai/skills/versioned?includeDraft=true")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.description")
+        .isEqualTo("Version two")
+        .jsonPath("$.content")
+        .isEqualTo("---\nname: versioned\ndescription: Version two\n---\nDraft body.");
+    expectResource("versioned", true, "draft resource");
+
+    publish("versioned");
+    expectResource("versioned", false, "draft resource");
+  }
+
+  private void publish(String id) {
+    web.patch()
+        .uri("/api/ai/skills/" + id)
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"action\":\"publish\"}")
+        .exchange()
+        .expectStatus()
+        .isOk();
+  }
+
+  private void expectResource(String id, boolean includeDraft, String content) {
+    web.get()
+        .uri(
+            uriBuilder ->
+                uriBuilder
+                    .path("/api/ai/skills/" + id + "/resource")
+                    .queryParam("path", "references/rules.md")
+                    .queryParam("includeDraft", includeDraft)
+                    .build())
+        .header("x-datastoria-user-email", "dev@example.com")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.content")
+        .isEqualTo(content);
+  }
 }

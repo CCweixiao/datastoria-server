@@ -1,7 +1,6 @@
 package io.datastoria.server.skill;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -55,36 +54,27 @@ public class BuiltinSkillProvisioner {
           && bundle.checksum().equals(existing.bundleChecksum())) {
         continue;
       }
-      AgentSkill saved =
-          repository.upsert(
-              new AgentSkill(
-                  bundle.id(),
-                  tenantId,
-                  SYSTEM_OWNER,
-                  bundle.skillMarkdown(),
-                  "published",
-                  "global",
-                  bundle.version(),
-                  bundle.checksum(),
-                  true,
-                  existing == null ? 0 : existing.revision(),
-                  existing == null ? null : existing.createdAt(),
-                  null,
-                  null));
-      List<AgentSkillResource> current = repository.findResources(tenantId, saved.id());
-      List<String> deletedPaths =
-          current.stream()
-              .map(AgentSkillResource::path)
-              .filter(path -> !bundle.resources().containsKey(path))
-              .toList();
-      List<AgentSkillResource> resources =
+      repository.saveBundle(
+          new AgentSkill(
+              bundle.id(),
+              tenantId,
+              SYSTEM_OWNER,
+              bundle.skillMarkdown(),
+              "published",
+              "global",
+              bundle.version(),
+              bundle.checksum(),
+              true,
+              existing == null ? 0 : existing.revision(),
+              existing == null ? null : existing.createdAt(),
+              null,
+              null),
           bundle.resources().entrySet().stream()
               .map(
                   entry ->
                       new AgentSkillResource(
-                          tenantId, saved.id(), entry.getKey(), entry.getValue(), null, null))
-              .toList();
-      repository.replaceResources(tenantId, saved.id(), resources, deletedPaths);
+                          tenantId, bundle.id(), entry.getKey(), entry.getValue(), null, null))
+              .toList());
     }
     provisionedTenants.add(tenantId);
   }

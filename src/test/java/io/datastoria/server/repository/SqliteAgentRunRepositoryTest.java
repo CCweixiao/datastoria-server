@@ -19,7 +19,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 
 import io.datastoria.server.TestDbHelper;
+import io.datastoria.server.agent.application.AgentRunCreationService;
 import io.datastoria.server.agent.domain.AgentRun;
+import io.datastoria.server.agent.domain.AgentRunSkillPin;
 import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.domain.IllegalRunTransitionException;
 import io.datastoria.server.agent.domain.RunFailureCode;
@@ -41,6 +43,7 @@ class SqliteAgentRunRepositoryTest {
   private static final Instant NOW = Instant.parse("2026-07-25T09:00:00Z");
 
   @Autowired AgentRunRepository repo;
+  @Autowired AgentRunCreationService runCreationService;
   @Autowired JdbcClient jdbc;
   @Autowired TestDbHelper dbHelper;
 
@@ -59,6 +62,22 @@ class SqliteAgentRunRepositoryTest {
     assertThat(found.userId()).isEqualTo(USER);
     assertThat(found.revision()).isZero();
     assertThat(found.createdAt()).isNotNull();
+  }
+
+  @Test
+  void runAndSkillPinsAreCreatedAtomically() {
+    AgentRun run = newRunningRun("run_atomic");
+
+    assertThatThrownBy(
+            () ->
+                runCreationService.create(
+                    run,
+                    java.util.List.of(
+                        new AgentRunSkillPin(
+                            TENANT, run.id(), "missing-skill", 0, "0".repeat(64)))))
+        .isInstanceOf(RuntimeException.class);
+
+    assertThat(repo.find(TENANT, run.id())).isEmpty();
   }
 
   @Test

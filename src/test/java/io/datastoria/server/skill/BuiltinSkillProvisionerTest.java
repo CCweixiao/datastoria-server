@@ -36,13 +36,13 @@ class BuiltinSkillProvisionerTest {
     assertThat(clickhouse.builtin()).isTrue();
     assertThat(clickhouse.bundleChecksum()).hasSize(64);
     assertThat(clickhouse.revision()).isZero();
-    assertThat(repository.findResources("tenant-seed", "clickhouse"))
+    assertThat(repository.findResources("tenant-seed", "clickhouse", clickhouse.revision()))
         .anyMatch(resource -> resource.path().equals("rules/schema-pk-plan-before-creation.md"));
   }
 
   @Test
   void tenantDatabaseSkillTakesPrecedenceOverSameIdSeed() {
-    repository.upsert(
+    repository.saveBundle(
         new AgentSkill(
             "clickhouse",
             "tenant-override",
@@ -56,7 +56,8 @@ class BuiltinSkillProvisionerTest {
             0,
             null,
             null,
-            null));
+            null),
+        java.util.List.of());
 
     provisioner.provision("tenant-override");
 

@@ -10,7 +10,10 @@ public class TestDbHelper {
   private static final String[] TABLES = {
     "ds_rca_template",
     "ds_user_state",
+    "ds_agent_run_skill",
+    "ds_skill_resource",
     "ds_agent_skill_resource",
+    "ds_skill_revision",
     "ds_agent_skill",
     "ds_clickhouse_connection",
     "ds_session_share",
