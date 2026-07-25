@@ -158,4 +158,33 @@ describe("Connection query context parameters", () => {
     expect(body.parameters.max_execution_time).toBe(60);
     expect(body.parameters.output_format_pretty_row_numbers).toBe(true);
   });
+
+  it("uses Spring ProblemDetail detail as the query error message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          title: "ClickHouse query failed",
+          detail: "The current user cannot read system.processes.",
+          status: 403,
+        }),
+        { status: 403, headers: { "Content-Type": "application/problem+json" } }
+      )
+    );
+    const connection = Connection.create({
+      id: "connection-4",
+      name: "test",
+      url: "http://localhost:8123",
+      user: "default",
+      password: "",
+      cluster: "",
+      editable: true,
+    });
+
+    await expect(connection.query("SELECT * FROM system.processes").response).rejects.toMatchObject(
+      {
+        message: "The current user cannot read system.processes.",
+        httpStatus: 403,
+      }
+    );
+  });
 });

@@ -24,3 +24,33 @@ export function backendApiFetch(
     headers: backendApiHeaders(init?.headers),
   });
 }
+
+type BackendProblemDetail = {
+  detail?: unknown;
+  title?: unknown;
+  message?: unknown;
+};
+
+/** Extracts a user-facing message from Spring ProblemDetail or a plain-text response. */
+export async function readBackendError(
+  response: Response,
+  fallback = `Request failed: ${response.status}`
+): Promise<{ message: string; body: string }> {
+  const body = await response.text();
+  if (!body.trim()) {
+    return { message: fallback, body };
+  }
+
+  try {
+    const problem = JSON.parse(body) as BackendProblemDetail;
+    for (const candidate of [problem.detail, problem.message, problem.title]) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return { message: candidate.trim(), body };
+      }
+    }
+  } catch {
+    // Non-JSON responses are already suitable for display.
+  }
+
+  return { message: body.trim(), body };
+}

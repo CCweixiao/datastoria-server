@@ -438,7 +438,7 @@ export const DashboardVisualizationPanel = forwardRef<
           return;
         }
         if (err instanceof QueryError) {
-          setError(normalizeVisualizationError(String(err.data || err.message)));
+          setError(normalizeVisualizationError(err.message));
           setErrorCode(err.errorCode || "");
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";

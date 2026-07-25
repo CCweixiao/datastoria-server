@@ -26,6 +26,7 @@ import { resolveModelSupportsImageInput, type ModelProps } from "@/lib/ai/llm/ll
 import { TextHighlighter } from "@/lib/text-highlighter";
 import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
+import { GitHubOAuthConnect } from "./github-oauth-connect";
 
 export function ModelsEdit() {
   const { allModels, modelSettings, providerSettings } = useModelConfig();
@@ -219,6 +220,11 @@ export function ModelsEdit() {
   return (
     <>
       <div className="h-full flex flex-col">
+        <GitHubOAuthConnect
+          connected={providerSettings.some(
+            (setting) => setting.providerId === "oauth:github" && setting.credentialConfigured
+          )}
+        />
         {/* Search Input */}
         <div className="flex-shrink-0 relative">
           <Search className="h-4 w-4 text-muted-foreground absolute left-2 top-1/2 transform -translate-y-1/2" />
@@ -295,99 +301,105 @@ export function ModelsEdit() {
                         <TableCell className="py-1.5 pr-4">
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1 flex-1 ">
-                              <>
-                                <Input
-                                  type={visibleApiKeys.has(provider) ? "text" : "password"}
-                                  value={
-                                    javaConfiguration
-                                      ? (serverCredentialDrafts[provider] ?? "")
-                                      : ""
-                                  }
-                                  onChange={(e) => {
-                                    handleProviderApiKeyChange(provider, e.target.value);
-                                    // Auto-reveal when user starts typing
-                                    if (e.target.value && !visibleApiKeys.has(provider)) {
-                                      setVisibleApiKeys((prev) => new Set(prev).add(provider));
+                              {provider === "GitHub Copilot" ? (
+                                <span className="text-xs text-muted-foreground">
+                                  OAuth credential managed by Java
+                                </span>
+                              ) : (
+                                <>
+                                  <Input
+                                    type={visibleApiKeys.has(provider) ? "text" : "password"}
+                                    value={
+                                      javaConfiguration
+                                        ? (serverCredentialDrafts[provider] ?? "")
+                                        : ""
                                     }
-                                  }}
-                                  onBlur={() => void persistServerCredential(provider)}
-                                  onFocus={() => handleApiKeyFocus(provider)}
-                                  placeholder={
-                                    providerSetting?.credentialConfigured
-                                      ? `${providerSetting.maskedHint ?? "Credential configured"} — enter a new key to rotate`
-                                      : `Enter ${provider} API key (encrypted by Java backend)`
-                                  }
-                                  className="w-full h-8 border-0 border-b border-muted-foreground/20 rounded-none pl-0 bg-transparent focus-visible:ring-0 pr-8"
-                                />
-                                {(serverCredentialDrafts[provider] ||
-                                  providerSetting?.credentialConfigured) && (
-                                  <div className="right-0 flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleApiKeyVisibility(provider)}
-                                      className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                                      title={
-                                        visibleApiKeys.has(provider)
-                                          ? "Hide API key"
-                                          : "Show API key"
+                                    onChange={(e) => {
+                                      handleProviderApiKeyChange(provider, e.target.value);
+                                      // Auto-reveal when user starts typing
+                                      if (e.target.value && !visibleApiKeys.has(provider)) {
+                                        setVisibleApiKeys((prev) => new Set(prev).add(provider));
                                       }
-                                    >
-                                      {visibleApiKeys.has(provider) ? (
-                                        <EyeOff className="h-4 w-4" />
-                                      ) : (
-                                        <Eye className="h-4 w-4" />
-                                      )}
-                                    </button>
-                                    <StatusPopover
-                                      open={clearConfirmProvider === provider}
-                                      onOpenChange={(open) =>
-                                        setClearConfirmProvider(open ? provider : null)
-                                      }
-                                      trigger={
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-6 px-2 text-xs"
-                                        >
-                                          Clear
-                                        </Button>
-                                      }
-                                      side="left"
-                                      align="end"
-                                      sideOffset={4}
-                                      icon={
-                                        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-                                      }
-                                      title="Clear API key"
-                                    >
-                                      <div className="text-xs mb-3">
-                                        Remove the saved API key for {provider}?
-                                      </div>
-                                      <div className="flex justify-end gap-2">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-8 rounded-sm text-sm"
-                                          onClick={() => setClearConfirmProvider(null)}
-                                        >
-                                          Cancel
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="destructive"
-                                          size="sm"
-                                          className="h-8 rounded-sm text-sm"
-                                          onClick={() => handleClearProviderKey(provider)}
-                                        >
-                                          Clear
-                                        </Button>
-                                      </div>
-                                    </StatusPopover>
-                                  </div>
-                                )}
-                              </>
+                                    }}
+                                    onBlur={() => void persistServerCredential(provider)}
+                                    onFocus={() => handleApiKeyFocus(provider)}
+                                    placeholder={
+                                      providerSetting?.credentialConfigured
+                                        ? `${providerSetting.maskedHint ?? "Credential configured"} — enter a new key to rotate`
+                                        : `Enter ${provider} API key (encrypted by Java backend)`
+                                    }
+                                    className="w-full h-8 border-0 border-b border-muted-foreground/20 rounded-none pl-0 bg-transparent focus-visible:ring-0 pr-8"
+                                  />
+                                  {(serverCredentialDrafts[provider] ||
+                                    providerSetting?.credentialConfigured) && (
+                                    <div className="right-0 flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleApiKeyVisibility(provider)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                                        title={
+                                          visibleApiKeys.has(provider)
+                                            ? "Hide API key"
+                                            : "Show API key"
+                                        }
+                                      >
+                                        {visibleApiKeys.has(provider) ? (
+                                          <EyeOff className="h-4 w-4" />
+                                        ) : (
+                                          <Eye className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                      <StatusPopover
+                                        open={clearConfirmProvider === provider}
+                                        onOpenChange={(open) =>
+                                          setClearConfirmProvider(open ? provider : null)
+                                        }
+                                        trigger={
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 px-2 text-xs"
+                                          >
+                                            Clear
+                                          </Button>
+                                        }
+                                        side="left"
+                                        align="end"
+                                        sideOffset={4}
+                                        icon={
+                                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+                                        }
+                                        title="Clear API key"
+                                      >
+                                        <div className="text-xs mb-3">
+                                          Remove the saved API key for {provider}?
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 rounded-sm text-sm"
+                                            onClick={() => setClearConfirmProvider(null)}
+                                          >
+                                            Cancel
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="destructive"
+                                            size="sm"
+                                            className="h-8 rounded-sm text-sm"
+                                            onClick={() => handleClearProviderKey(provider)}
+                                          >
+                                            Clear
+                                          </Button>
+                                        </div>
+                                      </StatusPopover>
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
                           </div>
                         </TableCell>

@@ -10,6 +10,7 @@ const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
 const nextConfig: NextConfig = {
   ...(basePath && { basePath }),
+  distDir: process.env.DATASTORIA_NEXT_DIST_DIR ?? ".next",
   reactStrictMode: false,
   transpilePackages: ["@number-flow/react", "number-flow"],
   serverExternalPackages: ["knex"],

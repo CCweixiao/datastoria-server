@@ -1,7 +1,7 @@
 import type { DependencyTableInfo } from "@/components/dependency-view/dependency-types";
 import { QueryContextManager } from "@/components/settings/query-context/query-context-manager";
+import { backendApiFetch, readBackendError } from "@/lib/backend-api";
 import type { ClickHouseSetting } from "@/lib/clickhouse/clickhouse-setting-loader";
-import { backendApiFetch } from "@/lib/backend-api";
 import type { ConnectionConfig } from "./connection-config";
 
 // Re-export ConnectionConfig for convenience
@@ -329,21 +329,24 @@ export class Connection {
           signal: abortController.signal,
         });
 
-        // Read response body as text first (can only be read once)
-        const responseText = await response.text();
-
         if (!response.ok) {
+          const { message, body } = await readBackendError(
+            response,
+            `Failed to execute query, got HTTP status ${response.status} ${response.statusText} from server`
+          );
           const clickHouseErrorCode = response.headers.get("x-clickhouse-exception-code");
           throw new QueryError(
             clickHouseErrorCode
               ? `Failed to execute query, got ClickHouse Exception Code: ${clickHouseErrorCode}`
-              : `Failed to execute query, got HTTP status ${response.status} ${response.statusText} from server`,
+              : message,
             response.status,
             Object.fromEntries(response.headers.entries()),
-            responseText
+            body
           );
         }
 
+        // Read successful response body as text first (can only be read once).
+        const responseText = await response.text();
         const data: QueryResponseData = {
           text: () => responseText,
           json: <T = unknown>() => JSON.parse(responseText) as T,
@@ -430,15 +433,18 @@ export class Connection {
       });
 
       if (!res.ok) {
-        const errorText = await res.text();
+        const { message, body } = await readBackendError(
+          res,
+          `Failed to execute query, got HTTP status ${res.status} ${res.statusText} from server`
+        );
         const clickHouseErrorCode = res.headers.get("x-clickhouse-exception-code");
         throw new QueryError(
           clickHouseErrorCode
             ? `Failed to execute query, got ClickHouse Exception Code: ${clickHouseErrorCode}`
-            : `Failed to execute query, got HTTP status ${res.status} ${res.statusText} from server`,
+            : message,
           res.status,
           Object.fromEntries(res.headers.entries()),
-          errorText
+          body
         );
       }
 

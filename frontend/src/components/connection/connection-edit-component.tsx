@@ -5,7 +5,12 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
+import {
+  backendApiFetch,
+  backendApiHeaders,
+  backendApiUrl,
+  readBackendError,
+} from "@/lib/backend-api";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
 import { cn } from "@/lib/utils";
@@ -414,7 +419,11 @@ export function ConnectionEditComponent({
         signal: controller.signal,
       });
       if (!response.ok) {
-        throw new Error((await response.text()) || `Connection test failed: ${response.status}`);
+        const { message } = await readBackendError(
+          response,
+          `Connection test failed: ${response.status}`
+        );
+        throw new Error(message);
       }
       setTestResultWithDelay({ type: "success", message: "Successfully connected." });
     } catch (e) {

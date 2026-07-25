@@ -11,6 +11,8 @@
 - A29 由 Java 保留原 `[]` stub 契约。
 - 前端不再保存或执行 OAuth token；所有 Java REST/SSE 请求统一携带服务端 session
   cookie，并新增登录页与认证门禁。
+- 模型设置页通过 Java 的 GitHub device-flow REST 接口完成 Copilot 授权；浏览器仅处理
+  一次性 device code，且不会接收 access/refresh token。
 
 ## 数据与安全
 
@@ -28,7 +30,11 @@
 - `AvailableModelsApiTest`：服务端 GitHub OAuth 凭据能填充 A12 `githubModels`。
 - `AuthenticatedIdentityWebFilterTest`：伪造开发身份头不能覆盖认证 principal。
 - `AuthCompatibilityControllerTest`：providers/session/signin 兼容响应不泄漏 token。
-- 前端：57 个测试文件、299 个测试通过；typecheck 与 production build 通过。
+- 前端：56 个测试文件、295 个测试通过；typecheck 与 production build 通过。
+- 真实浏览器 E2E：前端保存 ClickHouse Playground 连接，Java 持久化后代理查询，
+  Schema 与节点仪表盘成功展示真实版本、库表和指标数据。
+- 权限不足查询的 Spring ProblemDetail 会提取 `detail` 展示，不再把整段 JSON 暴露到
+  仪表盘；Playground 的 `ACCESS_DENIED` 面板已在浏览器复验。
 
 ## 部署配置
 
