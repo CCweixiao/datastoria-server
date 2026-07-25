@@ -1,10 +1,10 @@
 # P4 实施报告 — AgentScope Java 最小 Harness
 
 > Stage: P4（AgentScope 最小 Harness）
-> 本次交付：**P4.1 + P4.2 + P4.3 + P4.4 + P4.5（已通过 review）+ P4.6（本次）**
+> 本次交付：**P4.1–P4.6（均已通过 review）**
 > 分支：`codex/phase-p4`（worktree `/Users/jielongping/OpenProjects/datastoria-server-p4`）
 > 基线 master：`a540e8b`
-> 状态：P4.1–P4.5 review 已通过；**P4.6 已实现，待 review**；P4.7–P4.8 未开始。
+> 状态：P4.1–P4.6 review 已通过；P4.7–P4.8 未开始。
 
 ---
 
@@ -772,7 +772,7 @@ docs/delivery/p4-implementation-report.md                                       
 
 ---
 
-# P4.6 — A01 Java Chat API（本次交付，待 review）
+# P4.6 — A01 Java Chat API（review 已通过）
 
 ## P4.6-0. 范围
 
@@ -854,8 +854,8 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw -B -ntp spotless:apply clean verify
 ```
 
-- 全量：`Tests run: 268, Failures: 0, Errors: 0, Skipped: 0`。
-- P4.6 新增 **15 测试**（`AiAgentControllerTest` 13 + `RunLifecycleRecorderTest` 2）。
+- review 修复后全量：`Tests run: 272, Failures: 0, Errors: 0, Skipped: 0`。
+- P4.6 新增 **19 测试**（`AiAgentControllerTest` 17 + `RunLifecycleRecorderTest` 2）。
 - P4.1–P4.5 + P3 全部仍通过；`DatastoriaServerApplicationTests` context 加载通过。
 - 无真实网络、无 API key、无真实 provider（`FakeModelAdapterProvider` 注入）。
 
@@ -869,7 +869,11 @@ P4.6 测试覆盖（对齐需求 15）：
 | connectionPasswordRejected | `connection.password` → 400 |
 | missingSessionReturnsNotFound / missingModelReturnsNotFound | 404 |
 | crossTenantSessionReturnsNotFound | 跨租户 session 不可见（404，不泄漏） |
+| connectionMustMatchOwnedSession | 请求 connection 必须与 tenant/user 所属 session 的固定 connection 一致 |
+| assistantInitialMessageIsRejectedBeforeRunCreation | 非 continuation 初始请求只允许 user message |
+| conflictingIdempotencyKeysAreRejected | header/body 幂等键不一致时在建 run 前拒绝 |
 | providerErrorIsSanitizedInTheStream | error 帧只含固定 safe message，不含 `sk-SECRET`/raw |
+| adapterInitializationFailureIsSanitizedAndCreatesNoRun | adapter/凭据初始化失败不泄密、不遗留 RUNNING run |
 | serialIdempotencyKeyRejectsSecondRequest | 串行同 key → 第二请求 409 |
 | concurrentSameIdempotencyKeyStartsExactlyOneRun | 并发同 key → 恰好一个 run |
 | completedRunWithUsagePersisted / failedRunPersistedWithSafeCodeOnly | 终态落库（succeeded+usage / failed+code，无 raw） |
@@ -884,6 +888,10 @@ P4.6 测试覆盖（对齐需求 15）：
   固定 `RunFailureCode.safeMessage()`；run 落 `safe_message` 同值；测试断言不含 `sk-`/raw。AgentScope trace log 已关（P4.2）。
 - **凭据服务端注入**：`ModelAdapterProvider` 是唯一缝，NoOp 默认（fail-fast），真实 provider 读 `SecretService.decrypt` 在 P4.8。
 - **租户隔离**：session/model/agent 全 tenant-scoped 校验；跨租户 session → 404。
+- **连接隔离**：请求 `connectionId` 必须等于已通过 tenant/user 校验的 session 固定
+  `connectionId`；不接受调用方用任意连接重标记 run。
+- **adapter 初始化失败安全**：服务端 adapter 在建 run 前解析；失败统一映射为无 cause 的安全
+  `503 PROVIDER_UNAVAILABLE`，原始凭据异常既不进入全局日志，也不留下永久 `RUNNING` run。
 - **隔离边界**：controller/service/encoder/repository 不引用 `io.agentscope.*`（仅 `agent.runtime`）。
 - **取消 owner isolation**：P4.2/4.3 不变；disconnect → cancel 上游传播 + owner 校验保留。
 
@@ -934,5 +942,18 @@ docs/delivery/p4-implementation-report.md                                       
 - 确认 `Idempotency-Key` 由前端生成；确认 Java 返回的 SSE 能被未修改的 `DefaultChatTransport` 消费。
 - 跑 Node/Java diff + Playwright（不改前端渲染逻辑）。
 
-**停在 P4.6 review，不自动开始 P4.7。**
+**P4.6 review 已通过；不自动开始 P4.7。**
 
+## P4.6-13. Review 修复结论
+
+review 发现并修复 4 个边界问题：
+
+1. 原实现只校验 session ownership，未约束请求 `connectionId`；现要求与 session 的固定 connection
+   一致，防止跨连接混淆。
+2. 原实现先创建 `RUNNING` run、后解析 provider adapter；初始化失败会留下悬挂 run。现改为 adapter
+   解析成功后才创建 run，并将初始化异常映射为不携带原 cause 的安全 503。
+3. 补齐初始 turn 的 `message.role=user` 与非空 text 校验，拒绝 unsupported assistant 初始消息。
+4. 同时提供 `Idempotency-Key` 和 `clientRequestId` 时必须一致，避免两个来源产生歧义。
+
+验证：JDK 17 执行 `./mvnw -B -ntp spotless:apply clean verify`，272 tests 全通过；本机无 Docker，
+`SchemaParityTest` 仍为 0 tests，由 CI `mysql-contract` 覆盖。**P4.6 review 通过，可开始 P4.7。**

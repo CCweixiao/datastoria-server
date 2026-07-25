@@ -15,6 +15,7 @@ import io.datastoria.server.agent.runtime.ModelAdapterProvider;
 import io.datastoria.server.api.compat.AgentChatRequest;
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.api.error.PlainTextException;
+import io.datastoria.server.api.error.ProviderOperationException;
 import io.datastoria.server.api.error.ResourceInUseException;
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.AgentDefinition;
@@ -124,6 +125,20 @@ public class ChatRunService {
         sessionRepository
             .findById(req.sessionId(), tenant, user)
             .orElseThrow(() -> new NotFoundException("ChatSession", req.sessionId()));
+    if (req.connectionId() == null || req.connectionId().isBlank()) {
+      throw PlainTextException.badRequest("connectionId is required");
+    }
+    if (!req.connectionId().equals(session.connectionId())) {
+      // The session lookup is already tenant + user scoped. Requiring its pinned connection avoids
+      // letting a caller relabel the run with an unrelated (or another tenant's) connection id.
+      throw new NotFoundException("Connection", req.connectionId());
+    }
+    if (!"user".equals(req.role())) {
+      throw PlainTextException.badRequest("message.role must be user");
+    }
+    if (req.userText().isBlank()) {
+      throw PlainTextException.badRequest("message.parts must contain text");
+    }
 
     Model modelConfig = resolveModel(req, tenant);
     if (!modelConfig.enabled()) {
@@ -131,6 +146,17 @@ public class ChatRunService {
     }
 
     ResolvedAgent agent = resolveAgent(req, tenant);
+    // Resolve the server-side adapter before inserting the RUNNING row. Provider configuration or
+    // credential failures must not leave a run that can never emit a terminal lifecycle event.
+    ModelAdapter adapter;
+    try {
+      adapter = modelAdapterProvider.adapterFor(modelConfig);
+    } catch (RuntimeException ignored) {
+      // Adapter initialization can touch decrypted server-side credentials. Do not retain the
+      // original exception as a cause: the global error logger must not receive provider secrets.
+      throw new ProviderOperationException(
+          "PROVIDER_UNAVAILABLE", 503, "The selected model provider is unavailable");
+    }
 
     String idempotencyKey = normalize(req.clientRequestId());
     if (idempotencyKey != null) {
@@ -190,7 +216,6 @@ public class ChatRunService {
       throw conflict;
     }
 
-    ModelAdapter adapter = modelAdapterProvider.adapterFor(modelConfig);
     RunRequest runRequest = new RunRequest(context, adapter, agent.config(), req.userText());
     return new PreparedRun(runId, runRequest);
   }

@@ -88,6 +88,10 @@ public class AiAgentController {
   private static AgentChatRequest parseRequest(JsonNode raw, String idempotencyKey) {
     String headerKey = idempotencyKey != null && !idempotencyKey.isBlank() ? idempotencyKey : null;
     String bodyKey = raw.has("clientRequestId") ? raw.path("clientRequestId").asText(null) : null;
+    if (headerKey != null && bodyKey != null && !bodyKey.isBlank() && !headerKey.equals(bodyKey)) {
+      throw PlainTextException.badRequest(
+          "Idempotency-Key and clientRequestId must match when both are provided");
+    }
     if (headerKey == null && bodyKey != null && !bodyKey.isBlank()) {
       headerKey = bodyKey;
     }

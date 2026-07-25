@@ -218,6 +218,59 @@ class AiAgentControllerTest {
   }
 
   @Test
+  void connectionMustMatchOwnedSession() {
+    String body = streamBody("sess-1", "mdl-1", "hi").replace("\"ch-1\"", "\"ch-other\"");
+
+    webTestClient
+        .post()
+        .uri("/api/ai/agent")
+        .header("x-datastoria-user-email", USER)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(body)
+        .exchange()
+        .expectStatus()
+        .isNotFound();
+
+    assertThat(runRepository.findBySession(TENANT, "sess-1")).isEmpty();
+  }
+
+  @Test
+  void assistantInitialMessageIsRejectedBeforeRunCreation() {
+    String body =
+        streamBody("sess-1", "mdl-1", "hi").replace("\"role\":\"user\"", "\"role\":\"assistant\"");
+
+    webTestClient
+        .post()
+        .uri("/api/ai/agent")
+        .header("x-datastoria-user-email", USER)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(body)
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+
+    assertThat(runRepository.findBySession(TENANT, "sess-1")).isEmpty();
+  }
+
+  @Test
+  void conflictingIdempotencyKeysAreRejected() {
+    webTestClient
+        .post()
+        .uri("/api/ai/agent")
+        .header("x-datastoria-user-email", USER)
+        .header("Idempotency-Key", "header-key")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            streamBody("sess-1", "mdl-1", "hi")
+                .replaceFirst("\\}$", ",\"clientRequestId\":\"body-key\"}"))
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+
+    assertThat(runRepository.findBySession(TENANT, "sess-1")).isEmpty();
+  }
+
+  @Test
   void providerErrorIsSanitizedInTheStream() {
     fakeProvider.setModel(
         FakeStreamModel.builder()
@@ -232,6 +285,32 @@ class AiAgentControllerTest {
         .doesNotContain("sk-SECRET-123")
         .doesNotContain("provider leak")
         .doesNotContain("prompt echo");
+  }
+
+  @Test
+  void adapterInitializationFailureIsSanitizedAndCreatesNoRun() {
+    fakeProvider.failAdapterWith(
+        new IllegalStateException("credential decrypt failed for sk-SECRET-ADAPTER"));
+
+    String response =
+        webTestClient
+            .post()
+            .uri("/api/ai/agent")
+            .header("x-datastoria-user-email", USER)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(streamBody("sess-1", "mdl-1", "hi"))
+            .exchange()
+            .expectStatus()
+            .isEqualTo(503)
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(response)
+        .contains("PROVIDER_UNAVAILABLE")
+        .doesNotContain("sk-SECRET-ADAPTER")
+        .doesNotContain("decrypt failed");
+    assertThat(runRepository.findBySession(TENANT, "sess-1")).isEmpty();
   }
 
   @Test

@@ -14,6 +14,7 @@ import io.datastoria.server.domain.Model;
 public final class FakeModelAdapterProvider implements ModelAdapterProvider {
 
   private volatile FakeStreamModel model;
+  private volatile RuntimeException adapterFailure;
 
   public FakeModelAdapterProvider() {
     this.model = FakeStreamModel.builder().text("Hello").finish(1, 1).build();
@@ -25,10 +26,18 @@ public final class FakeModelAdapterProvider implements ModelAdapterProvider {
 
   public void reset() {
     this.model = FakeStreamModel.builder().text("Hello").finish(1, 1).build();
+    this.adapterFailure = null;
+  }
+
+  public void failAdapterWith(RuntimeException failure) {
+    this.adapterFailure = Objects.requireNonNull(failure);
   }
 
   @Override
   public ModelAdapter adapterFor(Model modelConfig) {
+    if (adapterFailure != null) {
+      throw adapterFailure;
+    }
     return new FakeModelAdapter(model);
   }
 }
