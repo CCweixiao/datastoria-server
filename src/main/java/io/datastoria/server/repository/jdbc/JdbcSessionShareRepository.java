@@ -48,7 +48,7 @@ public class JdbcSessionShareRepository implements SessionShareRepository {
         .param("expiresAt", SqlTimestamps.toParamMillis(s.expiresAt()))
         .param("now", SqlTimestamps.toParamMillis(now))
         .update();
-    return findByTokenHash(s.tokenHash(), s.tenantId()).orElseThrow();
+    return findByTokenHash(s.tokenHash()).orElseThrow();
   }
 
   @Override
@@ -64,11 +64,9 @@ public class JdbcSessionShareRepository implements SessionShareRepository {
   }
 
   @Override
-  public Optional<SessionShare> findByTokenHash(String tokenHash, String tenantId) {
+  public Optional<SessionShare> findByTokenHash(String tokenHash) {
     return jdbc.sql(
-            "SELECT * FROM ds_session_share"
-                + " WHERE tenant_id = :tenantId AND token_hash = :tokenHash")
-        .param("tenantId", tenantId)
+            "SELECT * FROM ds_session_share WHERE token_hash = :tokenHash LIMIT 1")
         .param("tokenHash", tokenHash)
         .query(MAPPER)
         .optional();

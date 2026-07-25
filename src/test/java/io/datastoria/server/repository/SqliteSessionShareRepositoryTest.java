@@ -75,16 +75,16 @@ class SqliteSessionShareRepositoryTest {
   void findByTokenHashResolvesShare() {
     seedSession("sess_e");
     repo.issue(newShare("shr_e", "sess_e", "hash-e", Instant.parse("2100-01-01T00:00:00Z")));
-    SessionShare found = repo.findByTokenHash("hash-e", TENANT).orElseThrow();
+    SessionShare found = repo.findByTokenHash("hash-e").orElseThrow();
     assertThat(found.sessionId()).isEqualTo("sess_e");
     assertThat(found.ownerUserId()).isEqualTo(USER);
   }
 
   @Test
-  void findByTokenHashDoesNotLeakCrossTenant() {
+  void findByTokenHashReturnsEmptyForUnknownHash() {
     seedSession("sess_f");
     repo.issue(newShare("shr_f", "sess_f", "hash-f", Instant.parse("2100-01-01T00:00:00Z")));
-    assertThat(repo.findByTokenHash("hash-f", "tenant-other")).isEmpty();
+    assertThat(repo.findByTokenHash("not-issued")).isEmpty();
   }
 
   private void seedSession(String id) {

@@ -20,8 +20,13 @@ public interface SessionShareRepository {
   /** Returns the active (non-revoked) share for a session, or empty if none. */
   Optional<SessionShare> findActive(String sessionId, String tenantId);
 
-  /** Looks up a share row by token hash. Used during verification. */
-  Optional<SessionShare> findByTokenHash(String tokenHash, String tenantId);
+  /**
+   * Looks up a share row by token hash, ignoring tenant. Used during share-code verification
+   * where the caller does not yet know the owner's tenant — the share row carries it. The
+   * {@code token_hash} value is an unguessable SHA-256 of a signed JWT, so a single match (or
+   * none) is the realistic outcome; {@code LIMIT 1} guards against the theoretical duplicate.
+   */
+  Optional<SessionShare> findByTokenHash(String tokenHash);
 
   /**
    * Marks the active share for the session as revoked. Returns the number of rows affected
