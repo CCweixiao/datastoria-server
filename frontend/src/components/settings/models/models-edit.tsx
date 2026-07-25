@@ -26,6 +26,7 @@ import { resolveModelSupportsImageInput, type ModelProps } from "@/lib/ai/llm/ll
 import { TextHighlighter } from "@/lib/text-highlighter";
 import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
+import { CodexOAuthConnect } from "./codex-oauth-connect";
 import { GitHubOAuthConnect } from "./github-oauth-connect";
 
 export function ModelsEdit() {
@@ -225,6 +226,11 @@ export function ModelsEdit() {
             (setting) => setting.providerId === "oauth:github" && setting.credentialConfigured
           )}
         />
+        <CodexOAuthConnect
+          connected={providerSettings.some(
+            (setting) => setting.providerId === "oauth:codex" && setting.credentialConfigured
+          )}
+        />
         {/* Search Input */}
         <div className="flex-shrink-0 relative">
           <Search className="h-4 w-4 text-muted-foreground absolute left-2 top-1/2 transform -translate-y-1/2" />
@@ -301,7 +307,8 @@ export function ModelsEdit() {
                         <TableCell className="py-1.5 pr-4">
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1 flex-1 ">
-                              {provider === "GitHub Copilot" ? (
+                              {provider === "GitHub Copilot" ||
+                              provider === "OpenAI Codex" ? (
                                 <span className="text-xs text-muted-foreground">
                                   OAuth credential managed by Java
                                 </span>

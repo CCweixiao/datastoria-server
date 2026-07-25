@@ -12,8 +12,8 @@ import com.fasterxml.jackson.databind.JsonNode;
  * extracted from {@code text} parts), {@code modelConfigId} or {@code model.provider} +{@code
  * model.modelId} (server resolves the tenant model config), {@code agentId} (optional; resolves the
  * published agent revision), {@code clientRequestId}/{@code Idempotency-Key} header (idempotency).
- * {@code agentContext}/{@code generateTitle}/{@code ephemeral} are accepted but not yet acted on
- * (documented).
+ * {@code agentContext} controls response language and reasoning at the server-owned model boundary.
+ * {@code generateTitle}/{@code ephemeral} are accepted for wire compatibility.
  *
  * <p><b>Forbidden</b> (rejected before this record is built): {@code model.apiKey}, {@code
  * connection.password}, any top-level {@code apiKey}. {@code continuation:true} is rejected (no

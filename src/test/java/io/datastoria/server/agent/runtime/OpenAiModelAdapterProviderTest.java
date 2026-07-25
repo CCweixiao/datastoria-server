@@ -12,6 +12,8 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
@@ -31,7 +33,8 @@ class OpenAiModelAdapterProviderTest {
     when(secrets.decrypt("model-secret", "tenant-1")).thenReturn("sk-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(providers, secrets, mock(OAuthCredentialService.class))
+        new OpenAiModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
             .adapterFor(model("model-secret"));
 
     assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
@@ -48,7 +51,7 @@ class OpenAiModelAdapterProviderTest {
     assertThatThrownBy(
             () ->
                 new OpenAiModelAdapterProvider(
-                        providers, secrets, mock(OAuthCredentialService.class))
+                        providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
                     .adapterFor(model(null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Unsupported provider type");
@@ -65,10 +68,30 @@ class OpenAiModelAdapterProviderTest {
     when(oauth.accessToken("github", identity)).thenReturn("oauth-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(providers, secrets, oauth).adapterFor(model(null), identity);
+        new OpenAiModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
+            .adapterFor(model(null), identity);
 
     assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
     verify(oauth).accessToken("github", identity);
+  }
+
+  @Test
+  void resolvesCodexCredentialIntoResponsesModel() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    OAuthCredentialService oauth = mock(OAuthCredentialService.class);
+    Identity identity = new Identity("tenant-1", "user-1", Set.of("ROLE_USER"));
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(
+            Optional.of(provider("openai-codex", "https://chatgpt.com/backend-api/codex", null)));
+    when(oauth.accessToken("codex", identity)).thenReturn("oauth-server-only");
+
+    ModelAdapter adapter =
+        new OpenAiModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
+            .adapterFor(model(null), identity);
+
+    assertThat(adapter.modelFor(null)).isInstanceOf(CodexResponsesChatModel.class);
+    verify(oauth).accessToken("codex", identity);
   }
 
   private static Model model(String secretId) {

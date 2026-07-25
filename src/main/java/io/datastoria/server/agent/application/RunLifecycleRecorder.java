@@ -7,8 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionOperations;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.datastoria.server.agent.domain.AgentPendingAction;
 import io.datastoria.server.agent.domain.AgentRunEvent;
@@ -142,6 +144,7 @@ public final class RunLifecycleRecorder {
   public Flux<AgentRunEvent> tap(RunMessageContext ctx, Flux<AgentRunEvent> events) {
     long[] usage = {0, 0, 0}; // inputTokens, outputTokens, cachedTokens
     StringBuilder text = new StringBuilder();
+    java.util.LinkedHashMap<String, ObjectNode> tools = new java.util.LinkedHashMap<>();
     return events.concatMap(
         e -> {
           if (e instanceof AgentRunEvent.UsageReported u) {
@@ -150,6 +153,25 @@ public final class RunLifecycleRecorder {
             usage[2] += u.usage().cachedTokens();
           } else if (e instanceof AgentRunEvent.TextDelta d) {
             text.append(d.delta());
+          } else if (e instanceof AgentRunEvent.ToolInputAvailable input) {
+            ObjectNode part = mapper.createObjectNode();
+            part.put("type", "dynamic-tool");
+            part.put("toolCallId", input.toolCallId());
+            part.put("toolName", input.toolName());
+            part.put("state", "input-available");
+            part.set("input", parseJson(input.inputJson()));
+            tools.put(input.toolCallId(), part);
+          } else if (e instanceof AgentRunEvent.ToolOutputAvailable output) {
+            String state =
+                output.denied()
+                    ? "output-denied"
+                    : output.error() ? "output-error" : "output-available";
+            completeTool(
+                tools,
+                output.toolCallId(),
+                state,
+                output.error() || output.denied() ? null : output.outputJson(),
+                output.error() || output.denied() ? output.outputJson() : null);
           } else if (e instanceof AgentRunEvent.ToolApprovalRequired approval) {
             return dispatch(() -> persistApproval(ctx, approval)).thenReturn(e);
           } else if (e instanceof AgentRunEvent.QuestionRequired question) {
@@ -157,7 +179,8 @@ public final class RunLifecycleRecorder {
           } else if (e instanceof AgentRunEvent.RunCompleted) {
             String usageJson = usageJson(usage);
             String assistantText = text.toString();
-            return dispatch(() -> persistCompletion(ctx, assistantText, usageJson)).thenReturn(e);
+            return dispatch(() -> persistCompletion(ctx, assistantText, tools, usageJson))
+                .thenReturn(e);
           } else if (e instanceof AgentRunEvent.RunFailed f) {
             RunFailureCode code = parseFailureCode(f.code());
             return dispatch(
@@ -283,7 +306,11 @@ public final class RunLifecycleRecorder {
     }
   }
 
-  private void persistCompletion(RunMessageContext ctx, String text, String usageJson) {
+  private void persistCompletion(
+      RunMessageContext ctx,
+      String text,
+      java.util.LinkedHashMap<String, ObjectNode> tools,
+      String usageJson) {
     // A concurrent completion in the same session may choose the same next sequence. Retrying the
     // whole transaction recomputes the sequence after the winner commits, while rolling back the
     // run transition from the losing attempt.
@@ -297,7 +324,7 @@ public final class RunLifecycleRecorder {
                   ctx.runId(),
                   AgentRunStatus.SUCCEEDED,
                   RunTransition.completing(Instant.now(), usageJson));
-              persistAssistantMessage(ctx, text, usageJson);
+              persistAssistantMessage(ctx, text, tools, usageJson);
             });
         return;
       } catch (RuntimeException failure) {
@@ -313,9 +340,13 @@ public final class RunLifecycleRecorder {
    * session sequence is computed from existing rows; per the design (one active run per session), a
    * sequence collision is unexpected and is swallowed (the run is already SUCCEEDED).
    */
-  private void persistAssistantMessage(RunMessageContext ctx, String text, String usageJson) {
-    if (text.isEmpty()) {
-      return; // no assistant content to persist (tool-only runs arrive in P5)
+  private void persistAssistantMessage(
+      RunMessageContext ctx,
+      String text,
+      java.util.LinkedHashMap<String, ObjectNode> tools,
+      String usageJson) {
+    if (text.isEmpty() && tools.isEmpty()) {
+      return;
     }
     if (messageRepository.findById(ctx.messageId(), ctx.tenantId(), ctx.sessionId()).isPresent()) {
       return; // idempotent: already persisted by a prior completion of this run
@@ -334,7 +365,7 @@ public final class RunLifecycleRecorder {
             ctx.sessionId(),
             ctx.userId(),
             "assistant",
-            partsJson(text),
+            partsJson(text, tools),
             "{\"usage\":" + usageJson + "}",
             sequence,
             now,
@@ -371,15 +402,53 @@ public final class RunLifecycleRecorder {
     }
   }
 
-  private String partsJson(String text) {
+  private String partsJson(String text, java.util.LinkedHashMap<String, ObjectNode> tools) {
     try {
       ArrayNode parts = mapper.createArrayNode();
-      var part = parts.addObject();
-      part.put("type", "text");
-      part.put("text", text);
+      for (ObjectNode tool : tools.values()) {
+        parts.add(tool);
+      }
+      if (!text.isEmpty()) {
+        var part = parts.addObject();
+        part.put("type", "text");
+        part.put("text", text);
+      }
       return mapper.writeValueAsString(parts);
     } catch (JsonProcessingException e) {
       return "[{\"type\":\"text\",\"text\":\"\"}]";
+    }
+  }
+
+  private void completeTool(
+      java.util.LinkedHashMap<String, ObjectNode> tools,
+      String toolCallId,
+      String state,
+      String outputJson,
+      String errorText) {
+    ObjectNode part =
+        tools.computeIfAbsent(
+            toolCallId,
+            ignored -> {
+              ObjectNode created = mapper.createObjectNode();
+              created.put("type", "dynamic-tool");
+              created.put("toolCallId", toolCallId);
+              created.put("toolName", "unknown");
+              return created;
+            });
+    part.put("state", state);
+    if (outputJson != null) {
+      part.set("output", parseJson(outputJson));
+    }
+    if (errorText != null) {
+      part.put("errorText", errorText);
+    }
+  }
+
+  private JsonNode parseJson(String value) {
+    try {
+      return mapper.readTree(value);
+    } catch (Exception ignored) {
+      return mapper.getNodeFactory().textNode(value);
     }
   }
 

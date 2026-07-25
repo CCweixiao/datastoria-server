@@ -4,6 +4,7 @@ import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
 export interface AvailableModelsResponse {
   systemModels: ModelProps[];
   githubModels: ModelProps[];
+  codexModels?: ModelProps[];
 }
 
 const inFlightRequests = new Map<string, Promise<AvailableModelsResponse>>();

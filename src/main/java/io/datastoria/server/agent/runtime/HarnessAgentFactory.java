@@ -7,7 +7,9 @@ import java.util.Map;
 
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.ConfirmResult;
+import io.agentscope.core.message.Base64Source;
 import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.DataBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
@@ -16,6 +18,7 @@ import io.agentscope.core.message.ToolResultBlock;
 import io.agentscope.core.message.ToolResultMessage;
 import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.message.URLSource;
 import io.agentscope.core.model.ChatResponse;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
@@ -29,6 +32,8 @@ import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.datastoria.server.agent.application.ChatAttachment;
+import io.datastoria.server.agent.application.ChatToolExchange;
 import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.RunContext;
 
@@ -51,8 +56,8 @@ import reactor.core.publisher.Flux;
  * RunFailed} downstream; DataStoria's own redacted observability (docs/design/harness-agent.md §12)
  * replaces this verbose trace.
  *
- * <p>The user message is normalized to a plain AgentScope {@code Msg} here. Richer UIMessage
- * normalization (image/tool-result parts) arrives in P4.6; P4 is text-only.
+ * <p>User and historical messages are normalized to AgentScope {@code Msg}s here, including
+ * validated image data/URL attachments. Provider reasoning options remain server-controlled.
  */
 public final class HarnessAgentFactory {
 
@@ -104,6 +109,17 @@ public final class HarnessAgentFactory {
       AgentRunCapabilities capabilities,
       List<ChatTurn> history,
       String userText) {
+    return create(context, modelAdapter, config, capabilities, history, userText, List.of());
+  }
+
+  public RunnableAgent create(
+      RunContext context,
+      ModelAdapter modelAdapter,
+      AgentRuntimeConfig config,
+      AgentRunCapabilities capabilities,
+      List<ChatTurn> history,
+      String userText,
+      List<ChatAttachment> attachments) {
     Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
     PermissionContextState permissionContext =
         capabilities.permissionContext() == null
@@ -113,8 +129,8 @@ public final class HarnessAgentFactory {
         buildAgent(context, modelAdapter, config, capabilities, toolkit, permissionContext);
 
     List<Msg> messages = historyMessages(history);
-    messages.add(Msg.builder().role(MsgRole.USER).textContent(userText).build());
-    return runnable(context, agent, messages, 0L);
+    messages.add(userMessage(userText, attachments));
+    return runnable(context, agent, messages, 0L, config.outputReasoning());
   }
 
   /**
@@ -158,7 +174,12 @@ public final class HarnessAgentFactory {
             .build();
     HarnessAgent agent =
         buildAgent(context, modelAdapter, config, capabilities, toolkit, permissionContext);
-    return runnable(context, agent, List.of(confirmation), resume.checkpointSequence());
+    return runnable(
+        context,
+        agent,
+        List.of(confirmation),
+        resume.checkpointSequence(),
+        config.outputReasoning());
   }
 
   /** Restores a server-suspended question and supplies its durable response as a tool result. */
@@ -195,7 +216,11 @@ public final class HarnessAgentFactory {
         buildAgent(context, modelAdapter, config, capabilities, toolkit, permissionContext);
     // checkpoint+1 is reserved for the synthetic ToolOutputAvailable emitted by AgentRunService.
     return runnable(
-        context, agent, List.of(new ToolResultMessage(result)), resume.checkpointSequence() + 1);
+        context,
+        agent,
+        List.of(new ToolResultMessage(result)),
+        resume.checkpointSequence() + 1,
+        config.outputReasoning());
   }
 
   private HarnessAgent buildAgent(
@@ -205,7 +230,7 @@ public final class HarnessAgentFactory {
       AgentRunCapabilities capabilities,
       Toolkit toolkit,
       PermissionContextState permissionContext) {
-    Model model = modelAdapter.modelFor(context);
+    Model model = configuredModel(modelAdapter.modelFor(context), config);
     HarnessAgent.Builder builder =
         HarnessAgent.builder()
             .name("run-" + context.runId())
@@ -267,13 +292,43 @@ public final class HarnessAgentFactory {
     };
   }
 
+  private Model configuredModel(Model delegate, AgentRuntimeConfig config) {
+    if (config.reasoningEffort() == null) {
+      return delegate;
+    }
+    return new Model() {
+      @Override
+      public Flux<ChatResponse> stream(
+          List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+        GenerateOptions requestOptions =
+            GenerateOptions.builder().reasoningEffort(config.reasoningEffort()).build();
+        return delegate.stream(
+            messages, tools, GenerateOptions.mergeOptions(options, requestOptions));
+      }
+
+      @Override
+      public String getModelName() {
+        return delegate.getModelName();
+      }
+
+      @Override
+      public int getContextWindowSize() {
+        return delegate.getContextWindowSize();
+      }
+    };
+  }
+
   private RunnableAgent runnable(
-      RunContext context, HarnessAgent agent, List<Msg> messages, long initialSequence) {
+      RunContext context,
+      HarnessAgent agent,
+      List<Msg> messages,
+      long initialSequence,
+      boolean outputReasoning) {
     return new HarnessRunnableAgent(
         context.runId(),
         agent,
         messages,
-        new AgentEventMapper(context, clock, initialSequence),
+        new AgentEventMapper(context, clock, initialSequence, outputReasoning),
         RuntimeContext.builder()
             .userId(context.userId())
             // AgentScope state is run-scoped. Chat history is reconstructed by DataStoria.
@@ -311,9 +366,74 @@ public final class HarnessAgentFactory {
     List<Msg> messages = new ArrayList<>();
     for (ChatTurn turn : history) {
       MsgRole role = "assistant".equals(turn.role()) ? MsgRole.ASSISTANT : MsgRole.USER;
-      messages.add(Msg.builder().role(role).textContent(turn.text()).build());
+      if (role == MsgRole.USER) {
+        messages.add(userMessage(turn.text(), turn.attachments()));
+        continue;
+      }
+      List<ContentBlock> assistantContent = new ArrayList<>();
+      if (turn.text() != null && !turn.text().isBlank()) {
+        assistantContent.add(TextBlock.builder().text(turn.text()).build());
+      }
+      for (ChatToolExchange exchange : turn.toolExchanges()) {
+        assistantContent.add(
+            ToolUseBlock.builder()
+                .id(exchange.toolCallId())
+                .name(exchange.toolName())
+                .input(readToolInput(exchange.inputJson()))
+                .content(exchange.inputJson())
+                .state(ToolCallState.FINISHED)
+                .build());
+      }
+      if (!assistantContent.isEmpty()) {
+        messages.add(Msg.builder().role(role).content(assistantContent).build());
+      }
+      for (ChatToolExchange exchange : turn.toolExchanges()) {
+        messages.add(
+            new ToolResultMessage(
+                new ToolResultBlock(
+                    exchange.toolCallId(),
+                    exchange.toolName(),
+                    List.of(TextBlock.builder().text(exchange.outputJson()).build()),
+                    Map.of(),
+                    exchange.error() ? ToolResultState.ERROR : ToolResultState.SUCCESS)));
+      }
     }
     return messages;
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> readToolInput(String inputJson) {
+    try {
+      return new com.fasterxml.jackson.databind.ObjectMapper().readValue(inputJson, Map.class);
+    } catch (Exception ignored) {
+      return Map.of();
+    }
+  }
+
+  private Msg userMessage(String text, List<ChatAttachment> attachments) {
+    List<ContentBlock> content = new ArrayList<>();
+    if (text != null && !text.isBlank()) {
+      content.add(TextBlock.builder().text(text).build());
+    }
+    if (attachments != null) {
+      attachments.stream().map(this::dataBlock).forEach(content::add);
+    }
+    return Msg.builder().role(MsgRole.USER).content(content).build();
+  }
+
+  private DataBlock dataBlock(ChatAttachment attachment) {
+    String url = attachment.url();
+    io.agentscope.core.message.Source source;
+    if (url.startsWith("data:")) {
+      int comma = url.indexOf(',');
+      if (comma < 0 || !url.substring(0, comma).endsWith(";base64")) {
+        throw new IllegalArgumentException("Attachment data URL must be base64 encoded");
+      }
+      source = new Base64Source(attachment.mediaType(), url.substring(comma + 1));
+    } else {
+      source = new URLSource(url, attachment.mediaType());
+    }
+    return DataBlock.builder().source(source).name(attachment.filename()).build();
   }
 
   private String writeToolInput(Map<String, Object> input) {

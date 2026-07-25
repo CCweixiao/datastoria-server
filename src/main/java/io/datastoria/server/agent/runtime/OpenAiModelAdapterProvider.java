@@ -2,6 +2,8 @@ package io.datastoria.server.agent.runtime;
 
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.domain.Model;
@@ -23,14 +25,17 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
   private final ModelProviderRepository providerRepository;
   private final SecretService secretService;
   private final OAuthCredentialService oauthCredentialService;
+  private final ObjectMapper mapper;
 
   public OpenAiModelAdapterProvider(
       ModelProviderRepository providerRepository,
       SecretService secretService,
-      OAuthCredentialService oauthCredentialService) {
+      OAuthCredentialService oauthCredentialService,
+      ObjectMapper mapper) {
     this.providerRepository = providerRepository;
     this.secretService = secretService;
     this.oauthCredentialService = oauthCredentialService;
+    this.mapper = mapper;
   }
 
   @Override
@@ -46,8 +51,17 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
             .filter(ModelProvider::enabled)
             .orElseThrow(() -> new NotFoundException("ModelProvider", modelConfig.providerId()));
     boolean githubCopilot = "github-copilot".equalsIgnoreCase(provider.providerKey());
-    if (!githubCopilot && !isOpenAiCompatible(provider.providerKey())) {
+    boolean openAiCodex = "openai-codex".equalsIgnoreCase(provider.providerKey());
+    if (!githubCopilot && !openAiCodex && !isOpenAiCompatible(provider.providerKey())) {
       throw new IllegalArgumentException("Unsupported provider type");
+    }
+    if (openAiCodex) {
+      if (identity == null) {
+        throw new IllegalStateException("Authenticated identity is required for OAuth provider");
+      }
+      String accessToken = oauthCredentialService.accessToken("codex", identity);
+      var providerModel = new CodexResponsesChatModel(modelConfig.modelKey(), accessToken, mapper);
+      return ignored -> providerModel;
     }
     String apiKey;
     if (githubCopilot) {

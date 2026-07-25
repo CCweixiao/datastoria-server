@@ -1,9 +1,11 @@
 package io.datastoria.server.service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -12,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.api.error.PlainTextException;
+import io.datastoria.server.api.error.ProviderOperationException;
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.OAuthCredential;
 import io.datastoria.server.domain.Secret;
@@ -26,12 +29,20 @@ import reactor.core.scheduler.Scheduler;
 @Service
 public class OAuthCredentialService {
 
+  private static final String CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
+
   private final OAuthCredentialRepository credentials;
   private final SecretService secrets;
   private final OAuthRemoteClient remote;
   private final ObjectMapper mapper;
   private final TransactionTemplate transactions;
   private final Scheduler jdbcScheduler;
+
+  @Value("${datastoria.oauth.codex.client-id:app_EMoamEEZ73f0CkXaXp7hrann}")
+  private String codexClientId;
+
+  @Value("${datastoria.oauth.github.client-id:}")
+  private String githubClientId;
 
   public OAuthCredentialService(
       OAuthCredentialRepository credentials,
@@ -125,12 +136,19 @@ public class OAuthCredentialService {
         .flatMap(bundle -> remote.getGitHubModels(text(bundle.payload(), "access_token")));
   }
 
+  /** Checks owner-scoped OAuth configuration without decrypting or returning token material. */
+  public boolean hasCredential(String provider, Identity identity) {
+    return credentials.findByOwner(identity.tenantId(), identity.userId(), provider).isPresent();
+  }
+
   /** Returns a decrypted access token only to the server-side model adapter boundary. */
   public String accessToken(String provider, Identity identity) {
-    OAuthCredential credential =
-        credentials
-            .findByOwner(identity.tenantId(), identity.userId(), provider)
-            .orElseThrow(() -> new NotFoundException("OAuthCredential", provider));
+    OAuthCredential credential = credential(provider, identity);
+    if (credential.expiresAt() != null
+        && !credential.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
+      refreshForRuntime(provider, identity);
+      credential = credential(provider, identity);
+    }
     try {
       return text(
           mapper.readTree(secrets.decrypt(credential.secretId(), identity.tenantId())),
@@ -138,6 +156,25 @@ public class OAuthCredentialService {
     } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
       throw new IllegalStateException("Stored OAuth credential is invalid", exception);
     }
+  }
+
+  private OAuthCredential credential(String provider, Identity identity) {
+    return credentials
+        .findByOwner(identity.tenantId(), identity.userId(), provider)
+        .orElseThrow(() -> new NotFoundException("OAuthCredential", provider));
+  }
+
+  private void refreshForRuntime(String provider, Identity identity) {
+    if ("codex".equals(provider)) {
+      refreshCodex(codexClientId, CODEX_TOKEN_URL, identity).block(Duration.ofSeconds(15));
+      return;
+    }
+    if ("github".equals(provider) && githubClientId != null && !githubClientId.isBlank()) {
+      refreshGitHub(githubClientId, identity).block(Duration.ofSeconds(15));
+      return;
+    }
+    throw new ProviderOperationException(
+        "OAUTH_REFRESH_UNAVAILABLE", 503, "OAuth credential refresh is unavailable");
   }
 
   private Mono<OAuthCredentialResponse> persist(

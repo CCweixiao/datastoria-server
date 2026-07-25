@@ -86,6 +86,36 @@ class RunLifecycleRecorderTest {
     assertThat(messageRepo.saved).isEmpty(); // no hollow completed message on failure
   }
 
+  @Test
+  void persistsCompletedToolPartsEvenWhenAssistantHasNoText() throws Exception {
+    CapturingRunRepo runRepo = new CapturingRunRepo();
+    CapturingMessageRepo messageRepo = new CapturingMessageRepo();
+    RunLifecycleRecorder recorder =
+        new RunLifecycleRecorder(runRepo, messageRepo, Schedulers.newSingle("test-jdbc"));
+
+    recorder
+        .tap(
+            new RunMessageContext("tenant", "r", "user-1", "sess-1", "msg-tool", "mdl-1"),
+            Flux.just(
+                new AgentRunEvent.ToolInputAvailable(
+                    "r", 1, NOW, "call-1", "execute_sql", "{\"query\":\"SELECT 1\"}"),
+                new AgentRunEvent.ToolOutputAvailable(
+                    "r", 2, NOW, "call-1", "execute_sql", "{\"rows\":1}", false, false),
+                new AgentRunEvent.RunCompleted("r", 3, NOW)))
+        .blockLast();
+
+    assertThat(messageRepo.latch.await(2, TimeUnit.SECONDS)).isTrue();
+    assertThat(messageRepo.saved)
+        .singleElement()
+        .satisfies(
+            message ->
+                assertThat(message.partsJson())
+                    .contains("\"type\":\"dynamic-tool\"")
+                    .contains("\"state\":\"output-available\"")
+                    .contains("\"query\":\"SELECT 1\"")
+                    .contains("\"rows\":1"));
+  }
+
   private static final class CapturingRunRepo implements AgentRunRepository {
     final CountDownLatch latch = new CountDownLatch(1);
     volatile AgentRunStatus status;

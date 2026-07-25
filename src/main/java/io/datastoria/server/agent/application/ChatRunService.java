@@ -272,12 +272,7 @@ public class ChatRunService {
             run.modelId(),
             run.createdAt());
     AgentRunCapabilities capabilities = resolvePinnedCapabilities(identity, run, context, adapter);
-    java.util.List<ChatTurn> history =
-        messageRepository.findBySession(run.sessionId(), run.tenantId()).stream()
-            .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
-            .map(message -> new ChatTurn(message.role(), textContent(message)))
-            .filter(turn -> !turn.text().isBlank())
-            .toList();
+    java.util.List<ChatTurn> history = loadPersistedHistory(run.sessionId(), run.tenantId(), null);
 
     runRepository.transition(
         run.tenantId(), run.id(), AgentRunStatus.RUNNING, RunTransition.starting(Instant.now()));
@@ -324,14 +319,35 @@ public class ChatRunService {
   }
 
   private AgentRuntimeConfig resolvePinnedAgentConfig(AgentRun run, String tenantId) {
+    AgentRuntimeConfig base;
     if (BUILTIN_DEFAULT_REVISION.equals(run.agentRevisionId())) {
-      return AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT);
+      base = AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT);
+    } else {
+      AgentRevision revision =
+          agentRevisionRepository
+              .findById(run.agentRevisionId(), tenantId)
+              .orElseThrow(() -> new NotFoundException("AgentRevision", run.agentRevisionId()));
+      base = AgentRuntimeConfig.minimal(revision.systemPrompt());
     }
-    AgentRevision revision =
-        agentRevisionRepository
-            .findById(run.agentRevisionId(), tenantId)
-            .orElseThrow(() -> new NotFoundException("AgentRevision", run.agentRevisionId()));
-    return AgentRuntimeConfig.minimal(revision.systemPrompt());
+    try {
+      return AgentContextOptions.apply(
+          base, run.inputSnapshotJson() == null ? null : mapper.readTree(run.inputSnapshotJson()));
+    } catch (Exception ignored) {
+      return base;
+    }
+  }
+
+  private String runtimeOptionsSnapshot(JsonNode context) {
+    if (context == null || !context.isObject()) {
+      return "{}";
+    }
+    var safe = mapper.createObjectNode();
+    for (String key : java.util.List.of("responseLanguage", "reasoningLevel", "outputReasoning")) {
+      if (context.has(key)) {
+        safe.set(key, context.get(key));
+      }
+    }
+    return safe.toString();
   }
 
   private AgentRunCapabilities resolvePinnedCapabilities(
@@ -428,8 +444,10 @@ public class ChatRunService {
     if (!"user".equals(req.role())) {
       throw PlainTextException.badRequest("message.role must be user");
     }
-    if (req.userText().isBlank()) {
-      throw PlainTextException.badRequest("message.parts must contain text");
+    java.util.List<ChatAttachment> currentAttachments =
+        attachments(req.message() == null ? null : req.message().path("parts"));
+    if (req.userText().isBlank() && currentAttachments.isEmpty()) {
+      throw PlainTextException.badRequest("message.parts must contain text or an image");
     }
 
     Model modelConfig = resolveModel(req, tenant);
@@ -487,7 +505,7 @@ public class ChatRunService {
             idempotencyKey,
             idempotencyKey,
             req.connectionId(),
-            null,
+            runtimeOptionsSnapshot(req.agentContext()),
             null,
             null,
             null,
@@ -515,10 +533,11 @@ public class ChatRunService {
         new RunRequest(
             context,
             adapter,
-            agent.config(),
+            AgentContextOptions.apply(agent.config(), req.agentContext()),
             resolvedCapabilities.capabilities(),
             loadHistory(req, tenant),
-            req.userText());
+            enrichedUserText(req, tenant),
+            currentAttachments);
     return new PreparedRun(runId, runRequest);
   }
 
@@ -595,19 +614,60 @@ public class ChatRunService {
   }
 
   private java.util.List<ChatTurn> loadHistory(AgentChatRequest req, String tenant) {
-    return messageRepository.findBySession(req.sessionId(), tenant).stream()
-        // The frontend persists the incoming user message before calling A01. It is appended below,
-        // so exclude that exact id to avoid presenting the current turn twice.
-        .filter(message -> !Objects.equals(message.id(), req.messageId()))
-        .filter(message -> "user".equals(message.role()) || "assistant".equals(message.role()))
-        .map(message -> new ChatTurn(message.role(), textContent(message)))
-        .filter(turn -> !turn.text().isBlank())
-        .toList();
+    return loadPersistedHistory(req.sessionId(), tenant, req.messageId());
+  }
+
+  private java.util.List<ChatTurn> loadPersistedHistory(
+      String sessionId, String tenant, String excludedMessageId) {
+    MentionContextFormatter mentions = new MentionContextFormatter();
+    java.util.List<ChatTurn> turns = new java.util.ArrayList<>();
+    for (ChatMessage message : messageRepository.findBySession(sessionId, tenant)) {
+      // The frontend persists the incoming user message before calling A01. It is appended below,
+      // so exclude that exact id to avoid presenting the current turn twice.
+      if (Objects.equals(message.id(), excludedMessageId)
+          || (!"user".equals(message.role()) && !"assistant".equals(message.role()))) {
+        continue;
+      }
+      String text = textContent(message);
+      if ("user".equals(message.role())) {
+        text = mentions.apply(text, metadata(message));
+      }
+      java.util.List<ChatAttachment> messageAttachments =
+          "user".equals(message.role()) ? attachments(parts(message)) : java.util.List.of();
+      java.util.List<ChatToolExchange> messageTools =
+          "assistant".equals(message.role()) ? toolExchanges(parts(message)) : java.util.List.of();
+      if (!text.isBlank() || !messageAttachments.isEmpty() || !messageTools.isEmpty()) {
+        turns.add(new ChatTurn(message.role(), text, messageAttachments, messageTools));
+      }
+    }
+    return turns;
+  }
+
+  private String enrichedUserText(AgentChatRequest req, String tenant) {
+    MentionContextFormatter mentions = new MentionContextFormatter();
+    for (ChatMessage message : messageRepository.findBySession(req.sessionId(), tenant)) {
+      if ("user".equals(message.role()) && !Objects.equals(message.id(), req.messageId())) {
+        mentions.apply(textContent(message), metadata(message));
+      }
+    }
+    JsonNode metadata = req.message() == null ? null : req.message().path("metadata");
+    return mentions.apply(req.userText(), metadata);
+  }
+
+  private JsonNode metadata(ChatMessage message) {
+    if (message.metadataJson() == null || message.metadataJson().isBlank()) {
+      return null;
+    }
+    try {
+      return mapper.readTree(message.metadataJson());
+    } catch (Exception ignored) {
+      return null;
+    }
   }
 
   private String textContent(ChatMessage message) {
     try {
-      JsonNode parts = mapper.readTree(message.partsJson());
+      JsonNode parts = parts(message);
       if (!parts.isArray()) {
         return "";
       }
@@ -626,6 +686,73 @@ public class ChatRunService {
       // owns data integrity. Unknown/non-text UI parts are intentionally not sent in text-only P4.
       return "";
     }
+  }
+
+  private JsonNode parts(ChatMessage message) {
+    try {
+      return mapper.readTree(message.partsJson());
+    } catch (Exception ignored) {
+      return mapper.createArrayNode();
+    }
+  }
+
+  private java.util.List<ChatToolExchange> toolExchanges(JsonNode parts) {
+    if (parts == null || !parts.isArray()) {
+      return java.util.List.of();
+    }
+    java.util.List<ChatToolExchange> exchanges = new java.util.ArrayList<>();
+    for (JsonNode part : parts) {
+      String type = part.path("type").asText("");
+      if (!"dynamic-tool".equals(type) && !type.startsWith("tool-")) {
+        continue;
+      }
+      String callId = part.path("toolCallId").asText("");
+      String toolName = part.path("toolName").asText("");
+      if (callId.isBlank() || toolName.isBlank() || !part.has("input")) {
+        continue;
+      }
+      String state = part.path("state").asText("");
+      JsonNode output = part.has("output") ? part.get("output") : part.get("errorText");
+      if (output == null
+          || (!"output-available".equals(state)
+              && !"output-error".equals(state)
+              && !"output-denied".equals(state))) {
+        continue;
+      }
+      exchanges.add(
+          new ChatToolExchange(
+              callId,
+              toolName,
+              part.get("input").toString(),
+              output.isTextual() ? output.asText() : output.toString(),
+              !"output-available".equals(state)));
+    }
+    return java.util.List.copyOf(exchanges);
+  }
+
+  private java.util.List<ChatAttachment> attachments(JsonNode parts) {
+    if (parts == null || !parts.isArray()) {
+      return java.util.List.of();
+    }
+    java.util.List<ChatAttachment> attachments = new java.util.ArrayList<>();
+    for (JsonNode part : parts) {
+      if (!part.isObject() || !"file".equals(part.path("type").asText())) {
+        continue;
+      }
+      String mediaType = part.path("mediaType").asText();
+      String url = part.path("url").asText();
+      if (!mediaType.startsWith("image/")
+          || !(url.startsWith("data:image/")
+              || url.startsWith("https://")
+              || url.startsWith("http://"))) {
+        throw PlainTextException.badRequest(
+            "Only image file parts with data/http URLs are supported");
+      }
+      attachments.add(
+          new ChatAttachment(
+              mediaType, url, part.hasNonNull("filename") ? part.path("filename").asText() : null));
+    }
+    return java.util.List.copyOf(attachments);
   }
 
   /** Rejects a duplicate idempotent submission; behavior is fixed per run status. */

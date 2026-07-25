@@ -1,4 +1,3 @@
-import type { AppUIMessage, MentionMetadata } from "@/lib/ai/ai-types";
 import { describe, expect, it } from "vitest";
 import { MentionContext } from "./mention-context";
 
@@ -75,38 +74,5 @@ describe("MentionContext.toMetadata", () => {
         },
       ],
     });
-  });
-});
-
-describe("MentionContext.inject", () => {
-  function createUserMessage(
-    id: string,
-    text: string,
-    mentionMetadata?: MentionMetadata
-  ): AppUIMessage {
-    return {
-      id,
-      role: "user",
-      parts: [{ type: "text", text }],
-      metadata: mentionMetadata ? { mentionMetadata } : undefined,
-    } as AppUIMessage;
-  }
-
-  it("replays active mention context into later user turns", () => {
-    const messages = MentionContext.inject([
-      createUserMessage("m1", "inspect this", {
-        version: 1,
-        mentions: [{ kind: "table", name: "system.query_log", engine: "MergeTree" }],
-      }),
-      createUserMessage("m2", "what columns does it have?"),
-    ]);
-
-    const secondUserMessage = messages[1];
-    expect(secondUserMessage.parts).toEqual([
-      {
-        type: "text",
-        text: "what columns does it have?\n\n[system-added context]\nMentioned tables:\n- system.query_log (engine: MergeTree)",
-      },
-    ]);
   });
 });

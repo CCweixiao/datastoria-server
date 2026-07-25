@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.datastoria.server.TestDbHelper;
+import io.datastoria.server.identity.Identity;
+import io.datastoria.server.service.OAuthCredentialService;
 import io.datastoria.server.service.OAuthRemoteClient;
 
 import reactor.core.publisher.Mono;
@@ -40,6 +43,7 @@ class OAuthCompatibilityApiTest {
   @Autowired TestDbHelper dbHelper;
   @Autowired JdbcClient jdbc;
   @Autowired ObjectMapper mapper;
+  @Autowired OAuthCredentialService credentials;
   @MockitoBean OAuthRemoteClient remote;
 
   @BeforeEach
@@ -96,6 +100,62 @@ class OAuthCompatibilityApiTest {
     assertThat(new String(cipherText, java.nio.charset.StandardCharsets.UTF_8))
         .doesNotContain("codex-access-secret")
         .doesNotContain("codex-refresh-secret");
+  }
+
+  @Test
+  void expiredCodexAccessTokenIsRefreshedAtTheServerModelBoundary() throws Exception {
+    when(remote.postForm(anyString(), any()))
+        .thenReturn(
+            Mono.just(
+                mapper.readTree(
+                    """
+                    {"access_token":"old-access","refresh_token":"stored-refresh",
+                     "expires_in":3600}
+                    """)));
+    web.post()
+        .uri("/api/ai/codex/auth/token")
+        .header(IDENTITY_HEADER, "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {"code":"code","code_verifier":"verifier",
+             "redirect_uri":"http://localhost:1455/auth/callback"}
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    Map<String, Object> owner =
+        jdbc.sql("SELECT tenant_id,user_id FROM ds_oauth_credential WHERE provider_key='codex'")
+            .query()
+            .singleRow();
+    jdbc.sql(
+            "UPDATE ds_oauth_credential SET expires_at='2000-01-01T00:00:00'"
+                + " WHERE provider_key='codex'")
+        .update();
+    when(remote.postForm(anyString(), any()))
+        .thenReturn(
+            Mono.just(
+                mapper.readTree(
+                    """
+                    {"access_token":"new-access","expires_in":3600}
+                    """)));
+
+    String token =
+        credentials.accessToken(
+            "codex",
+            new Identity(
+                String.valueOf(owner.get("tenant_id")),
+                String.valueOf(owner.get("user_id")),
+                Set.of("ROLE_USER")));
+
+    assertThat(token).isEqualTo("new-access");
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> request = ArgumentCaptor.forClass(Map.class);
+    verify(remote, org.mockito.Mockito.times(2)).postForm(anyString(), request.capture());
+    assertThat(request.getAllValues().get(1))
+        .containsEntry("refresh_token", "stored-refresh")
+        .doesNotContainKey("access_token");
   }
 
   @Test

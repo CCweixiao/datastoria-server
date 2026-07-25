@@ -1205,3 +1205,32 @@ ID，不携带 secret。对话联调应验证两轮历史、刷新后的 assista
 完整迁移审计仍在继续：OpenAI Codex 订阅认证使用 ChatGPT Responses API，并非
 Chat Completions。它需要独立的 Java AgentScope Responses adapter 后才能算真实接入，不能复用
 现有 OpenAI-compatible adapter。此项完成前不开始 P5。
+
+## P4.8-6. Codex Responses 与多轮上下文收口（2026-07-26）
+
+上述遗留项已完成：
+
+1. Java 新增独立的 Codex Responses AgentScope `ChatModel`，通过服务端保存的 Codex OAuth
+   credential 调用 `chatgpt.com/backend-api/codex/responses`；请求带 access token 和从 JWT
+   提取的 account id，支持 SSE 文本、reasoning summary、function call、usage 与图片输入。
+   credential 临近过期时由 Java 自动刷新，token 不返回浏览器。
+2. `/api/models/available` 为已连接 Codex 的当前用户物化独立 provider/model/configId；前端设置页
+   只负责 PKCE 登录和展示，不包含 provider 执行代码。
+3. A01 的图片 parts、mention context、`responseLanguage`、`reasoningLevel` 和
+   `outputReasoning` 已在 Java 校验并转换到 AgentScope。非法语言 tag 不能注入 system prompt；
+   关闭 reasoning 时 Java 不向 UI 输出 thinking 事件。
+4. assistant 的工具调用与结果（包括 tool-only 回答）以 `dynamic-tool` parts 落库；下一轮或 JVM
+   重启后重建为 AgentScope `ToolUseBlock`/`ToolResultMessage`，避免只恢复文字造成多轮上下文丢失。
+5. 新增 REST inventory guard，将冻结 OpenAPI 中 A01–A29（A28 由 Spring Security/auth
+   compatibility controller 承担）的业务 operation 与实际 WebFlux handler 对照，防止路由迁移回退。
+
+本轮最终回归：
+
+- Java 17：`./mvnw spotless:check test` 通过，Surefire 报告 **342 tests，0 failure，
+  0 error**；Testcontainers 因本机无 Docker，MySQL schema parity 仍按既有限制跳过。
+- 前端：TypeScript 通过；Vitest **57 files / 296 tests** 通过；`next build --webpack`
+  成功，产物仍无 `/api/*` 路由。
+- 静态审计：`frontend/src` 生产代码未发现 `ai`/`@ai-sdk`/provider SDK、browser storage 或
+  ClickHouse client 执行入口。
+
+P4.8 的 Codex、图片、多轮工具历史和 request-scoped 模型选项已完成；仍不自动开始 P5。

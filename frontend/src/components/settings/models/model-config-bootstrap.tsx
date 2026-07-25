@@ -26,7 +26,7 @@ async function bootstrapModelCatalog(): Promise<boolean> {
   const manager = ModelManager.getInstance();
 
   try {
-    const [{ systemModels, githubModels }] = await Promise.all([
+    const [{ systemModels, githubModels, codexModels = [] }] = await Promise.all([
       fetchAvailableModels(),
       AgentConfigurationManager.hydrate(),
     ]);
@@ -34,9 +34,9 @@ async function bootstrapModelCatalog(): Promise<boolean> {
     // credential state always corresponds to the returned models on a brand-new database.
     const providers = await getAiConfigurationGateway().listProviders();
 
-    manager.setSystemModels([...systemModels, ...githubModels], false);
-    const oauthProviders =
-      githubModels.length > 0
+    manager.setSystemModels([...systemModels, ...githubModels, ...codexModels], false);
+    const oauthProviders = [
+      ...(githubModels.length > 0
         ? [
             {
               provider: "GitHub Copilot",
@@ -45,7 +45,18 @@ async function bootstrapModelCatalog(): Promise<boolean> {
               maskedHint: "OAuth connected",
             },
           ]
-        : [];
+        : []),
+      ...(codexModels.length > 0
+        ? [
+            {
+              provider: "OpenAI Codex",
+              providerId: "oauth:codex",
+              credentialConfigured: true,
+              maskedHint: "OAuth connected",
+            },
+          ]
+        : []),
+    ];
     manager.setProviderSettings(
       [
         ...providers.map((provider) => ({

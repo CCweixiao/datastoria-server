@@ -20,11 +20,13 @@ public record RunRequest(
     AgentRuntimeConfig config,
     AgentRunCapabilities capabilities,
     List<ChatTurn> history,
-    String userText) {
+    String userText,
+    List<ChatAttachment> attachments) {
 
   public RunRequest(
       RunContext context, ModelAdapter modelAdapter, AgentRuntimeConfig config, String userText) {
-    this(context, modelAdapter, config, AgentRunCapabilities.none(), List.of(), userText);
+    this(
+        context, modelAdapter, config, AgentRunCapabilities.none(), List.of(), userText, List.of());
   }
 
   public RunRequest(
@@ -33,7 +35,17 @@ public record RunRequest(
       AgentRuntimeConfig config,
       List<ChatTurn> history,
       String userText) {
-    this(context, modelAdapter, config, AgentRunCapabilities.none(), history, userText);
+    this(context, modelAdapter, config, AgentRunCapabilities.none(), history, userText, List.of());
+  }
+
+  public RunRequest(
+      RunContext context,
+      ModelAdapter modelAdapter,
+      AgentRuntimeConfig config,
+      AgentRunCapabilities capabilities,
+      List<ChatTurn> history,
+      String userText) {
+    this(context, modelAdapter, config, capabilities, history, userText, List.of());
   }
 
   public RunRequest {
@@ -43,5 +55,6 @@ public record RunRequest(
     capabilities = capabilities == null ? AgentRunCapabilities.none() : capabilities;
     history = history == null ? List.of() : List.copyOf(history);
     userText = userText == null ? "" : userText;
+    attachments = attachments == null ? List.of() : List.copyOf(attachments);
   }
 }

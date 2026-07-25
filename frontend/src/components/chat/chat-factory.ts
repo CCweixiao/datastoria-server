@@ -302,7 +302,7 @@ export class ChatFactory {
       return undefined;
     }
 
-    return { configId: (selectedModel as { configId?: string }).configId };
+    return { configId: selectedModel.configId };
   }
 
   /**

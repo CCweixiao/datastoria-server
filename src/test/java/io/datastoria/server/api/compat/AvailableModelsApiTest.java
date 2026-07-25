@@ -46,6 +46,8 @@ class AvailableModelsApiTest {
         .jsonPath("$.systemModels[*].supportsReasoning")
         .value(org.hamcrest.Matchers.hasItem(true))
         .jsonPath("$.githubModels.length()")
+        .isEqualTo(0)
+        .jsonPath("$.codexModels.length()")
         .isEqualTo(0);
   }
 
@@ -161,6 +163,56 @@ class AvailableModelsApiTest {
         .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("copilot-model")))
         .jsonPath("$.githubModels.length()")
         .isEqualTo(1);
+  }
+
+  @Test
+  void storedCodexOAuthCredentialMaterializesExecutableCodexModels() throws Exception {
+    org.mockito.Mockito.when(
+            oauthRemote.postForm(
+                org.mockito.ArgumentMatchers.eq("https://auth.openai.com/oauth/token"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            reactor.core.publisher.Mono.just(
+                mapper.readTree(
+                    """
+                    {"access_token":"codex-token","refresh_token":"codex-refresh",
+                     "expires_in":3600}
+                    """)));
+
+    web.post()
+        .uri("/api/ai/codex/auth/token")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(
+            """
+            {"code":"authorization-code","code_verifier":"verifier",
+             "redirect_uri":"http://localhost:1455/auth/callback"}
+            """)
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    web.post()
+        .uri("/api/ai/models/available")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.systemModels[*].provider")
+        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("OpenAI Codex")))
+        .jsonPath("$.codexModels.length()")
+        .isEqualTo(5)
+        .jsonPath("$.codexModels[*].modelId")
+        .value(
+            org.hamcrest.Matchers.hasItems(
+                "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"))
+        .jsonPath("$.codexModels[*].configId")
+        .value(
+            org.hamcrest.Matchers.everyItem(
+                org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyString())));
   }
 
   private void createProviderAndModel(String providerKey, String modelKey, String displayName) {

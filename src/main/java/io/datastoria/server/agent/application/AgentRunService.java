@@ -79,7 +79,8 @@ public final class AgentRunService {
                 request.config(),
                 request.capabilities(),
                 request.history(),
-                request.userText()));
+                request.userText(),
+                request.attachments()));
   }
 
   /** Resumes one permission-paused run by delivering persisted decisions as ConfirmResults. */

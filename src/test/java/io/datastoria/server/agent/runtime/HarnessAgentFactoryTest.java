@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import io.agentscope.core.message.DataBlock;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolCallState;
@@ -25,6 +26,7 @@ import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.skill.AgentSkill;
 import io.agentscope.core.tool.Tool;
+import io.datastoria.server.agent.application.ChatAttachment;
 import io.datastoria.server.agent.application.ChatTurn;
 import io.datastoria.server.agent.domain.AgentRunEvent;
 import io.datastoria.server.agent.domain.RunContext;
@@ -64,6 +66,53 @@ class HarnessAgentFactoryTest {
     assertThat(model.lastToolCount())
         .as("P4 minimal Harness exposes no tools at the model boundary")
         .isZero();
+  }
+
+  @Test
+  void sendsCurrentAndHistoricalImagesToAgentScopeModel() {
+    CapturingMessageModel model = new CapturingMessageModel();
+
+    new HarnessAgentFactory()
+        .create(
+            ctx("run-images"),
+            new FakeModelAdapter(model),
+            AgentRuntimeConfig.minimal("sys"),
+            AgentRunCapabilities.none(),
+            List.of(
+                new ChatTurn(
+                    "user",
+                    "history",
+                    List.of(
+                        new ChatAttachment(
+                            "image/png", "https://example.test/history.png", "history.png")))),
+            "",
+            List.of(
+                new ChatAttachment("image/png", "data:image/png;base64,aGVsbG8=", "current.png")))
+        .streamEvents()
+        .collectList()
+        .block();
+
+    assertThat(
+            model.messages.stream()
+                .flatMap(message -> message.getContentBlocks(DataBlock.class).stream()))
+        .hasSize(2);
+  }
+
+  @Test
+  void appliesReasoningEffortToAgentScopeGenerateOptions() {
+    CapturingMessageModel model = new CapturingMessageModel();
+
+    new HarnessAgentFactory()
+        .create(
+            ctx("run-reasoning"),
+            new FakeModelAdapter(model),
+            AgentRuntimeConfig.minimal("sys").withRequestOptions("sys", "high", true),
+            "explain")
+        .streamEvents()
+        .collectList()
+        .block();
+
+    assertThat(model.options.getReasoningEffort()).isEqualTo("high");
   }
 
   @Test
@@ -422,6 +471,36 @@ class HarnessAgentFactoryTest {
 
     int invocations() {
       return invocations.get();
+    }
+  }
+
+  static final class CapturingMessageModel implements Model {
+    private volatile List<Msg> messages = List.of();
+    private volatile GenerateOptions options;
+
+    @Override
+    public Flux<ChatResponse> stream(
+        List<Msg> messages, List<ToolSchema> tools, GenerateOptions options) {
+      this.messages = List.copyOf(messages);
+      this.options = options;
+      return Flux.just(
+          ChatResponse.builder().content(List.of(TextBlock.builder().text("ok").build())).build(),
+          ChatResponse.builder()
+              .content(List.of())
+              .usage(ChatUsage.builder().inputTokens(1).outputTokens(1).time(0.0).build())
+              .finishReason("stop")
+              .metadata(Map.of())
+              .build());
+    }
+
+    @Override
+    public String getModelName() {
+      return "capture";
+    }
+
+    @Override
+    public int getContextWindowSize() {
+      return 128_000;
     }
   }
 

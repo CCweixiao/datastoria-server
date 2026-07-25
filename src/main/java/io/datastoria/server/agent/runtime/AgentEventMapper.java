@@ -45,6 +45,7 @@ public final class AgentEventMapper {
   private final RunContext context;
   private final Clock clock;
   private final AtomicLong sequence = new AtomicLong();
+  private final boolean outputReasoning;
   private final ObjectMapper json =
       new ObjectMapper().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
   private final Map<String, StringBuilder> toolInputs = new ConcurrentHashMap<>();
@@ -55,9 +56,15 @@ public final class AgentEventMapper {
   }
 
   public AgentEventMapper(RunContext context, Clock clock, long initialSequence) {
+    this(context, clock, initialSequence, true);
+  }
+
+  public AgentEventMapper(
+      RunContext context, Clock clock, long initialSequence, boolean outputReasoning) {
     this.context = context;
     this.clock = clock;
     this.sequence.set(initialSequence);
+    this.outputReasoning = outputReasoning;
   }
 
   /**
@@ -77,12 +84,21 @@ public final class AgentEventMapper {
             new AgentRunEvent.RunStarted(
                 runId, seq(), now(), context.sessionId(), context.messageId()));
       case THINKING_BLOCK_START:
+        if (!outputReasoning) {
+          return Optional.empty();
+        }
         return Optional.of(new AgentRunEvent.ReasoningBlockStarted(runId, seq(), now()));
       case THINKING_BLOCK_DELTA:
+        if (!outputReasoning) {
+          return Optional.empty();
+        }
         return Optional.of(
             new AgentRunEvent.ReasoningDelta(
                 runId, seq(), now(), ((ThinkingBlockDeltaEvent) event).getDelta()));
       case THINKING_BLOCK_END:
+        if (!outputReasoning) {
+          return Optional.empty();
+        }
         return Optional.of(new AgentRunEvent.ReasoningBlockEnded(runId, seq(), now()));
       case TEXT_BLOCK_START:
         return Optional.of(new AgentRunEvent.TextBlockStarted(runId, seq(), now()));

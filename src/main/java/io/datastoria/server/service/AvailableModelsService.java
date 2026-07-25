@@ -66,8 +66,54 @@ public class AvailableModelsService {
                     Mono.fromCallable(() -> githubModels(identity, payload))
                         .subscribeOn(jdbcScheduler))
             .onErrorResume(NotFoundException.class, ignored -> Mono.just(List.of()));
-    return Mono.zip(system, github)
-        .map(result -> new AvailableModelsResponse(result.getT1(), result.getT2()));
+    Mono<List<ModelProps>> codex =
+        Mono.fromCallable(() -> codexModels(identity)).subscribeOn(jdbcScheduler);
+    return Mono.zip(system, github, codex)
+        .map(result -> new AvailableModelsResponse(result.getT1(), result.getT2(), result.getT3()));
+  }
+
+  private List<ModelProps> codexModels(Identity identity) {
+    if (!oauthCredentials.hasCredential("codex", identity)) {
+      return List.of();
+    }
+    ModelProvider provider =
+        oauthProvider(
+            identity, "openai-codex", "OpenAI Codex", "https://chatgpt.com/backend-api/codex");
+    Map<String, Model> stored =
+        modelRepo.findAll(identity.tenantId()).stream()
+            .filter(model -> provider.id().equals(model.providerId()))
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    Model::modelKey, model -> model, (left, right) -> left));
+    return List.of(
+            new CodexModel("gpt-5.4", true),
+            new CodexModel("gpt-5.4-mini", true),
+            new CodexModel("gpt-5.3-codex", true),
+            new CodexModel("gpt-5.3-codex-spark", false),
+            new CodexModel("gpt-5.2", true))
+        .stream()
+        .map(
+            definition -> {
+              Model model =
+                  stored.computeIfAbsent(
+                      definition.modelKey(),
+                      ignored -> modelRepo.save(codexModel(identity, provider, definition)));
+              return new ModelProps(
+                  "OpenAI Codex",
+                  definition.modelKey(),
+                  "Codex model accessed with ChatGPT/Codex subscription authentication.",
+                  false,
+                  false,
+                  !model.enabled(),
+                  List.of("responses"),
+                  definition.vision(),
+                  false,
+                  true,
+                  List.of("low", "medium", "high", "xhigh"),
+                  "user",
+                  model.id());
+            })
+        .toList();
   }
 
   private List<ModelProps> githubModels(Identity identity, JsonNode payload) {
@@ -111,8 +157,14 @@ public class AvailableModelsService {
   }
 
   private ModelProvider githubProvider(Identity identity) {
+    return oauthProvider(
+        identity, "github-copilot", "GitHub Copilot", "https://api.githubcopilot.com");
+  }
+
+  private ModelProvider oauthProvider(
+      Identity identity, String providerKey, String displayName, String baseUrl) {
     return providerRepo.findAll(identity.tenantId()).stream()
-        .filter(provider -> "github-copilot".equalsIgnoreCase(provider.providerKey()))
+        .filter(provider -> providerKey.equalsIgnoreCase(provider.providerKey()))
         .findFirst()
         .orElseGet(
             () ->
@@ -120,9 +172,9 @@ public class AvailableModelsService {
                     new ModelProvider(
                         Ulid.next(),
                         identity.tenantId(),
-                        "github-copilot",
-                        "GitHub Copilot",
-                        "https://api.githubcopilot.com",
+                        providerKey,
+                        displayName,
+                        baseUrl,
                         "oauth",
                         true,
                         "{}",
@@ -133,6 +185,36 @@ public class AvailableModelsService {
                         Instant.now(),
                         Instant.now(),
                         null)));
+  }
+
+  private Model codexModel(Identity identity, ModelProvider provider, CodexModel definition) {
+    com.fasterxml.jackson.databind.node.ObjectNode capabilities = mapper.createObjectNode();
+    capabilities
+        .put("autoSelectable", false)
+        .put("supportsImageInput", definition.vision())
+        .put("supportsTemperature", false)
+        .put("supportsReasoning", true);
+    capabilities.set("supportedEndpoints", mapper.valueToTree(List.of("responses")));
+    capabilities.set(
+        "reasoningLevels", mapper.valueToTree(List.of("low", "medium", "high", "xhigh")));
+    Instant now = Instant.now();
+    return new Model(
+        Ulid.next(),
+        identity.tenantId(),
+        provider.id(),
+        definition.modelKey(),
+        definition.modelKey(),
+        "Codex model accessed with ChatGPT/Codex subscription authentication.",
+        "discovered",
+        true,
+        false,
+        capabilities.toString(),
+        "{}",
+        null,
+        0,
+        now,
+        now,
+        null);
   }
 
   private Model githubModel(Identity identity, ModelProvider provider, JsonNode node) {
@@ -268,4 +350,6 @@ public class AvailableModelsService {
         .map(JsonNode::asText)
         .toList();
   }
+
+  private record CodexModel(String modelKey, boolean vision) {}
 }

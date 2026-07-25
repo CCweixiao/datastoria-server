@@ -3,6 +3,8 @@ import type { ReasoningLevel } from "@/lib/ai/reasoning-levels";
 export type ModelSource = "user" | "system";
 
 export interface ModelProps {
+  /** Persistent Spring model configuration identifier used for AgentScope execution. */
+  configId?: string;
   provider: string;
   modelId: string;
   description?: string;
