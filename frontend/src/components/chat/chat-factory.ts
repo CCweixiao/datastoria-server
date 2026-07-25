@@ -8,6 +8,7 @@ import type { AgentContext, AppUIMessage, Message } from "@/lib/ai/ai-types";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
+import { backendApiFetch } from "@/lib/backend-api";
 import { Connection } from "@/lib/connection/connection";
 import { Chat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -219,7 +220,7 @@ export class ChatFactory {
       },
       undefined
     );
-    const resolved = await fetch(
+    const resolved = await backendApiFetch(
       `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond`,
       {
         method: "POST",
@@ -249,7 +250,7 @@ export class ChatFactory {
     const javaApiBase = (
       process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
     ).replace(/\/+$/, "");
-    const resolved = await fetch(
+    const resolved = await backendApiFetch(
       `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:${approved ? "approve" : "deny"}`,
       {
         method: "POST",
@@ -266,7 +267,7 @@ export class ChatFactory {
     if (!resolved.ok) {
       throw new Error((await resolved.text()) || "Failed to resolve approval.");
     }
-    const snapshot = await fetch(
+    const snapshot = await backendApiFetch(
       `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}`,
       {
         headers: buildChatRequestHeaders(undefined, undefined),
@@ -401,10 +402,10 @@ export class ChatFactory {
       transport: new DefaultChatTransport({
         fetch: async (input, init) => {
           if (resumeRunId && String(input).includes(`${encodeURIComponent(resumeRunId)}:resume`)) {
-            return fetch(input, { ...init, method: "POST" });
+            return backendApiFetch(input, { ...init, method: "POST" });
           }
           const endpoint = `${javaApiBase}/api/ai/agent`;
-          return fetch(endpoint, init);
+          return backendApiFetch(endpoint, init);
         },
         prepareReconnectToStreamRequest: ({ headers, credentials }) => {
           if (!resumeRunId) {

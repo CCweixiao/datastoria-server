@@ -1,0 +1,40 @@
+import { backendApiFetch, backendApiUrl } from "@/lib/backend-api";
+
+export type AuthProvider = {
+  id: string;
+  name: string;
+  signinUrl: string;
+};
+
+export type AuthSession = {
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+    image?: string;
+  };
+  expires?: string;
+};
+
+export async function loadAuthProviders(): Promise<Record<string, AuthProvider>> {
+  const response = await backendApiFetch(backendApiUrl("/api/auth/providers"));
+  if (!response.ok) {
+    throw new Error(`Failed to load authentication providers: ${response.status}`);
+  }
+  return (await response.json()) as Record<string, AuthProvider>;
+}
+
+export async function loadAuthSession(): Promise<AuthSession> {
+  const response = await backendApiFetch(backendApiUrl("/api/auth/session"));
+  if (response.status === 401) {
+    return {};
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to load authentication session: ${response.status}`);
+  }
+  return (await response.json()) as AuthSession;
+}
+
+export function beginSignIn(provider: AuthProvider): void {
+  window.location.assign(backendApiUrl(provider.signinUrl));
+}

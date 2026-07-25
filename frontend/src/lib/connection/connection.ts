@@ -1,6 +1,7 @@
 import type { DependencyTableInfo } from "@/components/dependency-view/dependency-types";
 import { QueryContextManager } from "@/components/settings/query-context/query-context-manager";
 import type { ClickHouseSetting } from "@/lib/clickhouse/clickhouse-setting-loader";
+import { backendApiFetch } from "@/lib/backend-api";
 import type { ConnectionConfig } from "./connection-config";
 
 // Re-export ConnectionConfig for convenience
@@ -318,7 +319,7 @@ export class Connection {
           process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
         ).replace(/\/+$/, "");
         const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-        const response = await fetch(`${apiBase}/api/connections/${this.id}/query`, {
+        const response = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -418,7 +419,7 @@ export class Connection {
         process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
       ).replace(/\/+$/, "");
       const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-      const res = await fetch(`${apiBase}/api/connections/${this.id}/query`, {
+      const res = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -6,16 +6,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import io.datastoria.server.TestDbHelper;
+import io.datastoria.server.service.OAuthRemoteClient;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "datastoria.oauth.github.client-id=test-client")
 @ActiveProfiles("test")
 class AvailableModelsApiTest {
 
   @Autowired WebTestClient web;
   @Autowired TestDbHelper dbHelper;
+  @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
+  @MockitoBean OAuthRemoteClient oauthRemote;
 
   @BeforeEach
   void clean() {
@@ -91,6 +97,52 @@ class AvailableModelsApiTest {
         .isEqualTo(6)
         .jsonPath("$.systemModels[*].modelId")
         .value(org.hamcrest.Matchers.hasItems("gpt-4", "claude-3"));
+  }
+
+  @Test
+  void storedGitHubOAuthCredentialPopulatesGitHubModels() throws Exception {
+    org.mockito.Mockito.when(
+            oauthRemote.postJson(
+                org.mockito.ArgumentMatchers.eq("https://github.com/login/oauth/access_token"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(
+            reactor.core.publisher.Mono.just(
+                mapper.readTree(
+                    """
+                    {"access_token":"stored-token","refresh_token":"refresh-token"}
+                    """)));
+    org.mockito.Mockito.when(oauthRemote.getGitHubModels("stored-token"))
+        .thenReturn(
+            reactor.core.publisher.Mono.just(
+                mapper.readTree(
+                    """
+                    {"data":[{"id":"copilot-model","name":"Copilot Model",
+                    "vendor":"GitHub","model_picker_enabled":true,
+                    "supported_endpoints":["chat"]}]}
+                    """)));
+
+    web.post()
+        .uri("/api/ai/github/auth/device/token")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"device_code\":\"device-code\"}")
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    web.post()
+        .uri("/api/ai/models/available")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.githubModels[0].provider")
+        .isEqualTo("GitHub Copilot")
+        .jsonPath("$.githubModels[0].modelId")
+        .isEqualTo("copilot-model");
   }
 
   private void createProviderAndModel(String providerKey, String modelKey, String displayName) {

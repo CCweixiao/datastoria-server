@@ -37,7 +37,7 @@ describe("RemoteSessionRepository", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/ai/chat/sessions/session-1", {
       headers: { [SESSION_SHARE_CODE_HEADER]: "share-token" },
-      credentials: "same-origin",
+      credentials: "include",
       cache: "no-store",
     });
   });
@@ -68,7 +68,7 @@ describe("RemoteSessionRepository", () => {
         [SESSION_SHARE_CODE_HEADER]: "share-token",
         "x-datastoria-user-email": "dev@example.com",
       },
-      credentials: "same-origin",
+      credentials: "include",
       cache: "no-store",
     });
   });

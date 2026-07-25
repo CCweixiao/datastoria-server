@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
@@ -30,6 +31,7 @@ public class AvailableModelsService {
   private final ModelRepository modelRepo;
   private final ModelProviderRepository providerRepo;
   private final ModelCatalogProvisioner catalogProvisioner;
+  private final OAuthCredentialService oauthCredentials;
   private final ObjectMapper mapper;
   private final Scheduler jdbcScheduler;
 
@@ -37,18 +39,64 @@ public class AvailableModelsService {
       ModelRepository modelRepo,
       ModelProviderRepository providerRepo,
       ModelCatalogProvisioner catalogProvisioner,
+      OAuthCredentialService oauthCredentials,
       ObjectMapper mapper,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.modelRepo = modelRepo;
     this.providerRepo = providerRepo;
     this.catalogProvisioner = catalogProvisioner;
+    this.oauthCredentials = oauthCredentials;
     this.mapper = mapper;
     this.jdbcScheduler = jdbcScheduler;
   }
 
   public Mono<AvailableModelsResponse> getAvailableModels(Identity identity) {
-    return Mono.fromCallable(() -> AvailableModelsResponse.systemOnly(buildSystemModels(identity)))
-        .subscribeOn(jdbcScheduler);
+    Mono<List<ModelProps>> system =
+        Mono.fromCallable(() -> buildSystemModels(identity)).subscribeOn(jdbcScheduler);
+    Mono<List<ModelProps>> github =
+        oauthCredentials
+            .githubModels(identity)
+            .map(this::githubModels)
+            .onErrorResume(NotFoundException.class, ignored -> Mono.just(List.of()));
+    return Mono.zip(system, github)
+        .map(result -> new AvailableModelsResponse(result.getT1(), result.getT2()));
+  }
+
+  private List<ModelProps> githubModels(JsonNode payload) {
+    JsonNode models = payload.isArray() ? payload : payload.path("data");
+    if (!models.isArray()) {
+      return List.of();
+    }
+    return java.util.stream.StreamSupport.stream(models.spliterator(), false)
+        .filter(model -> model.path("model_picker_enabled").asBoolean(true))
+        .map(
+            model ->
+                new ModelProps(
+                    "GitHub Copilot",
+                    model.path("id").asText(),
+                    githubDescription(model),
+                    false,
+                    true,
+                    false,
+                    stringList(model.path("supported_endpoints"), List.of("chat")),
+                    model.path("capabilities").path("supports").path("vision").asBoolean(false),
+                    true,
+                    false,
+                    List.of(),
+                    "user",
+                    null))
+        .filter(model -> !model.modelId().isBlank())
+        .sorted(java.util.Comparator.comparing(ModelProps::modelId))
+        .toList();
+  }
+
+  private static String githubDescription(JsonNode model) {
+    String name = model.path("name").asText();
+    String vendor = model.path("vendor").asText();
+    if (!name.isBlank() && !vendor.isBlank()) {
+      return "- **Vendor**: " + vendor + "\n\n- **Model**: " + name;
+    }
+    return !name.isBlank() ? name : model.path("id").asText();
   }
 
   private List<ModelProps> buildSystemModels(Identity identity) {

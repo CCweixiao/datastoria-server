@@ -1,4 +1,4 @@
-import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 
 export interface EffectiveConfiguration {
   entries: Record<string, string>;
@@ -6,7 +6,7 @@ export interface EffectiveConfiguration {
 }
 
 export async function loadEffectiveConfiguration(): Promise<EffectiveConfiguration> {
-  const response = await fetch(backendApiUrl("/api/me/ai/preferences"), {
+  const response = await backendApiFetch(backendApiUrl("/api/me/ai/preferences"), {
     headers: backendApiHeaders(),
   });
   if (!response.ok) {
@@ -16,7 +16,7 @@ export async function loadEffectiveConfiguration(): Promise<EffectiveConfigurati
 }
 
 export async function saveConfiguration(configKey: string, value: unknown): Promise<void> {
-  const response = await fetch(backendApiUrl("/api/me/ai/preferences"), {
+  const response = await backendApiFetch(backendApiUrl("/api/me/ai/preferences"), {
     method: "PUT",
     headers: backendApiHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({

@@ -1,5 +1,6 @@
 import type { AvailableModelsResponse } from "@/lib/ai/llm/available-models-client";
 import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
+import { backendApiFetch } from "@/lib/backend-api";
 
 export type ServerModelProps = ModelProps & { configId?: string };
 export interface ServerProvider {
@@ -50,13 +51,13 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
   private async findOrCreateProvider(provider: string): Promise<{ id: string }> {
     const providerKey = this.providerKey(provider);
     const providers = await checkedJson<Array<{ id: string; providerKey: string }>>(
-      await fetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
+      await backendApiFetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
       "Load providers"
     );
     const existing = providers.find((candidate) => candidate.providerKey === providerKey);
     if (existing) return existing;
     return checkedJson(
-      await fetch(javaUrl("/api/admin/ai/providers"), {
+      await backendApiFetch(javaUrl("/api/admin/ai/providers"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders() },
         body: JSON.stringify({
@@ -72,7 +73,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
   }
   async listAvailableModels(): Promise<AvailableModelsResponse> {
     return checkedJson(
-      await fetch(javaUrl("/api/ai/models/available"), {
+      await backendApiFetch(javaUrl("/api/ai/models/available"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...identityHeaders() },
         body: "{}",
@@ -83,14 +84,14 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
 
   async listProviders(): Promise<ServerProvider[]> {
     return checkedJson(
-      await fetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
+      await backendApiFetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
       "Load providers"
     );
   }
 
   async getModelPreference(): Promise<string | undefined> {
     const result = await checkedJson<{ selectedModelId: string | null }>(
-      await fetch(javaUrl("/api/me/ai/model-preference"), {
+      await backendApiFetch(javaUrl("/api/me/ai/model-preference"), {
         headers: identityHeaders(),
       }),
       "Load model preference"
@@ -103,7 +104,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
       throw new Error("The selected server model is missing configId");
     }
     await checkedJson(
-      await fetch(javaUrl("/api/me/ai/model-preference"), {
+      await backendApiFetch(javaUrl("/api/me/ai/model-preference"), {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...identityHeaders() },
         body: JSON.stringify({ modelConfigId: model.configId }),
@@ -114,11 +115,14 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
 
   async saveProviderCredential(provider: string, credential: string): Promise<void> {
     const configured = await this.findOrCreateProvider(provider);
-    const response = await fetch(javaUrl(`/api/admin/ai/providers/${configured.id}/credential`), {
+    const response = await backendApiFetch(
+      javaUrl(`/api/admin/ai/providers/${configured.id}/credential`),
+      {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...identityHeaders() },
       body: JSON.stringify({ secretKind: "api_key", value: credential }),
-    });
+      }
+    );
     if (!response.ok) {
       throw new Error(`Save provider credential failed: ${response.status}`);
     }
@@ -129,15 +133,18 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     const providers = await checkedJson<
       Array<{ id: string; providerKey: string; credentialConfigured: boolean }>
     >(
-      await fetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
+      await backendApiFetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
       "Load providers"
     );
     const existing = providers.find((candidate) => candidate.providerKey === providerKey);
     if (!existing?.credentialConfigured) return;
-    const response = await fetch(javaUrl(`/api/admin/ai/providers/${existing.id}/credential`), {
+    const response = await backendApiFetch(
+      javaUrl(`/api/admin/ai/providers/${existing.id}/credential`),
+      {
       method: "DELETE",
       headers: identityHeaders(),
-    });
+      }
+    );
     if (!response.ok) {
       throw new Error(`Clear provider credential failed: ${response.status}`);
     }
@@ -147,9 +154,12 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     if (!model.configId) {
       throw new Error("The server model is missing configId");
     }
-    const currentResponse = await fetch(javaUrl(`/api/admin/ai/models/${model.configId}`), {
+    const currentResponse = await backendApiFetch(
+      javaUrl(`/api/admin/ai/models/${model.configId}`),
+      {
       headers: identityHeaders(),
-    });
+      }
+    );
     const current = await checkedJson<{
       displayName: string;
       description?: string | null;
@@ -160,7 +170,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
       revision: number;
     }>(currentResponse, "Load model");
     await checkedJson(
-      await fetch(javaUrl(`/api/admin/ai/models/${model.configId}`), {
+      await backendApiFetch(javaUrl(`/api/admin/ai/models/${model.configId}`), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

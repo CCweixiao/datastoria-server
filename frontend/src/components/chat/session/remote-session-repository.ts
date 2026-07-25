@@ -1,6 +1,7 @@
 import type { Chat, Message } from "@/lib/ai/ai-types";
 import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
+import { backendApiFetch } from "@/lib/backend-api";
 import type {
   CreateSessionFromMessagesInput,
   SessionAccessOptions,
@@ -102,7 +103,7 @@ async function sessionFetch(url: string, init: RequestInit = {}): Promise<Respon
   const identity = sessionIdentityHeaders() as Record<string, string>;
   const headers = mergeHeaders(init.headers as HeadersInit | undefined, identity);
   const { headers: _unused, ...rest } = init;
-  return fetch(url, {
+  return backendApiFetch(url, {
     ...rest,
     ...(headers ? { headers } : {}),
     credentials: init.credentials ?? "same-origin",

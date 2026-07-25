@@ -5,7 +5,7 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
 import { cn } from "@/lib/utils";
@@ -400,7 +400,7 @@ export function ConnectionEditComponent({
     const controller = new AbortController();
     setAbort(controller);
     try {
-      const response = await fetch(backendApiUrl("/api/connections/test"), {
+      const response = await backendApiFetch(backendApiUrl("/api/connections/test"), {
         method: "POST",
         headers: backendApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({

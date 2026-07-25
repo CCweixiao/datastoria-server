@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useModelConfig } from "@/hooks/use-model-config";
 import type { SkillDetailResponse, SkillResourceResponse } from "@/lib/ai/skills/skill-provider";
 import type { SkillReviewResponse } from "@/lib/ai/skills/skill-review";
-import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDiffViewer from "react-diff-viewer-continued";
@@ -159,7 +159,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     resourceAbortControllerRef.current?.abort();
     resourceAbortControllerRef.current = null;
 
-    fetch(buildSkillDetailUrl(skillId), {
+    backendApiFetch(buildSkillDetailUrl(skillId), {
       signal: controller.signal,
       headers: backendApiHeaders(),
     })
@@ -185,7 +185,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
 
   const fetchResource = useCallback(
     async (resourcePath: string): Promise<SkillResourceResponse> => {
-      const response = await fetch(buildSkillResourceUrl(skillId, resourcePath), {
+      const response = await backendApiFetch(buildSkillResourceUrl(skillId, resourcePath), {
         headers: backendApiHeaders(),
       });
       if (!response.ok) {
@@ -226,7 +226,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
       setResourceLoadingPath(resourcePath);
       setRenderMode("raw");
 
-      fetch(buildSkillResourceUrl(skillId, resourcePath), {
+      backendApiFetch(buildSkillResourceUrl(skillId, resourcePath), {
         signal: controller.signal,
         headers: backendApiHeaders(),
       })
@@ -263,7 +263,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
   }, []);
 
   const reloadDetail = useCallback(async () => {
-    const response = await fetch(buildSkillDetailUrl(skillId), {
+    const response = await backendApiFetch(buildSkillDetailUrl(skillId), {
       headers: backendApiHeaders(),
     });
     if (!response.ok) {
@@ -288,7 +288,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
         content,
       }));
 
-      const response = await fetch(buildSkillDetailUrl(skillId), {
+      const response = await backendApiFetch(buildSkillDetailUrl(skillId), {
         method: "PATCH",
         headers: backendApiHeaders({
           "Content-Type": "application/json",
@@ -517,7 +517,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     setReviewResult(null);
 
     try {
-      const response = await fetch(backendApiUrl("/api/ai/skills/actions/review"), {
+      const response = await backendApiFetch(
+        backendApiUrl("/api/ai/skills/actions/review"),
+        {
         method: "POST",
         headers: backendApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
@@ -533,7 +535,8 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
             ],
           },
         }),
-      });
+        }
+      );
 
       if (!response.ok) {
         throw new Error(await readJsonError(response, "Failed to review file"));

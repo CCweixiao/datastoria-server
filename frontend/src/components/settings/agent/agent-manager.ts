@@ -3,7 +3,7 @@ import {
   normalizeReasoningLevel,
   type ReasoningLevel,
 } from "@/lib/ai/reasoning-levels";
-import { backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 
 export type AgentMode = "v2" | "legacy";
 
@@ -96,7 +96,7 @@ export class AgentConfigurationManager {
 
   public static hydrate(): Promise<AgentConfiguration> {
     if (!this.hydration) {
-      this.hydration = fetch(backendApiUrl("/api/me/ai/preferences"), {
+      this.hydration = backendApiFetch(backendApiUrl("/api/me/ai/preferences"), {
         headers: backendApiHeaders(),
       })
         .then(async (response) => {
@@ -136,7 +136,7 @@ export class AgentConfigurationManager {
       aiResponseLanguage: normalizeAIResponseLanguage(cfg.aiResponseLanguage),
     };
     this.configuration = normalized;
-    void fetch(backendApiUrl("/api/me/ai/preferences"), {
+    void backendApiFetch(backendApiUrl("/api/me/ai/preferences"), {
       method: "PUT",
       headers: backendApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({

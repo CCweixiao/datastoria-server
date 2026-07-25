@@ -2,9 +2,7 @@ package io.datastoria.server.dto;
 
 import java.util.List;
 
-/**
- * Response for POST /api/ai/models/available — {@code githubModels} stays empty until P10 OAuth.
- */
+/** Response for POST /api/ai/models/available. */
 public record AvailableModelsResponse(
     List<ModelProps> systemModels, List<ModelProps> githubModels) {
 

@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | R01 | 独立 Spring Boot/JDK17 后端 | P0 | build/test/health、部署 artifact | 基础骨架已验证 |
 | R02 | 模型 provider/catalog 配置落数据库 | P2 | SQLite/MySQL Flyway、共用 repository contract、重启持久化 | 未实现 |
-| R03 | API key/OAuth token 服务端加密 | P2/P10 | crypto test、DB/日志/响应扫描、轮换演练 | 未实现 |
+| R03 | API key/OAuth token 服务端加密 | P2/P10 | `SecretCryptoTest`、`OAuthCompatibilityApiTest`、密文/响应扫描、refresh 轮换 | 已实现 |
 | R04 | 后端模型管理接口供前端使用 | P2 | OpenAPI、RBAC、前端 Playwright | 未实现 |
 | R05 | Agent 与系统配置落数据库 | P2/P4 | 双方言 definition/revision/config 表、effective config test | 未实现 |
 | R06 | 后端 Agent 配置接口供前端使用 | P2 | 管理/用户 API、revision conflict、前端验证 | 未实现 |

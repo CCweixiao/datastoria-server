@@ -14,6 +14,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
 import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
 import type { Connection } from "@/lib/connection/connection";
+import { backendApiFetch } from "@/lib/backend-api";
 import { toastManager } from "@/lib/toast";
 import type { Chat } from "@ai-sdk/react";
 import { Download, Loader2, Maximize2, Minimize2, Plus, Share2, Square, X } from "lucide-react";
@@ -545,7 +546,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
 
     setIsSharing(true);
     try {
-      const response = await fetch(
+      const response = await backendApiFetch(
         `${getSessionApiBase()}/api/ai/sessions/${encodeURIComponent(chat.id)}/share`,
         {
           method: "POST",

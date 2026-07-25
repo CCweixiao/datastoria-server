@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
 import type { AutoExplainNegativeReasonCode } from "@/lib/ai/session/feedback-events";
 import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
+import { backendApiFetch } from "@/lib/backend-api";
 import { useChat, type Chat } from "@ai-sdk/react";
 import {
   AlertCircle,
@@ -161,7 +162,9 @@ const AutoExplainFeedback = memo(function AutoExplainFeedback({
     setSavedMessage(null);
 
     try {
-      const response = await fetch(`${getSessionApiBase()}/api/ai/chat/feedback/auto-explain`, {
+      const response = await backendApiFetch(
+        `${getSessionApiBase()}/api/ai/chat/feedback/auto-explain`,
+        {
         method: "POST",
         headers: sessionIdentityHeaders({
           "Content-Type": "application/json",
@@ -180,7 +183,8 @@ const AutoExplainFeedback = memo(function AutoExplainFeedback({
             sql: sql ?? null,
           },
         }),
-      });
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to record feedback");

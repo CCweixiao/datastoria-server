@@ -12,3 +12,15 @@ export function backendApiHeaders(extra?: HeadersInit): HeadersInit {
     ...(extra ?? {}),
   };
 }
+
+/** Sends a browser request to Java with the server-owned login session cookie. */
+export function backendApiFetch(
+  input: string | URL | Request,
+  init?: RequestInit
+): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    credentials: "include",
+    headers: backendApiHeaders(init?.headers),
+  });
+}

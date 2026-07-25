@@ -1,4 +1,5 @@
 import { listUserState, putUserState } from "@/lib/user-state-client";
+import { backendApiFetch } from "@/lib/backend-api";
 import type { ConnectionConfig } from "./connection-config";
 
 export const ConnectionChangeType = {
@@ -76,7 +77,7 @@ export class ConnectionManager {
 
   private async reload(): Promise<void> {
     const [response, selection] = await Promise.all([
-      fetch(apiUrl("/api/connections"), { headers: headers() }),
+      backendApiFetch(apiUrl("/api/connections"), { headers: headers() }),
       listUserState<string>("connection-selection").catch(() => []),
     ]);
     if (!response.ok) {
@@ -100,7 +101,7 @@ export class ConnectionManager {
   }
 
   async add(connection: ConnectionConfig): Promise<ConnectionChangeEventArgs> {
-    const response = await fetch(apiUrl("/api/connections"), {
+    const response = await backendApiFetch(apiUrl("/api/connections"), {
       method: "POST",
       headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({
@@ -127,7 +128,7 @@ export class ConnectionManager {
     if (!existing?.id) {
       return this.add(newConnection);
     }
-    const response = await fetch(apiUrl(`/api/connections/${existing.id}`), {
+    const response = await backendApiFetch(apiUrl(`/api/connections/${existing.id}`), {
       method: "PUT",
       headers: headers({
         "Content-Type": "application/json",
@@ -160,7 +161,7 @@ export class ConnectionManager {
     if (!existing?.id) {
       return { type: ConnectionChangeType.REMOVE, beforeChange: existing, afterChange: null };
     }
-    const response = await fetch(apiUrl(`/api/connections/${existing.id}`), {
+    const response = await backendApiFetch(apiUrl(`/api/connections/${existing.id}`), {
       method: "DELETE",
       headers: headers({ "If-Match": `"${existing.revision ?? 0}"` }),
     });

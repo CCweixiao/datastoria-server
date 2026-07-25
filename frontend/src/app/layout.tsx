@@ -1,5 +1,6 @@
 import "@/index.css";
 import "katex/dist/katex.min.css";
+import { AuthGate } from "@/components/auth-gate";
 import type { Metadata, Viewport } from "next";
 
 export const viewport: Viewport = {
@@ -162,7 +163,9 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthGate>{children}</AuthGate>
+      </body>
     </html>
   );
 }
