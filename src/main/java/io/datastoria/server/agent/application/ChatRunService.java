@@ -15,6 +15,7 @@ import io.datastoria.server.agent.domain.AgentRunSkillPin;
 import io.datastoria.server.agent.domain.AgentRunStatus;
 import io.datastoria.server.agent.runtime.AgentRunCapabilities;
 import io.datastoria.server.agent.runtime.AgentRuntimeConfig;
+import io.datastoria.server.agent.runtime.AgentToolExecutionPolicy;
 import io.datastoria.server.agent.runtime.ClickHouseAgentTools;
 import io.datastoria.server.agent.runtime.ModelAdapter;
 import io.datastoria.server.agent.runtime.ModelAdapterProvider;
@@ -35,6 +36,7 @@ import io.datastoria.server.repository.AgentDefinitionRepository;
 import io.datastoria.server.repository.AgentRevisionRepository;
 import io.datastoria.server.repository.AgentRunRepository;
 import io.datastoria.server.repository.AgentSkillRepository;
+import io.datastoria.server.repository.AuditLogRepository;
 import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.ChatSessionRepository;
 import io.datastoria.server.repository.ModelRepository;
@@ -83,6 +85,7 @@ public class ChatRunService {
   private final AgentDefinitionRepository agentDefinitionRepository;
   private final AgentRevisionRepository agentRevisionRepository;
   private final AgentSkillRepository skillRepository;
+  private final AuditLogRepository auditLogRepository;
   private final BuiltinSkillProvisioner builtinSkillProvisioner;
   private final SkillToolAvailability skillToolAvailability;
   private final ClickHouseConnectionService clickHouseConnectionService;
@@ -101,6 +104,7 @@ public class ChatRunService {
       AgentDefinitionRepository agentDefinitionRepository,
       AgentRevisionRepository agentRevisionRepository,
       AgentSkillRepository skillRepository,
+      AuditLogRepository auditLogRepository,
       BuiltinSkillProvisioner builtinSkillProvisioner,
       SkillToolAvailability skillToolAvailability,
       ClickHouseConnectionService clickHouseConnectionService,
@@ -117,6 +121,7 @@ public class ChatRunService {
     this.agentDefinitionRepository = agentDefinitionRepository;
     this.agentRevisionRepository = agentRevisionRepository;
     this.skillRepository = skillRepository;
+    this.auditLogRepository = auditLogRepository;
     this.builtinSkillProvisioner = builtinSkillProvisioner;
     this.skillToolAvailability = skillToolAvailability;
     this.clickHouseConnectionService = clickHouseConnectionService;
@@ -313,7 +318,13 @@ public class ChatRunService {
     return new ResolvedCapabilities(
         new AgentRunCapabilities(
             skills,
-            new ClickHouseAgentTools(clickHouseConnectionService, req.connectionId(), identity)),
+            new ClickHouseAgentTools(
+                clickHouseConnectionService,
+                req.connectionId(),
+                identity,
+                mapper,
+                AgentToolExecutionPolicy.tracked(
+                    auditLogRepository, jdbcScheduler, identity, runId, req.connectionId()))),
         pins);
   }
 

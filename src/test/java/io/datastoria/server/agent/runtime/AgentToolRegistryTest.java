@@ -20,7 +20,9 @@ class AgentToolRegistryTest {
             "search_query_log",
             "collect_cluster_status",
             "collect_rca_evidence");
-    assertThat(registry.createToolkit(new ClickHouseAgentTools(null, null, null)).getToolNames())
-        .isEqualTo(registry.availableToolNames());
+    var toolkit = registry.createToolkit(new ClickHouseAgentTools(null, null, null));
+    assertThat(toolkit.getToolNames()).isEqualTo(registry.availableToolNames());
+    assertThat(toolkit.getToolGroup(AgentToolRegistry.READ_ONLY_GROUP).getTools())
+        .containsExactlyInAnyOrder("get_tables", "explore_schema", "validate_sql");
   }
 }

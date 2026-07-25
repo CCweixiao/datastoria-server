@@ -1,8 +1,8 @@
 /**
  * Client-only interactive tools.
  *
- * ClickHouse tool schemas and executors live under `tools/clickhouse` because they can run either
- * in the browser or on the server depending on whether a ClickHouseConnection is provided.
+ * ClickHouse tools are intentionally absent: their schemas live under `tools/clickhouse` for
+ * rendering/type checks, while every executor is owned by the Java AgentScope runtime.
  */
 import type { AppUIMessage } from "@/lib/ai/ai-types";
 import { tool, type UIMessage } from "ai";
