@@ -5,10 +5,7 @@
   "description": "A modern, AI-powered ClickHouse management console that transforms how you interact with your data and manage your clusters",
   "scripts": {
     "prebuild": "npm run build:deps",
-    "predev": "npm run sync:skills",
-    "postbuild": "node scripts/copy-resources.mjs",
-    "sync:skills": "node scripts/sync-skills.mjs",
-    "build:deps": "npm run sync:skills && npm run build:number-flow-core && npm run build:number-flow-react && npm run build:vizlayer-core && npm run build:vizlayer-react && npm run build:cmdk",
+    "build:deps": "npm run build:number-flow-core && npm run build:number-flow-react && npm run build:vizlayer-core && npm run build:vizlayer-react && npm run build:cmdk",
     "build:number-flow-core": "cd external/number-flow/packages/number-flow && npm run build",
     "build:number-flow-react": "cd external/number-flow/packages/react && npm run build",
     "build:vizlayer-core": "cd external/vizlayer/packages/core && pnpm run build",

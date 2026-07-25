@@ -264,4 +264,16 @@ class ClickHouseConnectionApiTest {
         .jsonPath("$.data[0].value")
         .isEqualTo(1);
   }
+
+  @Test
+  void connectionTemplatesMatchesOriginalEmptyCatalog() {
+    web.get()
+        .uri("/api/connections/templates")
+        .header(IDENTITY_HEADER, "dev@example.com")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .json("[]");
+  }
 }

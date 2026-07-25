@@ -1,6 +1,6 @@
 import type { PlannerMetadata } from "@/lib/ai/agent/plan/planning-types";
 import type { ReasoningLevel } from "@/lib/ai/reasoning-levels";
-import type { InferUITools, LanguageModelUsage, UIMessage } from "ai";
+import type { LanguageModelUsage, UIMessage } from "ai";
 
 export interface AgentContext {
   /** Whether to prune successful validate_sql tool calls from history. Default: true. */
@@ -136,7 +136,7 @@ export interface Chat {
  * App UI message: UIMessage with MessageMetadata plus UI timestamps.
  * Single source of truth for message metadata (usage, planner) shared with Message.
  */
-type AppTools = typeof import("@/lib/ai/tools/clickhouse/clickhouse-tools").ClickHouseTools;
+type AppTools = import("@/lib/ai/tools/clickhouse/clickhouse-tools").ClickHouseUITools;
 
 export type PendingActionData = {
   runId: string;
@@ -151,7 +151,7 @@ type AppDataTypes = {
   "pending-action": PendingActionData;
 };
 
-export type AppUIMessage = UIMessage<MessageMetadata, AppDataTypes, InferUITools<AppTools>> & {
+export type AppUIMessage = UIMessage<MessageMetadata, AppDataTypes, AppTools> & {
   updatedAt?: Date;
   createdAt?: Date;
 };

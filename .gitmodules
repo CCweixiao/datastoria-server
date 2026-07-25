@@ -6,9 +6,6 @@
 	path = frontend/external/cmdk
 	url = https://github.com/FrankChen021/cmdk.git
 	branch = fix
-[submodule "frontend/external/clickhouse"]
-	path = frontend/external/clickhouse
-	url = https://github.com/FrankChen021/agent-skills.git
 [submodule "frontend/external/vizlayer"]
 	path = frontend/external/vizlayer
 	url = https://github.com/FrankChen021/vizlayer.git

@@ -26,21 +26,3 @@ export interface SkillResourceResponse {
   author?: SkillCatalogItem["author"];
   version?: SkillCatalogItem["version"];
 }
-
-export function findSkillByLookup(
-  skills: SkillCatalogItem[],
-  lookup: string
-): SkillCatalogItem | null {
-  const trimmed = lookup.trim();
-  if (!trimmed) return null;
-
-  const direct = skills.find((skill) => skill.id === trimmed || skill.name === trimmed);
-  if (direct) return direct;
-
-  const normalized = trimmed.toLowerCase();
-  return (
-    skills.find(
-      (skill) => skill.id.toLowerCase() === normalized || skill.name.toLowerCase() === normalized
-    ) ?? null
-  );
-}

@@ -44,6 +44,12 @@ public class ClickHouseConnectionController {
     return IdentityContext.current().flatMap(service::findAll).map(ResponseEntity::ok);
   }
 
+  /** A29 compatibility endpoint. The original backend currently exposes no built-in templates. */
+  @GetMapping("/templates")
+  public Mono<ResponseEntity<List<Object>>> templates() {
+    return Mono.just(ResponseEntity.ok(List.of()));
+  }
+
   @PostMapping
   public Mono<ResponseEntity<ClickHouseConnectionResponse>> create(
       @RequestBody @Valid ClickHouseConnectionRequest request) {

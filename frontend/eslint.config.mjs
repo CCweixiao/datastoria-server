@@ -11,7 +11,6 @@ export default defineConfig([
     ".next/**",
     "docs/.vitepress/**",
     "external/**",
-    "resources/skills/**",
     "src/components/ui/**",
   ]),
   {

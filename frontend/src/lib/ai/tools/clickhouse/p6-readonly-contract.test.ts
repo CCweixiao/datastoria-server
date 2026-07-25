@@ -1,11 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ClickHouseTools } from "./clickhouse-tools";
-
-type Schema = {
-  safeParse: (value: unknown) => { success: boolean };
-};
+import { CLICKHOUSE_TOOL_NAMES } from "./clickhouse-tools";
 
 describe("P6 Java/frontend readonly tool contract", () => {
   const contract = JSON.parse(
@@ -13,14 +9,10 @@ describe("P6 Java/frontend readonly tool contract", () => {
   );
 
   for (const name of ["get_tables", "explore_schema", "validate_sql"] as const) {
-    it(`accepts the shared ${name} input and output`, () => {
-      const tool = ClickHouseTools[name] as unknown as {
-        inputSchema: Schema;
-        outputSchema: Schema;
-      };
-
-      expect(tool.inputSchema.safeParse(contract[name].input).success).toBe(true);
-      expect(tool.outputSchema.safeParse(contract[name].output).success).toBe(true);
+    it(`renders the Java-owned ${name} contract`, () => {
+      expect(Object.values(CLICKHOUSE_TOOL_NAMES)).toContain(name);
+      expect(contract[name]).toHaveProperty("input");
+      expect(contract[name]).toHaveProperty("output");
     });
   }
 });

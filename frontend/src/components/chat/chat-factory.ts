@@ -468,27 +468,6 @@ export class ChatFactory {
 
       messages: options.initialMessages,
 
-      onToolCall: async ({ toolCall }) => {
-        const { toolName, toolCallId, input } = toolCall;
-        if (
-          toolName === SERVER_TOOL_NAMES.GENERATE_SQL ||
-          toolName === SERVER_TOOL_NAMES.GENERATE_VISUALIZATION ||
-          toolName === SERVER_TOOL_NAMES.OPTIMIZE_SQL ||
-          toolName === SERVER_TOOL_NAMES.PLAN ||
-          toolName === SERVER_TOOL_NAMES.SKILL ||
-          toolName === SERVER_TOOL_NAMES.SKILL_RESOURCE ||
-          toolName === SERVER_TOOL_NAMES.SEARCH_FILE ||
-          toolName === SERVER_TOOL_NAMES.READ_FILE
-        ) {
-          return;
-        }
-
-        console.error(`Unexpected client-side tool request: ${toolName}`, {
-          toolCallId,
-          input,
-        });
-      },
-
       onFinish: options.onFinish
         ? async ({ message }) => {
             await options.onFinish?.({
