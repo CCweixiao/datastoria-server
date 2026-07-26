@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.RcaTemplateMapper">
+
+  <resultMap id="RcaMap" type="io.datastoria.server.persistence.entity.RcaTemplateEntity" autoMapping="true"/>
+
+  <select id="countByKey" resultType="long">
+    SELECT COUNT(*) FROM ds_rca_template WHERE template_key = #{key}
+  </select>
+
+  <insert id="insertTemplate" parameterType="io.datastoria.server.persistence.entity.RcaTemplateEntity">
+    INSERT INTO ds_rca_template (id, template_key, source_yaml, enabled, revision, created_at, updated_at)
+    VALUES (#{id}, #{templateKey}, #{sourceYaml}, #{enabled}, #{revision}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <select id="findEnabledSources" resultMap="RcaMap">
+    SELECT template_key, source_yaml FROM ds_rca_template WHERE enabled = TRUE ORDER BY template_key
+  </select>
+
+  <select id="findEnabledByKey" resultMap="RcaMap">
+    SELECT template_key, revision, source_yaml FROM ds_rca_template
+    WHERE template_key = #{key} AND enabled = TRUE
+  </select>
+</mapper>

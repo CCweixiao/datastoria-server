@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.AuditLogMapper">
+
+  <insert id="insertAudit" parameterType="io.datastoria.server.persistence.entity.AuditLogEntity"
+          useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+    INSERT INTO ds_audit_log (tenant_id, actor, action, resource_type, resource_id, request_id,
+        safe_diff, result, created_at)
+    VALUES (#{tenantId}, #{actor}, #{action}, #{resourceType}, #{resourceId}, #{requestId},
+        #{safeDiff}, #{result}, #{createdAt})
+  </insert>
+</mapper>

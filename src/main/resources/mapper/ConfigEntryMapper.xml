@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.ConfigEntryMapper">
+
+  <resultMap id="ConfigMap" type="io.datastoria.server.persistence.entity.ConfigEntryEntity" autoMapping="true"/>
+
+  <insert id="insertConfigEntry" parameterType="io.datastoria.server.persistence.entity.ConfigEntryEntity">
+    INSERT INTO ds_config_entry (id, tenant_id, scope_type, scope_id, config_key, value_json,
+        schema_version, revision, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{scopeType}, #{scopeId}, #{configKey}, #{valueJson},
+        #{schemaVersion}, #{revision}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <select id="findUserEntry" resultMap="ConfigMap">
+    SELECT id, tenant_id, scope_type, scope_id, config_key, value_json, schema_version, revision,
+           created_at, updated_at, deleted_at
+    FROM ds_config_entry
+    WHERE tenant_id = #{tenantId} AND scope_type = 'user' AND scope_id = #{userId}
+      AND config_key = #{configKey} AND deleted_at IS NULL
+  </select>
+
+  <update id="casUpdate">
+    UPDATE ds_config_entry
+    SET value_json = #{valueJson}, revision = revision + 1, updated_at = #{now}
+    WHERE id = #{id} AND tenant_id = #{tenantId}
+      AND revision = #{expectedRevision} AND deleted_at IS NULL
+  </update>
+
+  <select id="findEffective" resultMap="ConfigMap">
+    SELECT id, tenant_id, scope_type, scope_id, config_key, value_json, schema_version, revision,
+           created_at, updated_at, deleted_at
+    FROM ds_config_entry
+    WHERE tenant_id = #{tenantId} AND deleted_at IS NULL
+      AND (
+        scope_type = 'system'
+        OR (scope_type = 'tenant' AND scope_id = #{tenantId})
+        OR (scope_type = 'user' AND scope_id = #{userId})
+      )
+    ORDER BY revision
+  </select>
+
+  <update id="softDelete">
+    UPDATE ds_config_entry
+    SET deleted_at = #{now}, revision = revision + 1
+    WHERE id = #{id} AND tenant_id = #{tenantId}
+      AND revision = #{expectedRevision} AND deleted_at IS NULL
+  </update>
+</mapper>

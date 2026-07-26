@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.AgentDefinitionMapper">
+
+  <insert id="insertDefinition" parameterType="io.datastoria.server.persistence.entity.AgentDefinitionEntity">
+    INSERT INTO ds_agent_definition (id, tenant_id, agent_key, name, description, status,
+        published_revision_id, revision, created_by, updated_by, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{agentKey}, #{name}, #{description}, #{status},
+        #{publishedRevisionId}, #{revision}, #{createdBy}, #{updatedBy}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateCas">
+    UPDATE ds_agent_definition
+    SET name = #{entity.name},
+        description = #{entity.description},
+        updated_by = #{entity.updatedBy},
+        updated_at = #{entity.updatedAt},
+        revision = revision + 1
+    WHERE id = #{entity.id} AND tenant_id = #{entity.tenantId}
+      AND revision = #{expectedRevision} AND deleted_at IS NULL
+  </update>
+
+  <update id="publish">
+    UPDATE ds_agent_definition
+    SET published_revision_id = #{revisionId}, status = 'published', updated_at = #{now},
+        revision = revision + 1
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="disable">
+    UPDATE ds_agent_definition
+    SET status = 'disabled', updated_at = #{now}, revision = revision + 1
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="softDelete">
+    UPDATE ds_agent_definition
+    SET deleted_at = #{now}, revision = revision + 1
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+</mapper>

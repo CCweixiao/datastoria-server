@@ -6,15 +6,14 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.datastoria.server.persistence.mapper.P3ImportMapper;
 import io.datastoria.server.tools.importer.ImportRows.FeedbackRow;
 import io.datastoria.server.tools.importer.ImportRows.MessageRow;
 import io.datastoria.server.tools.importer.ImportRows.SessionRow;
@@ -74,12 +73,12 @@ public class P3Importer {
 
   private static final Logger log = LoggerFactory.getLogger(P3Importer.class);
 
-  private final JdbcClient jdbc;
+  private final P3ImportMapper db;
   private final TransactionTemplate transactions;
   private final ObjectMapper mapper;
 
-  public P3Importer(JdbcClient jdbc, TransactionTemplate transactions, ObjectMapper mapper) {
-    this.jdbc = jdbc;
+  public P3Importer(P3ImportMapper db, TransactionTemplate transactions, ObjectMapper mapper) {
+    this.db = db;
     this.transactions = transactions;
     this.mapper = mapper;
   }
@@ -173,42 +172,26 @@ public class P3Importer {
   }
 
   private void upsertSession(SessionRow row, P3ImportResult.Builder result) {
-    Optional<Boolean> exists =
-        jdbc.sql("SELECT 1 FROM ds_chat_session WHERE tenant_id = :tenantId AND id = :id")
-            .param("tenantId", row.tenantId())
-            .param("id", row.id())
-            .query(Boolean.class)
-            .optional();
-    if (exists.isEmpty()) {
-      jdbc.sql(
-              "INSERT INTO ds_chat_session"
-                  + " (id, tenant_id, user_id, connection_id, title, revision,"
-                  + " created_at, updated_at)"
-                  + " VALUES (:id, :tenantId, :userId, :connectionId, :title, :revision,"
-                  + " :createdAt, :updatedAt)")
-          .param("id", row.id())
-          .param("tenantId", row.tenantId())
-          .param("userId", row.userId())
-          .param("connectionId", row.connectionId())
-          .param("title", row.title())
-          .param("revision", row.safeRevision())
-          .param("createdAt", row.createdAt().toString())
-          .param("updatedAt", row.updatedAt().toString())
-          .update();
+    if (db.sessionExists(row.tenantId(), row.id()) == null) {
+      db.insertSession(
+          row.id(),
+          row.tenantId(),
+          row.userId(),
+          row.connectionId(),
+          row.title(),
+          row.safeRevision(),
+          row.createdAt().toString(),
+          row.updatedAt().toString());
       result.inserted(P3ImportManifest.SESSIONS);
     } else {
-      jdbc.sql(
-              "UPDATE ds_chat_session SET user_id = :userId, connection_id = :connectionId,"
-                  + " title = :title, revision = :revision, updated_at = :updatedAt"
-                  + " WHERE tenant_id = :tenantId AND id = :id")
-          .param("userId", row.userId())
-          .param("connectionId", row.connectionId())
-          .param("title", row.title())
-          .param("revision", row.safeRevision())
-          .param("updatedAt", row.updatedAt().toString())
-          .param("tenantId", row.tenantId())
-          .param("id", row.id())
-          .update();
+      db.updateSession(
+          row.userId(),
+          row.connectionId(),
+          row.title(),
+          row.safeRevision(),
+          row.updatedAt().toString(),
+          row.tenantId(),
+          row.id());
       result.updated(P3ImportManifest.SESSIONS);
     }
   }
@@ -254,50 +237,30 @@ public class P3Importer {
   }
 
   private void upsertMessage(MessageRow row, P3ImportResult.Builder result) {
-    Optional<Boolean> exists =
-        jdbc.sql(
-                "SELECT 1 FROM ds_chat_message"
-                    + " WHERE tenant_id = :tenantId AND session_id = :sessionId AND id = :id")
-            .param("tenantId", row.tenantId())
-            .param("sessionId", row.sessionId())
-            .param("id", row.id())
-            .query(Boolean.class)
-            .optional();
-    if (exists.isEmpty()) {
-      jdbc.sql(
-              "INSERT INTO ds_chat_message"
-                  + " (id, tenant_id, session_id, user_id, role, parts_json, metadata_json,"
-                  + " sequence, created_at, updated_at)"
-                  + " VALUES (:id, :tenantId, :sessionId, :userId, :role, :partsJson,"
-                  + " :metadataJson, :sequence, :createdAt, :updatedAt)")
-          .param("id", row.id())
-          .param("tenantId", row.tenantId())
-          .param("sessionId", row.sessionId())
-          .param("userId", row.userId())
-          .param("role", row.role())
-          .param("partsJson", row.partsJson())
-          .param("metadataJson", row.metadataJson())
-          .param("sequence", row.sequence())
-          .param("createdAt", row.createdAt().toString())
-          .param("updatedAt", row.updatedAt().toString())
-          .update();
+    if (db.messageExists(row.tenantId(), row.sessionId(), row.id()) == null) {
+      db.insertMessage(
+          row.id(),
+          row.tenantId(),
+          row.sessionId(),
+          row.userId(),
+          row.role(),
+          row.partsJson(),
+          row.metadataJson(),
+          row.safeSequence(),
+          row.createdAt().toString(),
+          row.updatedAt().toString());
       result.inserted(P3ImportManifest.MESSAGES);
     } else {
-      jdbc.sql(
-              "UPDATE ds_chat_message SET user_id = :userId, role = :role,"
-                  + " parts_json = :partsJson, metadata_json = :metadataJson,"
-                  + " sequence = :sequence, updated_at = :updatedAt"
-                  + " WHERE tenant_id = :tenantId AND session_id = :sessionId AND id = :id")
-          .param("userId", row.userId())
-          .param("role", row.role())
-          .param("partsJson", row.partsJson())
-          .param("metadataJson", row.metadataJson())
-          .param("sequence", row.sequence())
-          .param("updatedAt", row.updatedAt().toString())
-          .param("tenantId", row.tenantId())
-          .param("sessionId", row.sessionId())
-          .param("id", row.id())
-          .update();
+      db.updateMessage(
+          row.userId(),
+          row.role(),
+          row.partsJson(),
+          row.metadataJson(),
+          row.safeSequence(),
+          row.updatedAt().toString(),
+          row.tenantId(),
+          row.sessionId(),
+          row.id());
       result.updated(P3ImportManifest.MESSAGES);
     }
   }
@@ -343,61 +306,37 @@ public class P3Importer {
   }
 
   private void upsertFeedback(FeedbackRow row, P3ImportResult.Builder result) {
-    Optional<Boolean> exists =
-        jdbc.sql(
-                "SELECT 1 FROM ds_feedback_event"
-                    + " WHERE tenant_id = :tenantId AND user_id = :userId AND source = :source"
-                    + " AND session_id = :sessionId AND message_id = :messageId")
-            .param("tenantId", row.tenantId())
-            .param("userId", row.userId())
-            .param("source", row.source())
-            .param("sessionId", row.sessionId())
-            .param("messageId", row.messageId())
-            .query(Boolean.class)
-            .optional();
-    if (exists.isEmpty()) {
-      jdbc.sql(
-              "INSERT INTO ds_feedback_event"
-                  + " (id, tenant_id, user_id, source, session_id, message_id, solved,"
-                  + " reason_code, payload_json, free_text, recovery_action_taken,"
-                  + " created_at, updated_at)"
-                  + " VALUES (:id, :tenantId, :userId, :source, :sessionId, :messageId,"
-                  + " :solved, :reasonCode, :payloadJson, :freeText, :recoveryActionTaken,"
-                  + " :createdAt, :updatedAt)")
-          .param("id", row.id())
-          .param("tenantId", row.tenantId())
-          .param("userId", row.userId())
-          .param("source", row.source())
-          .param("sessionId", row.sessionId())
-          .param("messageId", row.messageId())
-          .param("solved", row.safeSolved())
-          .param("reasonCode", row.reasonCode())
-          .param("payloadJson", row.payloadJson())
-          .param("freeText", row.freeText())
-          .param("recoveryActionTaken", row.safeRecovery())
-          .param("createdAt", row.createdAt().toString())
-          .param("updatedAt", row.updatedAt().toString())
-          .update();
+    if (db.feedbackExists(
+            row.tenantId(), row.userId(), row.source(), row.sessionId(), row.messageId())
+        == null) {
+      db.insertFeedback(
+          row.id(),
+          row.tenantId(),
+          row.userId(),
+          row.source(),
+          row.sessionId(),
+          row.messageId(),
+          row.safeSolved(),
+          row.reasonCode(),
+          row.payloadJson(),
+          row.freeText(),
+          row.safeRecovery(),
+          row.createdAt().toString(),
+          row.updatedAt().toString());
       result.inserted(P3ImportManifest.FEEDBACK);
     } else {
-      jdbc.sql(
-              "UPDATE ds_feedback_event SET solved = :solved, reason_code = :reasonCode,"
-                  + " payload_json = :payloadJson, free_text = :freeText,"
-                  + " recovery_action_taken = :recoveryActionTaken, updated_at = :updatedAt"
-                  + " WHERE tenant_id = :tenantId AND user_id = :userId AND source = :source"
-                  + " AND session_id = :sessionId AND message_id = :messageId")
-          .param("solved", row.safeSolved())
-          .param("reasonCode", row.reasonCode())
-          .param("payloadJson", row.payloadJson())
-          .param("freeText", row.freeText())
-          .param("recoveryActionTaken", row.safeRecovery())
-          .param("updatedAt", row.updatedAt().toString())
-          .param("tenantId", row.tenantId())
-          .param("userId", row.userId())
-          .param("source", row.source())
-          .param("sessionId", row.sessionId())
-          .param("messageId", row.messageId())
-          .update();
+      db.updateFeedback(
+          row.safeSolved(),
+          row.reasonCode(),
+          row.payloadJson(),
+          row.freeText(),
+          row.safeRecovery(),
+          row.updatedAt().toString(),
+          row.tenantId(),
+          row.userId(),
+          row.source(),
+          row.sessionId(),
+          row.messageId());
       result.updated(P3ImportManifest.FEEDBACK);
     }
   }
@@ -440,41 +379,25 @@ public class P3Importer {
   }
 
   private void upsertShare(ShareRow row, P3ImportResult.Builder result) {
-    Optional<Boolean> exists =
-        jdbc.sql(
-                "SELECT 1 FROM ds_session_share WHERE tenant_id = :tenantId AND token_hash = :tokenHash")
-            .param("tenantId", row.tenantId())
-            .param("tokenHash", row.tokenHash())
-            .query(Boolean.class)
-            .optional();
-    if (exists.isEmpty()) {
+    if (db.shareExists(row.tenantId(), row.tokenHash()) == null) {
       // Insert: respect revokedAt from the source (NULL becomes NULL).
-      jdbc.sql(
-              "INSERT INTO ds_session_share"
-                  + " (id, tenant_id, session_id, owner_user_id, token_hash, expires_at,"
-                  + " revoked_at, created_at)"
-                  + " VALUES (:id, :tenantId, :sessionId, :ownerUserId, :tokenHash,"
-                  + " :expiresAt, :revokedAt, :createdAt)")
-          .param("id", row.id())
-          .param("tenantId", row.tenantId())
-          .param("sessionId", row.sessionId())
-          .param("ownerUserId", row.ownerUserId())
-          .param("tokenHash", row.tokenHash())
-          .param("expiresAt", row.expiresAt().toString())
-          .param("revokedAt", row.revokedAt() == null ? null : row.revokedAt().toString())
-          .param("createdAt", row.createdAt().toString())
-          .update();
+      db.insertShare(
+          row.id(),
+          row.tenantId(),
+          row.sessionId(),
+          row.ownerUserId(),
+          row.tokenHash(),
+          row.expiresAt().toString(),
+          row.revokedAt() == null ? null : row.revokedAt().toString(),
+          row.createdAt().toString());
       result.inserted(P3ImportManifest.SHARES);
     } else {
       // Update: refresh expiry/revocation; do not flip token_hash (that would break existing JWTs).
-      jdbc.sql(
-              "UPDATE ds_session_share SET expires_at = :expiresAt, revoked_at = :revokedAt"
-                  + " WHERE tenant_id = :tenantId AND token_hash = :tokenHash")
-          .param("expiresAt", row.expiresAt().toString())
-          .param("revokedAt", row.revokedAt() == null ? null : row.revokedAt().toString())
-          .param("tenantId", row.tenantId())
-          .param("tokenHash", row.tokenHash())
-          .update();
+      db.updateShare(
+          row.expiresAt().toString(),
+          row.revokedAt() == null ? null : row.revokedAt().toString(),
+          row.tenantId(),
+          row.tokenHash());
       result.updated(P3ImportManifest.SHARES);
     }
   }

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.FeedbackEventMapper">
+
+  <resultMap id="FeedbackMap" type="io.datastoria.server.persistence.entity.FeedbackEventEntity" autoMapping="true"/>
+
+  <insert id="insertFeedback" parameterType="io.datastoria.server.persistence.entity.FeedbackEventEntity">
+    INSERT INTO ds_feedback_event (id, tenant_id, user_id, source, session_id, message_id,
+        solved, reason_code, payload_json, free_text, recovery_action_taken,
+        created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{source}, #{sessionId}, #{messageId},
+        #{solved}, #{reasonCode}, #{payloadJson}, #{freeText}, #{recoveryActionTaken},
+        #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateFeedback">
+    UPDATE ds_feedback_event
+    SET solved = #{entity.solved},
+        reason_code = #{entity.reasonCode},
+        payload_json = #{entity.payloadJson},
+        free_text = #{entity.freeText},
+        recovery_action_taken = #{entity.recoveryActionTaken},
+        updated_at = #{now}
+    WHERE id = #{entity.id} AND tenant_id = #{entity.tenantId}
+  </update>
+
+  <select id="findForReport" resultMap="FeedbackMap">
+    SELECT id, tenant_id, user_id, source, session_id, message_id, solved, reason_code,
+           payload_json, free_text, recovery_action_taken, created_at, updated_at
+    FROM ds_feedback_event
+    WHERE tenant_id = #{tenantId}
+    <if test="source != null">
+      AND source = #{source}
+    </if>
+    <if test="createdAfter != null">
+      AND created_at &gt;= #{createdAfter}
+    </if>
+    ORDER BY created_at DESC
+  </select>
+</mapper>

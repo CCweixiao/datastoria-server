@@ -59,13 +59,14 @@ io.datastoria.server
 ## 数据库运行环境
 
 - `local`、`dev`、默认测试环境使用 SQLite 3，便于开发者零依赖启动。
-- `prod` 使用 MySQL 8.0+；`postgres` 使用 PostgreSQL 16+。两个生产 profile 都必须
-  校验对应 JDBC URL 并 fail fast。
-- 业务层只依赖 repository 接口，不根据数据库类型分叉业务规则。
-- Flyway 分别维护 `db/migration/sqlite`、`db/migration/mysql` 与
-  `db/migration/postgresql` 三套 DDL；每次变更使用相同版本号和描述。
-- 同一套 repository contract test 分别在 SQLite、MySQL 和 PostgreSQL 上运行，并增加
-  schema parity 检查。SQLite 通过不能替代所选生产方言验收。
+- `prod` 使用 MySQL 8.0+，必须校验 `jdbc:mysql:` URL 并 fail fast。PostgreSQL 不再支持。
+- 业务层只依赖 repository 接口，不根据数据库类型分叉业务规则；关系数据访问统一由
+  MyBatis-Plus 实现，SQLite 与 MySQL 共用同一套 Entity / Mapper / XML（见
+  `docs/migration/mybatis-plus-migration.md`）。
+- Flyway 分别维护 `db/migration/sqlite` 与 `db/migration/mysql` 两套 DDL；每次变更使用
+  相同版本号和描述。
+- 同一套 repository contract test 分别在 SQLite 与真实 MySQL（Testcontainers）上运行，并
+  增加 schema parity 检查。SQLite 通过不能替代 MySQL 验收。
 
 ## 核心数据流
 

@@ -113,23 +113,6 @@ jobs:
       - name: Run MySQL schema and repository contracts
         run: ./mvnw -B -ntp verify -Pmysql-it
 
-  postgres-contract:
-    name: postgres contract (jdk17)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Run PostgreSQL schema and repository contracts
-        run: ./mvnw -B -ntp verify -Ppostgres-it
-
   contract-runner:
     name: contract runner (node20)
     runs-on: ubuntu-latest

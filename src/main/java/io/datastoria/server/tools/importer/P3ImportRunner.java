@@ -7,11 +7,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.ExitCodeGenerator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.datastoria.server.persistence.mapper.P3ImportMapper;
 
 /**
  * Boots the importer as a one-shot CLI command on top of the standard Spring Boot application.
@@ -47,11 +48,11 @@ public class P3ImportRunner implements CommandLineRunner, ExitCodeGenerator {
   private int exitCode = 0;
 
   public P3ImportRunner(
-      JdbcClient jdbc,
+      P3ImportMapper db,
       TransactionTemplate transactions,
       ObjectMapper mapper,
       org.springframework.core.env.Environment env) {
-    this.importer = new P3Importer(jdbc, transactions, mapper);
+    this.importer = new P3Importer(db, transactions, mapper);
     this.env = env;
   }
 

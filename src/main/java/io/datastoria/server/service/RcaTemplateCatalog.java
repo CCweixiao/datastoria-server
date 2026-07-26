@@ -7,46 +7,36 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
-/** Read-only access to enabled, revisioned RCA templates persisted by the A27 bootstrap. */
+import io.datastoria.server.persistence.entity.RcaTemplateEntity;
+import io.datastoria.server.persistence.mapper.RcaTemplateMapper;
+
+/** Read-only access to enabled, revisioned RCA templates persisted by the bootstrap. */
 @Service
 public class RcaTemplateCatalog {
 
-  private final JdbcClient jdbc;
+  private final RcaTemplateMapper mapper;
 
-  public RcaTemplateCatalog(JdbcClient jdbc) {
-    this.jdbc = jdbc;
+  public RcaTemplateCatalog(RcaTemplateMapper mapper) {
+    this.mapper = mapper;
   }
 
   public Map<String, String> enabledSources() {
     Map<String, String> templates = new LinkedHashMap<>();
-    jdbc.sql(
-            "SELECT template_key, source_yaml FROM ds_rca_template"
-                + " WHERE enabled = TRUE ORDER BY template_key")
-        .query(
-            rs -> {
-              while (rs.next()) {
-                templates.put(rs.getString("template_key"), rs.getString("source_yaml"));
-              }
-              return templates;
-            });
+    for (RcaTemplateEntity row : mapper.findEnabledSources()) {
+      templates.put(row.getTemplateKey(), row.getSourceYaml());
+    }
     return templates;
   }
 
   public Optional<TemplateSnapshot> findEnabled(String key) {
-    return jdbc.sql(
-            "SELECT template_key, revision, source_yaml FROM ds_rca_template"
-                + " WHERE template_key = :key AND enabled = TRUE")
-        .param("key", key)
-        .query(
-            (rs, rowNum) -> {
-              String source = rs.getString("source_yaml");
-              return new TemplateSnapshot(
-                  rs.getString("template_key"), rs.getLong("revision"), sha256(source));
-            })
-        .optional();
+    RcaTemplateEntity row = mapper.findEnabledByKey(key);
+    if (row == null) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        new TemplateSnapshot(row.getTemplateKey(), row.getRevision(), sha256(row.getSourceYaml())));
   }
 
   public TemplateSnapshot requireEnabled(String key) {

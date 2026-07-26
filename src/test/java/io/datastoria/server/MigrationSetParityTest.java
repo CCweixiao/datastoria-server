@@ -12,7 +12,10 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
-/** Always-on structural gate for all Flyway dialects; runtime parity remains Testcontainers. */
+/**
+ * Always-on structural gate for the supported Flyway dialects; runtime parity remains
+ * Testcontainers.
+ */
 class MigrationSetParityTest {
 
   private static final Pattern TABLE =
@@ -22,23 +25,10 @@ class MigrationSetParityTest {
   void allDialectsHaveIdenticalMigrationVersionsAndCreatedTables() throws Exception {
     Map<String, Path> sqlite = migrations("sqlite");
     Map<String, Path> mysql = migrations("mysql");
-    Map<String, Path> postgres = migrations("postgresql");
 
     assertThat(mysql.keySet()).isEqualTo(sqlite.keySet());
-    assertThat(postgres.keySet()).isEqualTo(sqlite.keySet());
     assertThat(createdTables(mysql.values())).isEqualTo(createdTables(sqlite.values()));
-    assertThat(createdTables(postgres.values())).isEqualTo(createdTables(sqlite.values()));
     assertThat(sqlite).hasSize(15);
-  }
-
-  @Test
-  void postgresMigrationsContainNoUnconvertedDialectTokens() throws Exception {
-    for (Path migration : migrations("postgresql").values()) {
-      assertThat(Files.readString(migration))
-          .doesNotContain(
-              "AUTOINCREMENT", " GLOB ", " AS BLOB", "TINYINT", "LONGBLOB", "json_valid(");
-    }
-    assertThat(Path.of("scripts/generate-postgres-migrations.mjs")).isRegularFile();
   }
 
   private Map<String, Path> migrations(String dialect) throws Exception {

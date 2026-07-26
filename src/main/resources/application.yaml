@@ -27,5 +27,15 @@ info:
 #   local  -> SQLite file (./data/datastoria.db)
 #   test   -> SQLite in-memory
 #   prod   -> MySQL (fail-fast on missing env vars)
-#   postgres -> PostgreSQL (fail-fast on missing env vars)
 # Running without a profile intentionally has no datasource.
+
+# MyBatis-Plus configuration shared by every datasource profile. SQLite and MySQL load the
+# SAME mapper XML, type handlers and camelCase mapping; only the datasource (Flyway location +
+# JDBC driver) changes per profile. No global TenantLine/LogicDelete/OptimisticLocker plugins
+# are enabled here: tenant_id, deleted_at and revision semantics are implemented explicitly
+# by the repository adapters and custom mapper XML.
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-handlers-package: io.datastoria.server.persistence.typehandler
+  configuration:
+    map-underscore-to-camel-case: true

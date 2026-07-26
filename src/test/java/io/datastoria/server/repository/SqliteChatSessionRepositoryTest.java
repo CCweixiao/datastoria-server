@@ -16,7 +16,6 @@ import io.datastoria.server.TestDbHelper;
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.domain.ChatSession;
 import io.datastoria.server.domain.Ulid;
-import io.datastoria.server.repository.jdbc.SessionListCursor;
 
 @SpringBootTest
 @ActiveProfiles("test")

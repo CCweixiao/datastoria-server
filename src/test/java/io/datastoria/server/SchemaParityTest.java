@@ -26,11 +26,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
- * Verifies that the SQLite, MySQL, and PostgreSQL migration trees produce a logically equivalent
- * schema: same tables, columns, keys, and unique constraints. Type names may differ by dialect.
+ * Verifies that the SQLite and MySQL migration trees produce a logically equivalent schema: same
+ * tables, columns, keys, and unique constraints. Type names may differ by dialect.
  *
  * <p>Requires Docker; skipped automatically only if Docker itself is unavailable. Container or
  * migration failures remain hard test failures.
@@ -40,7 +39,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 class SchemaParityTest {
 
   private static MySQLContainer<?> mysql;
-  private static PostgreSQLContainer<?> postgres;
 
   @Autowired DataSource sqliteDataSource;
 
@@ -57,22 +55,11 @@ class SchemaParityTest {
           .locations("classpath:db/migration/mysql")
           .load()
           .migrate();
-      postgres = new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("parity_test");
-      postgres.start();
-      Flyway.configure()
-          .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-          .locations("classpath:db/migration/postgresql")
-          .load()
-          .migrate();
     } catch (Exception e) {
-      if (postgres != null && postgres.isRunning()) {
-        postgres.stop();
-      }
       if (mysql != null && mysql.isRunning()) {
         mysql.stop();
       }
       mysql = null;
-      postgres = null;
       throw e;
     }
   }
@@ -81,9 +68,6 @@ class SchemaParityTest {
   static void stopDatabases() {
     if (mysql != null) {
       mysql.stop();
-    }
-    if (postgres != null) {
-      postgres.stop();
     }
   }
 
@@ -147,11 +131,6 @@ class SchemaParityTest {
     List<SchemaSnapshot> snapshots = new ArrayList<>();
     try (Connection connection =
         DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      snapshots.add(snapshot(connection));
-    }
-    try (Connection connection =
-        DriverManager.getConnection(
-            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
       snapshots.add(snapshot(connection));
     }
     return snapshots;

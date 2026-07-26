@@ -32,9 +32,9 @@ import io.datastoria.server.dto.SessionPageDTO;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.ChatMessageRepository;
 import io.datastoria.server.repository.ChatSessionRepository;
+import io.datastoria.server.repository.SessionListCursor;
 import io.datastoria.server.repository.SessionPage;
 import io.datastoria.server.repository.SessionShareRepository;
-import io.datastoria.server.repository.jdbc.SessionListCursor;
 
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;

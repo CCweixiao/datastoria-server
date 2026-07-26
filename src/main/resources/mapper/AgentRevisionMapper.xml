@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.AgentRevisionMapper">
+
+  <resultMap id="RevisionMap" type="io.datastoria.server.persistence.entity.AgentRevisionEntity" autoMapping="true"/>
+
+  <insert id="insertRevision" parameterType="io.datastoria.server.persistence.entity.AgentRevisionEntity">
+    INSERT INTO ds_agent_revision (id, agent_id, version, model_id, system_prompt, prompt_checksum,
+        runtime_config_json, tool_policy_json, skill_policy_json, created_by, created_at)
+    VALUES (#{id}, #{agentId}, #{version}, #{modelId}, #{systemPrompt}, #{promptChecksum},
+        #{runtimeConfigJson}, #{toolPolicyJson}, #{skillPolicyJson}, #{createdBy}, #{createdAt})
+  </insert>
+
+  <select id="findById" resultMap="RevisionMap">
+    SELECT r.id, r.agent_id, r.version, r.model_id, r.system_prompt, r.prompt_checksum,
+           r.runtime_config_json, r.tool_policy_json, r.skill_policy_json, r.created_by, r.created_at
+    FROM ds_agent_revision r
+    JOIN ds_agent_definition d ON d.id = r.agent_id
+    WHERE r.id = #{id} AND d.tenant_id = #{tenantId} AND d.deleted_at IS NULL
+  </select>
+
+  <select id="findByAgentId" resultMap="RevisionMap">
+    SELECT r.id, r.agent_id, r.version, r.model_id, r.system_prompt, r.prompt_checksum,
+           r.runtime_config_json, r.tool_policy_json, r.skill_policy_json, r.created_by, r.created_at
+    FROM ds_agent_revision r
+    JOIN ds_agent_definition d ON d.id = r.agent_id
+    WHERE r.agent_id = #{agentId} AND d.tenant_id = #{tenantId} AND d.deleted_at IS NULL
+    ORDER BY r.version
+  </select>
+</mapper>

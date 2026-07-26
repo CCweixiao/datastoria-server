@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Optional;
 
 import io.datastoria.server.domain.ChatSession;
-import io.datastoria.server.repository.jdbc.SessionListCursor;
 
 /**
  * Persistent chat-session access. Every method is scoped by {@code tenantId}; reads and writes

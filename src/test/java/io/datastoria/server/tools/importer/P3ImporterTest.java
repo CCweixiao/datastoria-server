@@ -22,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.datastoria.server.TestDbHelper;
+import io.datastoria.server.persistence.mapper.P3ImportMapper;
 import io.datastoria.server.tools.importer.ImportRows.FeedbackRow;
 import io.datastoria.server.tools.importer.ImportRows.MessageRow;
 import io.datastoria.server.tools.importer.ImportRows.SessionRow;
@@ -41,6 +42,7 @@ class P3ImporterTest {
   @Autowired private JdbcClient jdbc;
   @Autowired private ObjectMapper mapper;
   @Autowired private TestDbHelper dbHelper;
+  @Autowired private P3ImportMapper p3Mapper;
   @Autowired private org.springframework.transaction.support.TransactionTemplate transactions;
 
   private P3Importer importer;
@@ -50,7 +52,7 @@ class P3ImporterTest {
   @BeforeEach
   void setUp() {
     dbHelper.cleanAll();
-    importer = new P3Importer(jdbc, transactions, mapper);
+    importer = new P3Importer(p3Mapper, transactions, mapper);
   }
 
   @Test

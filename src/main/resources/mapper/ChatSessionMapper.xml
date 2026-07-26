@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.ChatSessionMapper">
+
+  <resultMap id="ChatSessionMap" type="io.datastoria.server.persistence.entity.ChatSessionEntity" autoMapping="true"/>
+
+  <insert id="insertSession" parameterType="io.datastoria.server.persistence.entity.ChatSessionEntity">
+    INSERT INTO ds_chat_session (id, tenant_id, user_id, connection_id, title, revision,
+        created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{connectionId}, #{title}, #{revision},
+        #{createdAt}, #{updatedAt})
+  </insert>
+
+  <!--
+    Keyset pagination on (updated_at DESC, id DESC). Both optional filters are guarded by <if> so a
+    NULL is never bound into a comparison. The caller binds limit+1 and inspects the trailing row to
+    decide whether a next cursor exists. Strict-less-than keyset window avoids repeating rows.
+  -->
+  <select id="findPage" resultMap="ChatSessionMap">
+    SELECT id, tenant_id, user_id, connection_id, title, revision, created_at, updated_at
+    FROM ds_chat_session
+    WHERE tenant_id = #{tenantId}
+      AND user_id = #{userId}
+      <if test="connectionId != null and connectionId != ''">
+        AND connection_id = #{connectionId}
+      </if>
+      <if test="cursorUpdatedAt != null">
+        AND (updated_at &lt; #{cursorUpdatedAt}
+             OR (updated_at = #{cursorUpdatedAt} AND id &lt; #{cursorId}))
+      </if>
+    ORDER BY updated_at DESC, id DESC
+    LIMIT #{limit}
+  </select>
+
+  <update id="rename">
+    UPDATE ds_chat_session
+    SET title = #{title}, updated_at = #{now}, revision = revision + 1
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND user_id = #{userId}
+  </update>
+
+  <delete id="delete">
+    DELETE FROM ds_chat_session
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND user_id = #{userId}
+  </delete>
+
+  <select id="findAllByConnection" resultMap="ChatSessionMap">
+    SELECT id, tenant_id, user_id, connection_id, title, revision, created_at, updated_at
+    FROM ds_chat_session
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND connection_id = #{connectionId}
+    ORDER BY updated_at DESC, id DESC
+  </select>
+</mapper>

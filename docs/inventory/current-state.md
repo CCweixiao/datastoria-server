@@ -81,7 +81,7 @@
 
 目标：
 
-- 系统默认、租户覆盖、用户偏好分层落库，并在 SQLite/MySQL/PostgreSQL 保持相同语义。
+- 系统默认、租户覆盖、用户偏好分层落库，并在 SQLite/MySQL 保持相同语义。
 - Agent 定义与运行策略分开：定义包含模型、prompt、Skill/Tool policy；用户偏好只覆盖允许字段。
 - API 返回合并后的 effective config，同时返回 revision/ETag 防止覆盖更新。
 
@@ -161,7 +161,7 @@ ClickHouse 工具只接收 `connectionId` 解析出的服务端连接，不再�
 2. 当前分享访问似乎可走 PATCH/DELETE，兼容与安全目标可能冲突；先锁定行为，再用显式
    ADR 变更。
 3. parts/metadata 是开放 JSON union，Java DTO 不应在早期丢弃未知字段。
-4. Java 需要兼容原 Node 已支持的 SQLite、MySQL 和 PostgreSQL；repository 行为必须由
+4. Java 需要兼容 SQLite、MySQL 两个方言；repository 行为必须由
    同一套 contract test 约束，生产 profile 不得回落到 SQLite。
 5. OAuth provider token 当前进入浏览器；迁移中要分两步兼容，最终必须服务端托管。
 6. 工具输出可能很大；WebFlux、SQLite TEXT/MySQL JSON 和 SSE 都需要大小、裁剪、背压

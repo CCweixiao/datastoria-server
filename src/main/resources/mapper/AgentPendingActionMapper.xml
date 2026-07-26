@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.AgentPendingActionMapper">
+
+  <resultMap id="PendingMap" type="io.datastoria.server.persistence.entity.AgentPendingActionEntity" autoMapping="true"/>
+
+  <!-- INSERT ... SELECT: zero rows inserted iff the run does not exist for (tenant, user). -->
+  <insert id="createInsert">
+    INSERT INTO ds_agent_pending_action (id, tenant_id, run_id, tool_call_id, action_type,
+        request_json, response_json, resolution_digest, status, expires_at, resolved_by,
+        resolved_at, revision, created_at, updated_at)
+    SELECT #{a.id}, #{a.tenantId}, #{a.runId}, #{a.toolCallId}, #{a.actionType}, #{a.requestJson},
+           #{a.responseJson}, #{a.resolutionDigest}, #{a.status}, #{a.expiresAt}, #{a.resolvedBy},
+           #{a.resolvedAt}, #{a.revision}, #{a.createdAt}, #{a.updatedAt}
+    FROM ds_agent_run
+    WHERE id = #{a.runId} AND tenant_id = #{a.tenantId} AND user_id = #{userId}
+  </insert>
+
+  <select id="findById" resultMap="PendingMap">
+    SELECT a.id, a.tenant_id, a.run_id, a.tool_call_id, a.action_type, a.request_json,
+           a.response_json, a.resolution_digest, a.status, a.expires_at, a.resolved_by,
+           a.resolved_at, a.revision, a.created_at, a.updated_at
+    FROM ds_agent_pending_action a
+    JOIN ds_agent_run r ON r.tenant_id = a.tenant_id AND r.id = a.run_id
+    WHERE a.tenant_id = #{tenantId} AND a.run_id = #{runId} AND a.id = #{actionId}
+      AND r.user_id = #{userId}
+  </select>
+
+  <select id="findByToolCall" resultMap="PendingMap">
+    SELECT a.id, a.tenant_id, a.run_id, a.tool_call_id, a.action_type, a.request_json,
+           a.response_json, a.resolution_digest, a.status, a.expires_at, a.resolved_by,
+           a.resolved_at, a.revision, a.created_at, a.updated_at
+    FROM ds_agent_pending_action a
+    JOIN ds_agent_run r ON r.tenant_id = a.tenant_id AND r.id = a.run_id
+    WHERE a.tenant_id = #{tenantId} AND a.run_id = #{runId} AND a.tool_call_id = #{toolCallId}
+      AND r.user_id = #{userId}
+  </select>
+
+  <select id="findPending" resultMap="PendingMap">
+    SELECT a.id, a.tenant_id, a.run_id, a.tool_call_id, a.action_type, a.request_json,
+           a.response_json, a.resolution_digest, a.status, a.expires_at, a.resolved_by,
+           a.resolved_at, a.revision, a.created_at, a.updated_at
+    FROM ds_agent_pending_action a
+    JOIN ds_agent_run r ON r.tenant_id = a.tenant_id AND r.id = a.run_id
+    WHERE a.tenant_id = #{tenantId} AND a.run_id = #{runId} AND r.user_id = #{userId}
+      AND a.status = 'pending'
+    ORDER BY a.created_at, a.id
+  </select>
+
+  <!-- Revision-guarded resolution CAS with status, expiry and owner-scope guards. -->
+  <update id="resolveCas">
+    UPDATE ds_agent_pending_action
+    SET status = #{statusDb},
+        response_json = #{res.responseJson},
+        resolution_digest = #{res.digest},
+        resolved_by = #{res.resolvedBy},
+        resolved_at = #{res.resolvedAt},
+        revision = revision + 1,
+        updated_at = #{res.resolvedAt}
+    WHERE id = #{actionId} AND tenant_id = #{tenantId} AND run_id = #{runId}
+      AND status = 'pending' AND revision = #{expectedRevision} AND expires_at &gt; #{res.resolvedAt}
+      AND EXISTS (SELECT 1 FROM ds_agent_run r
+                  WHERE r.id = #{runId} AND r.tenant_id = #{tenantId} AND r.user_id = #{userId})
+  </update>
+
+  <update id="expireDue">
+    UPDATE ds_agent_pending_action
+    SET status = 'expired', resolved_by = 'system', resolved_at = #{now},
+        revision = revision + 1, updated_at = #{now}
+    WHERE status = 'pending' AND expires_at &lt;= #{now}
+  </update>
+
+  <update id="expireOne">
+    UPDATE ds_agent_pending_action
+    SET status = 'expired', resolved_by = 'system', resolved_at = #{now},
+        revision = revision + 1, updated_at = #{now}
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND status = 'pending' AND revision = #{expectedRevision}
+  </update>
+</mapper>

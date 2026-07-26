@@ -19,8 +19,8 @@ import io.datastoria.server.dto.ProviderResponse;
 import io.datastoria.server.dto.ProviderTestResponse;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.repository.ModelProviderRepository;
+import io.datastoria.server.repository.ModelProviderSecretRepository;
 import io.datastoria.server.repository.ModelRepository;
-import io.datastoria.server.repository.jdbc.JdbcModelProviderRepository;
 
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -33,7 +33,7 @@ import reactor.core.scheduler.Scheduler;
 public class ProviderService {
 
   private final ModelProviderRepository providerRepo;
-  private final JdbcModelProviderRepository jdbcProviderRepo;
+  private final ModelProviderSecretRepository providerSecrets;
   private final ModelRepository modelRepo;
   private final SecretService secretService;
   private final TransactionTemplate transactions;
@@ -42,14 +42,14 @@ public class ProviderService {
 
   public ProviderService(
       ModelProviderRepository providerRepo,
-      JdbcModelProviderRepository jdbcProviderRepo,
+      ModelProviderSecretRepository providerSecrets,
       ModelRepository modelRepo,
       SecretService secretService,
       TransactionTemplate transactions,
       ProviderRemoteClient remoteClient,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.providerRepo = providerRepo;
-    this.jdbcProviderRepo = jdbcProviderRepo;
+    this.providerSecrets = providerSecrets;
     this.modelRepo = modelRepo;
     this.secretService = secretService;
     this.transactions = transactions;
@@ -193,7 +193,7 @@ public class ProviderService {
                               req.secretKind(),
                               req.value(),
                               req.expiresAt());
-                      jdbcProviderRepo.updateSecretId(providerId, identity.tenantId(), saved.id());
+                      providerSecrets.updateSecretId(providerId, identity.tenantId(), saved.id());
                       if (provider.secretId() != null) {
                         secretService.delete(provider.secretId(), identity.tenantId());
                       }
@@ -212,7 +212,7 @@ public class ProviderService {
                               .findById(providerId, identity.tenantId())
                               .orElseThrow(() -> new NotFoundException("Provider", providerId));
                       if (provider.secretId() != null) {
-                        jdbcProviderRepo.updateSecretId(providerId, identity.tenantId(), null);
+                        providerSecrets.updateSecretId(providerId, identity.tenantId(), null);
                         secretService.delete(provider.secretId(), identity.tenantId());
                       }
                     }))

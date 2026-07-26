@@ -20,7 +20,7 @@ import io.datastoria.server.api.AuthCompatibilityController;
  */
 @Configuration
 @EnableWebFluxSecurity
-@Profile({"prod", "postgres"})
+@Profile({"prod"})
 public class ProductionSecurityConfig {
 
   @Bean

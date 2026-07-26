@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.AgentSkillMapper">
+
+  <!--
+    Visibility reads JOIN ds_skill_revision and alias its columns onto AgentSkillEntity fields:
+    skill_md -> content, effective_state -> state, skill_version -> version,
+    skill_revision -> revision, content_checksum -> bundleChecksum. The remaining columns auto-map.
+  -->
+  <resultMap id="SkillViewMap" type="io.datastoria.server.persistence.entity.AgentSkillEntity" autoMapping="true">
+    <result property="content" column="skill_md"/>
+    <result property="state" column="effective_state"/>
+    <result property="version" column="skill_version"/>
+    <result property="revision" column="skill_revision"/>
+    <result property="bundleChecksum" column="content_checksum"/>
+  </resultMap>
+
+  <resultMap id="ResourceMap" type="io.datastoria.server.persistence.entity.SkillResourceEntity" autoMapping="true"/>
+
+  <select id="findVisible" resultMap="SkillViewMap">
+    SELECT s.id, s.tenant_id, s.owner_user_id, s.scope, s.builtin,
+           s.created_at, s.updated_at, s.deleted_at,
+           r.revision AS skill_revision, r.version AS skill_version,
+           r.skill_md, r.content_checksum,
+           CASE WHEN #{includeDraft} = 1 AND s.draft_revision IS NOT NULL
+                THEN 'draft' ELSE 'published' END AS effective_state
+    FROM ds_agent_skill s
+    JOIN ds_skill_revision r
+      ON r.tenant_id = s.tenant_id AND r.skill_id = s.id
+     AND r.revision = CASE
+           WHEN #{includeDraft} = 1 AND s.draft_revision IS NOT NULL
+             THEN s.draft_revision
+           ELSE s.published_revision
+         END
+    WHERE s.tenant_id = #{tenantId} AND s.deleted_at IS NULL
+      AND (s.scope = 'global' OR s.owner_user_id = #{userId})
+      AND (#{includeDraft} = 1 OR s.published_revision IS NOT NULL)
+    ORDER BY s.id
+  </select>
+
+  <select id="findById" resultMap="SkillViewMap">
+    SELECT s.id, s.tenant_id, s.owner_user_id, s.scope, s.builtin,
+           s.created_at, s.updated_at, s.deleted_at,
+           r.revision AS skill_revision, r.version AS skill_version,
+           r.skill_md, r.content_checksum,
+           CASE WHEN #{includeDraft} = 1 AND s.draft_revision IS NOT NULL
+                THEN 'draft' ELSE 'published' END AS effective_state
+    FROM ds_agent_skill s
+    JOIN ds_skill_revision r
+      ON r.tenant_id = s.tenant_id AND r.skill_id = s.id
+     AND r.revision = CASE
+           WHEN #{includeDraft} = 1 AND s.draft_revision IS NOT NULL
+             THEN s.draft_revision
+           ELSE s.published_revision
+         END
+    WHERE s.tenant_id = #{tenantId} AND s.id = #{id} AND s.deleted_at IS NULL
+      AND (s.scope = 'global' OR s.owner_user_id = #{userId})
+      AND (#{includeDraft} = 1 OR s.published_revision IS NOT NULL)
+  </select>
+
+  <select id="findRevision" resultMap="SkillViewMap">
+    SELECT s.id, s.tenant_id, s.owner_user_id, s.scope, s.builtin,
+           s.created_at, s.updated_at, s.deleted_at,
+           r.revision AS skill_revision, r.version AS skill_version,
+           r.skill_md, r.content_checksum, 'pinned' AS effective_state
+    FROM ds_agent_skill s
+    JOIN ds_skill_revision r
+      ON r.tenant_id = s.tenant_id AND r.skill_id = s.id
+     AND r.revision = #{skillRevision}
+    WHERE s.tenant_id = #{tenantId} AND s.id = #{id}
+      AND (s.scope = 'global' OR s.owner_user_id = #{userId})
+  </select>
+
+  <select id="findRoot" resultType="io.datastoria.server.persistence.entity.AgentSkillEntity">
+    SELECT owner_user_id AS ownerUserId, revision
+    FROM ds_agent_skill
+    WHERE tenant_id = #{tenantId} AND id = #{id}
+  </select>
+
+  <insert id="insertSkillRoot" parameterType="io.datastoria.server.persistence.entity.AgentSkillEntity">
+    INSERT INTO ds_agent_skill
+      (id, tenant_id, owner_user_id, content, state, scope, version, bundle_checksum,
+       builtin, revision, published_revision, draft_revision, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{ownerUserId}, #{content}, #{state}, #{scope}, #{version},
+       #{bundleChecksum}, #{builtin}, #{revision}, #{publishedRevision}, #{draftRevision},
+       #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateSkillRoot">
+    UPDATE ds_agent_skill
+    SET content = #{entity.content}, state = #{entity.state}, scope = #{entity.scope},
+        version = #{entity.version}, bundle_checksum = #{entity.bundleChecksum},
+        builtin = #{entity.builtin}, revision = #{entity.revision},
+        published_revision = CASE WHEN #{published} = 1
+                                  THEN #{entity.revision} ELSE published_revision END,
+        draft_revision = CASE WHEN #{published} = 1 THEN NULL ELSE #{entity.revision} END,
+        updated_at = #{entity.updatedAt}, deleted_at = NULL
+    WHERE tenant_id = #{entity.tenantId} AND id = #{entity.id}
+      AND owner_user_id = #{entity.ownerUserId}
+  </update>
+
+  <insert id="insertSkillRevision" parameterType="io.datastoria.server.persistence.entity.SkillRevisionEntity">
+    INSERT INTO ds_skill_revision
+      (tenant_id, skill_id, revision, version, name, description, summary, skill_md,
+       metadata_json, required_tools_json, content_checksum, review_status, created_by, created_at)
+    VALUES (#{tenantId}, #{skillId}, #{revision}, #{version}, #{name}, #{description}, #{summary},
+       #{skillMd}, #{metadataJson}, #{requiredToolsJson}, #{contentChecksum}, #{reviewStatus},
+       #{createdBy}, #{createdAt})
+  </insert>
+
+  <insert id="insertSkillResource" parameterType="io.datastoria.server.persistence.entity.SkillResourceEntity">
+    INSERT INTO ds_skill_resource
+      (tenant_id, skill_id, skill_revision, resource_path, media_type, content, size_bytes, checksum)
+    VALUES (#{tenantId}, #{skillId}, #{skillRevision}, #{resourcePath}, #{mediaType}, #{content},
+       #{sizeBytes}, #{checksum})
+  </insert>
+
+  <delete id="deleteCompatResources">
+    DELETE FROM ds_agent_skill_resource WHERE tenant_id = #{tenantId} AND skill_id = #{skillId}
+  </delete>
+
+  <insert id="insertCompatResource" parameterType="io.datastoria.server.persistence.entity.AgentSkillResourceEntity">
+    INSERT INTO ds_agent_skill_resource
+      (tenant_id, skill_id, resource_path, content, created_at, updated_at)
+    VALUES (#{tenantId}, #{skillId}, #{resourcePath}, #{content}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <select id="findResources" resultMap="ResourceMap">
+    SELECT tenant_id, skill_id, resource_path, content
+    FROM ds_skill_resource
+    WHERE tenant_id = #{tenantId} AND skill_id = #{skillId} AND skill_revision = #{skillRevision}
+    ORDER BY resource_path
+  </select>
+
+  <update id="publish">
+    UPDATE ds_agent_skill
+    SET state = 'published', published_revision = draft_revision, draft_revision = NULL,
+        updated_at = #{now}
+    WHERE tenant_id = #{tenantId} AND id = #{id} AND owner_user_id = #{userId}
+      AND draft_revision IS NOT NULL AND deleted_at IS NULL
+  </update>
+
+  <update id="delete">
+    UPDATE ds_agent_skill SET deleted_at = #{now}
+    WHERE tenant_id = #{tenantId} AND id = #{id} AND owner_user_id = #{userId}
+      AND builtin = FALSE AND deleted_at IS NULL
+  </update>
+</mapper>

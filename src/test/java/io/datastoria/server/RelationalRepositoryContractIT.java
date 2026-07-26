@@ -30,7 +30,7 @@ import io.datastoria.server.repository.FeedbackEventRepository;
 import io.datastoria.server.repository.ModelProviderRepository;
 import io.datastoria.server.repository.ModelRepository;
 
-/** Shared repository contract executed by the MySQL and PostgreSQL Testcontainers suites. */
+/** Shared repository contract executed by the MySQL Testcontainers suite. */
 abstract class RelationalRepositoryContractIT {
 
   @Autowired AgentDefinitionRepository agentDefRepo;

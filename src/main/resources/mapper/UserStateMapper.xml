@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.UserStateMapper">
+
+  <resultMap id="StateMap" type="io.datastoria.server.persistence.entity.UserStateEntity" autoMapping="true"/>
+
+  <select id="findAll" resultMap="StateMap">
+    SELECT tenant_id, user_id, namespace, state_key, value_json, revision, created_at, updated_at
+    FROM ds_user_state
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND namespace = #{namespace}
+    ORDER BY state_key
+  </select>
+
+  <select id="find" resultMap="StateMap">
+    SELECT tenant_id, user_id, namespace, state_key, value_json, revision, created_at, updated_at
+    FROM ds_user_state
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId}
+      AND namespace = #{namespace} AND state_key = #{stateKey}
+  </select>
+
+  <update id="casUpdate">
+    UPDATE ds_user_state
+    SET value_json = #{entity.valueJson}, revision = revision + 1, updated_at = #{now}
+    WHERE tenant_id = #{entity.tenantId} AND user_id = #{entity.userId}
+      AND namespace = #{entity.namespace} AND state_key = #{entity.stateKey}
+      AND revision = #{expectedRevision}
+  </update>
+
+  <update id="updateNoRevisionCheck">
+    UPDATE ds_user_state
+    SET value_json = #{entity.valueJson}, revision = revision + 1, updated_at = #{now}
+    WHERE tenant_id = #{entity.tenantId} AND user_id = #{entity.userId}
+      AND namespace = #{entity.namespace} AND state_key = #{entity.stateKey}
+  </update>
+
+  <insert id="insert">
+    INSERT INTO ds_user_state (tenant_id, user_id, namespace, state_key, value_json, revision,
+        created_at, updated_at)
+    VALUES (#{entity.tenantId}, #{entity.userId}, #{entity.namespace}, #{entity.stateKey},
+        #{entity.valueJson}, 0, #{now}, #{now})
+  </insert>
+
+  <delete id="delete">
+    DELETE FROM ds_user_state
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId}
+      AND namespace = #{namespace} AND state_key = #{stateKey}
+  </delete>
+</mapper>

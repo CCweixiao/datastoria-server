@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.SessionShareMapper">
+
+  <resultMap id="ShareMap" type="io.datastoria.server.persistence.entity.SessionShareEntity" autoMapping="true"/>
+
+  <insert id="insertShare" parameterType="io.datastoria.server.persistence.entity.SessionShareEntity">
+    INSERT INTO ds_session_share (id, tenant_id, session_id, owner_user_id, token_hash,
+        expires_at, revoked_at, created_at)
+    VALUES (#{id}, #{tenantId}, #{sessionId}, #{ownerUserId}, #{tokenHash},
+        #{expiresAt}, NULL, #{createdAt})
+  </insert>
+
+  <select id="findActive" resultMap="ShareMap">
+    SELECT id, tenant_id, session_id, owner_user_id, token_hash, expires_at, revoked_at, created_at
+    FROM ds_session_share
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND revoked_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  </select>
+
+  <select id="findByTokenHash" resultMap="ShareMap">
+    SELECT id, tenant_id, session_id, owner_user_id, token_hash, expires_at, revoked_at, created_at
+    FROM ds_session_share
+    WHERE token_hash = #{tokenHash}
+    LIMIT 1
+  </select>
+
+  <update id="revoke">
+    UPDATE ds_session_share
+    SET revoked_at = #{now}
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND revoked_at IS NULL
+  </update>
+</mapper>

@@ -27,18 +27,4 @@ public class FlywayConfig {
   }
 
   record ProdDatasourceGuard(String url) {}
-
-  @Bean
-  @Profile("postgres")
-  PostgresDatasourceGuard postgresDatasourceGuard(DataSourceProperties properties) {
-    String url = properties.getUrl();
-    if (url == null || !url.startsWith("jdbc:postgresql:")) {
-      throw new IllegalStateException(
-          "PostgreSQL profile requires a datasource URL starting with"
-              + " 'jdbc:postgresql:'. Refusing to start with another dialect.");
-    }
-    return new PostgresDatasourceGuard(url);
-  }
-
-  record PostgresDatasourceGuard(String url) {}
 }

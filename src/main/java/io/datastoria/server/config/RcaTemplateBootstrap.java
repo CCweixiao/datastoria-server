@@ -6,41 +6,37 @@ import java.util.UUID;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+
+import io.datastoria.server.persistence.entity.RcaTemplateEntity;
+import io.datastoria.server.persistence.mapper.RcaTemplateMapper;
 
 @Component
 public class RcaTemplateBootstrap implements ApplicationRunner {
 
-  private final JdbcClient jdbc;
+  private final RcaTemplateMapper mapper;
 
-  public RcaTemplateBootstrap(JdbcClient jdbc) {
-    this.jdbc = jdbc;
+  public RcaTemplateBootstrap(RcaTemplateMapper mapper) {
+    this.mapper = mapper;
   }
 
   @Override
   public void run(ApplicationArguments args) throws Exception {
-    Integer count =
-        jdbc.sql("SELECT COUNT(*) FROM ds_rca_template WHERE template_key = :key")
-            .param("key", "high_part_count")
-            .query(Integer.class)
-            .single();
-    if (count != null && count > 0) {
+    if (mapper.countByKey("high_part_count") > 0) {
       return;
     }
     String source =
         new ClassPathResource("rca/high-part-count.yaml")
             .getContentAsString(StandardCharsets.UTF_8);
     long now = System.currentTimeMillis();
-    jdbc.sql(
-            "INSERT INTO ds_rca_template"
-                + " (id, template_key, source_yaml, enabled, revision, created_at, updated_at)"
-                + " VALUES (:id, :key, :source, :enabled, 1, :now, :now)")
-        .param("id", UUID.randomUUID().toString())
-        .param("key", "high_part_count")
-        .param("source", source)
-        .param("enabled", true)
-        .param("now", now)
-        .update();
+    RcaTemplateEntity entity = new RcaTemplateEntity();
+    entity.setId(UUID.randomUUID().toString());
+    entity.setTemplateKey("high_part_count");
+    entity.setSourceYaml(source);
+    entity.setEnabled(true);
+    entity.setRevision(1L);
+    entity.setCreatedAt(now);
+    entity.setUpdatedAt(now);
+    mapper.insertTemplate(entity);
   }
 }

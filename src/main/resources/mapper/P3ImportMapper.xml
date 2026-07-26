@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.P3ImportMapper">
+
+  <!-- ds_chat_session -->
+  <select id="sessionExists" resultType="java.lang.Integer">
+    SELECT 1 FROM ds_chat_session WHERE tenant_id = #{tenantId} AND id = #{id} LIMIT 1
+  </select>
+  <insert id="insertSession">
+    INSERT INTO ds_chat_session (id, tenant_id, user_id, connection_id, title, revision,
+        created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{connectionId}, #{title}, #{revision},
+        #{createdAt}, #{updatedAt})
+  </insert>
+  <update id="updateSession">
+    UPDATE ds_chat_session
+    SET user_id = #{userId}, connection_id = #{connectionId}, title = #{title},
+        revision = #{revision}, updated_at = #{updatedAt}
+    WHERE tenant_id = #{tenantId} AND id = #{id}
+  </update>
+
+  <!-- ds_chat_message -->
+  <select id="messageExists" resultType="java.lang.Integer">
+    SELECT 1 FROM ds_chat_message
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND id = #{id} LIMIT 1
+  </select>
+  <insert id="insertMessage">
+    INSERT INTO ds_chat_message (id, tenant_id, session_id, user_id, role, parts_json,
+        metadata_json, sequence, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{sessionId}, #{userId}, #{role}, #{partsJson},
+        #{metadataJson}, #{sequence}, #{createdAt}, #{updatedAt})
+  </insert>
+  <update id="updateMessage">
+    UPDATE ds_chat_message
+    SET user_id = #{userId}, role = #{role}, parts_json = #{partsJson},
+        metadata_json = #{metadataJson}, sequence = #{sequence}, updated_at = #{updatedAt}
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND id = #{id}
+  </update>
+
+  <!-- ds_feedback_event -->
+  <select id="feedbackExists" resultType="java.lang.Integer">
+    SELECT 1 FROM ds_feedback_event
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND source = #{source}
+      AND session_id = #{sessionId} AND message_id = #{messageId} LIMIT 1
+  </select>
+  <insert id="insertFeedback">
+    INSERT INTO ds_feedback_event (id, tenant_id, user_id, source, session_id, message_id,
+        solved, reason_code, payload_json, free_text, recovery_action_taken,
+        created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{source}, #{sessionId}, #{messageId},
+        #{solved}, #{reasonCode}, #{payloadJson}, #{freeText}, #{recoveryActionTaken},
+        #{createdAt}, #{updatedAt})
+  </insert>
+  <update id="updateFeedback">
+    UPDATE ds_feedback_event
+    SET solved = #{solved}, reason_code = #{reasonCode}, payload_json = #{payloadJson},
+        free_text = #{freeText}, recovery_action_taken = #{recoveryActionTaken},
+        updated_at = #{updatedAt}
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND source = #{source}
+      AND session_id = #{sessionId} AND message_id = #{messageId}
+  </update>
+
+  <!-- ds_session_share -->
+  <select id="shareExists" resultType="java.lang.Integer">
+    SELECT 1 FROM ds_session_share WHERE tenant_id = #{tenantId} AND token_hash = #{tokenHash} LIMIT 1
+  </select>
+  <insert id="insertShare">
+    INSERT INTO ds_session_share (id, tenant_id, session_id, owner_user_id, token_hash,
+        expires_at, revoked_at, created_at)
+    VALUES (#{id}, #{tenantId}, #{sessionId}, #{ownerUserId}, #{tokenHash},
+        #{expiresAt}, #{revokedAt}, #{createdAt})
+  </insert>
+  <update id="updateShare">
+    UPDATE ds_session_share SET expires_at = #{expiresAt}, revoked_at = #{revokedAt}
+    WHERE tenant_id = #{tenantId} AND token_hash = #{tokenHash}
+  </update>
+</mapper>

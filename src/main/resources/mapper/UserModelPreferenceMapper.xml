@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.datastoria.server.persistence.mapper.UserModelPreferenceMapper">
+
+  <resultMap id="PrefMap" type="io.datastoria.server.persistence.entity.UserModelPreferenceEntity" autoMapping="true"/>
+
+  <select id="findByUser" resultMap="PrefMap">
+    SELECT id, tenant_id, user_id, selected_model_id, preference_json, revision, created_at, updated_at
+    FROM ds_user_model_preference
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId}
+  </select>
+
+  <update id="casUpdate">
+    UPDATE ds_user_model_preference
+    SET selected_model_id = #{entity.selectedModelId}, preference_json = #{entity.preferenceJson},
+        revision = revision + 1, updated_at = #{now}
+    WHERE tenant_id = #{entity.tenantId} AND user_id = #{entity.userId}
+      AND revision = #{expectedRevision}
+  </update>
+
+  <insert id="insert" parameterType="io.datastoria.server.persistence.entity.UserModelPreferenceEntity">
+    INSERT INTO ds_user_model_preference (id, tenant_id, user_id, selected_model_id, preference_json,
+        revision, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{selectedModelId}, #{preferenceJson}, #{revision},
+        #{createdAt}, #{updatedAt})
+  </insert>
+</mapper>
