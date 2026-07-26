@@ -118,6 +118,7 @@ handler 集合必须覆盖全部操作。
 | Spring handler inventory | PASS，覆盖 A01–A29 及 55 个前端操作 |
 | 迁移边界测试 | PASS：无 Next API route、Node 后端依赖、重复 Skill/DDL、Node 请求校验器或 Tool executor |
 | 浏览器真实联调 | PASS：Spring 会话、持久化连接、真实 ClickHouse schema/monitoring、模型供应商目录、用户状态覆盖写 |
+| 真实 Provider 联调 | PASS：最新工作树独立启动后，服务端凭据发现 8 个 GLM 模型；ephemeral Agent SSE 返回 `OK`、usage、`finish` 与 `[DONE]`，结束后 Session 404 |
 | 新增供应商 UI | PASS：GLM、Kimi、MiniMax、百炼、DeepSeek 模板表单可打开 |
 | 恢复页面回归 | PASS：登录未配置提示/隐私弹窗；代码读取/语法高亮/行高亮 |
 | 本地静态资源 | PASS：`release-notes.json` 返回 200，登录协议弹窗无可访问性告警 |
@@ -131,14 +132,18 @@ handler 集合必须覆盖全部操作。
 `system.columns` 安全返回 false，不再调用会抛出 `UNKNOWN_TABLE` 的 `hasColumnInTable`。
 控制台无业务错误或 release notes 404。
 
+最新提交另在 `8081` 以 `local` profile 启动，直接读取同一 SQLite V15 数据：
+`POST /api/admin/ai/providers/{id}/models:discover` 通过服务端解密凭据访问真实 GLM 目录并返回
+8 个模型；随后以 `ephemeral=true`、`generateTitle=false` 发起最小 Agent 请求，响应包含固定
+SSE headers、`start`、内容为 `OK` 的 `text-delta`、usage、`finish` 和 `[DONE]`。流结束后
+临时 Session 查询为 404，证明未遗留测试会话。独立进程验证后已正常停止。
+
 ## 6. 后续审计门槛
 
 在宣布整个深度迁移目标完成前，仍需：
 
-1. 对设置、连接、SQL、Session、Skill、Agent chat/HITL/重放继续执行浏览器网络轨迹回归；
-   其中会真实调用模型的场景需要可用 provider credential。
-2. 查看 CI 的 MySQL/PostgreSQL Testcontainers 结果；本机无 Docker，真实容器 repository
+1. 查看 CI 的 MySQL/PostgreSQL Testcontainers 结果；本机无 Docker，真实容器 repository
    contract 不能用 SQLite 结果替代。PostgreSQL V1–V15 已额外在本地 PGlite 引擎完整执行，
    但 JDBC repository contract 仍以 CI 容器结果为发布门。
-3. 用户当前由 IDE 管理的 8080 Java 进程仍需在方便时重启，以加载本轮最后的
+2. 用户当前由 IDE 管理的 8080 Java 进程仍需在方便时重启，以加载本轮最后的
    user-state/repository 修改；本轮已在独立 8081 Java 进程复验最新 class。
