@@ -26,7 +26,7 @@ export class QueryHistoryManager {
   constructor(storage: QueryHistoryStorage = new QueryHistoryLocalStorage()) {
     this.storage = storage;
     this.entries = normalizeQueryHistory(this.storage.load());
-    if (this.storage.hydrate) {
+    if (typeof window !== "undefined" && this.storage.hydrate) {
       void this.storage
         .hydrate()
         .then((entries) => {

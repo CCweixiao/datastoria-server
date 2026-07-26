@@ -12,9 +12,11 @@ export interface SavedLayout {
   updatedAt: string;
 }
 
-void listUserState<SavedLayout>("dashboard-layout")
-  .then((entries) => entries.forEach((entry) => layouts.set(entry.key, entry.value)))
-  .catch((error) => console.error("Failed to load dashboard layouts:", error));
+if (typeof window !== "undefined") {
+  void listUserState<SavedLayout>("dashboard-layout")
+    .then((entries) => entries.forEach((entry) => layouts.set(entry.key, entry.value)))
+    .catch((error) => console.error("Failed to load dashboard layouts:", error));
+}
 
 function sectionKey(dashboardId: string, sectionIndex: number): string {
   return `${dashboardId}-section-${sectionIndex}`;
