@@ -138,12 +138,13 @@ handler 集合必须覆盖全部操作。
 SSE headers、`start`、内容为 `OK` 的 `text-delta`、usage、`finish` 和 `[DONE]`。流结束后
 临时 Session 查询为 404，证明未遗留测试会话。独立进程验证后已正常停止。
 
-## 6. 后续审计门槛
+## 6. 当前验收范围与后续生产门槛
 
-在宣布整个深度迁移目标完成前，仍需：
+当前阶段按本地开发模式验收，只运行 SQLite，不要求启动或测试 MySQL/PostgreSQL，也不推送
+Git。已经实现的 MySQL/PostgreSQL profile、migration、repository contract 和 CI job 保留，
+避免破坏原 Node 已支持的数据库兼容能力；它们不作为当前本地开发验收的阻塞项。
 
-1. 查看 CI 的 MySQL/PostgreSQL Testcontainers 结果；本机无 Docker，真实容器 repository
-   contract 不能用 SQLite 结果替代。PostgreSQL V1–V15 已额外在本地 PGlite 引擎完整执行，
-   但 JDBC repository contract 仍以 CI 容器结果为发布门。
-2. 用户当前由 IDE 管理的 8080 Java 进程仍需在方便时重启，以加载本轮最后的
-   user-state/repository 修改；本轮已在独立 8081 Java 进程复验最新 class。
+后续准备启用相应生产数据库时，再查看 CI 的 MySQL/PostgreSQL Testcontainers 结果。真实
+容器 repository contract 不能用 SQLite 结果替代；PostgreSQL V1–V15 已额外在本地 PGlite
+引擎完整执行。用户当前由 IDE 管理的 8080 Java 进程仍应在方便时重启，以加载本轮最后修改；
+本轮已在独立 8081 Java 进程复验最新 class。
