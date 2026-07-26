@@ -12,6 +12,9 @@ export type GetTablesInput = {
   limit?: number;
 };
 
+export type ValidateSqlToolInput = { sql: string };
+export type ValidateSqlToolOutput = { success: boolean; error?: string };
+
 export type GetTablesOutput = Array<{
   database: string;
   table: string;

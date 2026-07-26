@@ -5,7 +5,7 @@
 - 原项目：`/Users/jielongping/OpenProjects/datastoria`，
   `22b7ae42bca3927a30dd464f7326a3bbbb2217d7`
 - 迁移项目：`/Users/jielongping/OpenProjects/datastoria-server`，
-  `ffa8c67a` 加本报告所在工作树修改
+  `3fc331b` 加本报告所在工作树修改
 - 审计日期：2026-07-26
 - 原项目 `src/app/api`：24 个 `route.ts`，2 个 route 测试
 - 迁移前端 `frontend/src/app/api`：0 个文件
@@ -41,9 +41,9 @@ handler 集合必须覆盖全部操作。
 
 ## 3. 服务端代码迁移结果
 
-- 原前端 AI 目录中 92 个 Agent、provider adapter、数据库 repository、Skill loader、
-  Tool executor、SSE server 文件未进入迁移前端。
-- 迁移前端保留的 `src/lib/ai` 文件只负责浏览器展示类型、消息序列化、远程 chat
+- 原前端 `src/lib/ai` 共 116 个文件；迁移前端只保留 30 个，未保留的 86 个主要是 Agent、
+  provider adapter、数据库 repository、Skill loader、Tool executor 和 SSE server 实现。
+- 迁移前端保留的 30 个 `src/lib/ai` 文件只负责浏览器展示类型、远程 chat
   transport、API client，以及工具名称/参数的 UI 展示契约；不执行模型、Skill 或 Tool。
 - 原 Node `CommandManager.expand` 的 Slash Command 展开已由 Java
   `SlashCommandExpander` 接管；运行时 Skill 使用 frontmatter `name`/`description`，
@@ -77,19 +77,22 @@ handler 集合必须覆盖全部操作。
 - 修正前端 README，不再把浏览器端描述为 Agent/Skill/Tool/数据库运行时。
 - 增加本地默认 `public/release-notes.json` 空数组，避免非 release 构建每五分钟请求一个
   不存在的静态资源；`npm run release` 仍会用发布分支的真实内容覆盖该文件。
+- 删除迁移后只被自身测试引用的 Node `remote-chat-request` 服务端请求校验器及测试；反馈事件
+  文件从请求校验/存储规范化实现缩减为 UI 使用的原因码，ClickHouse tool wrapper 缩减为
+  SSE 展示名称。删除永远返回 true 的 Java backend feature flags 和未使用的 share 常量。
 
 ## 5. 当前验证证据
 
 | 验证 | 结果 |
 |---|---|
 | 前端格式、TypeScript、ESLint | PASS |
-| 前端 Vitest | PASS，57 files / 298 tests |
+| 前端 Vitest | PASS，56 files / 290 tests |
 | 前端生产构建 | PASS；构建路由中无 `/api/**` |
 | Java Spotless | PASS |
-| Java tests | PASS，406 tests |
+| Java tests | PASS，407 tests |
 | SQLite Flyway | PASS，V1–V15 |
 | Spring handler inventory | PASS，覆盖 A01–A29 及 55 个前端操作 |
-| 迁移边界测试 | PASS：无 Next API route、Node 后端依赖、重复 Skill/DDL |
+| 迁移边界测试 | PASS：无 Next API route、Node 后端依赖、重复 Skill/DDL、Node 请求校验器或 Tool executor |
 | 浏览器真实联调 | PASS：Spring 会话、持久化连接、真实 ClickHouse schema/monitoring、模型供应商目录、用户状态覆盖写 |
 | 新增供应商 UI | PASS：GLM、Kimi、MiniMax、百炼、DeepSeek 模板表单可打开 |
 | 恢复页面回归 | PASS：登录未配置提示/隐私弹窗；代码读取/语法高亮/行高亮 |

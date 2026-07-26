@@ -6,10 +6,6 @@ export function getSessionApiBase(): string {
   );
 }
 
-export function isJavaSessionBackend(): boolean {
-  return true;
-}
-
 export function sessionIdentityHeaders(extra?: HeadersInit): HeadersInit {
   const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
   const merged: Record<string, string> = {};

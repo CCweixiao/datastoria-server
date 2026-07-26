@@ -1,6 +1,5 @@
 import {
   getAiConfigurationGateway,
-  isJavaConfigurationBackend,
   type ServerModelProps,
 } from "@/lib/ai/configuration/configuration-gateway";
 import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
@@ -110,7 +109,6 @@ If you have your API keys, you can configure your models in the settings.`,
   }
 
   public setServerSelectedModel(configId: string | undefined): void {
-    if (!isJavaConfigurationBackend()) return;
     this.serverSelectedModel = configId
       ? this.getAllModels().find((model) => (model as ServerModelProps).configId === configId)
       : undefined;

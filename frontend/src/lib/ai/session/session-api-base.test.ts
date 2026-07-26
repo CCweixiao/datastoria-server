@@ -1,8 +1,4 @@
-import {
-  getSessionApiBase,
-  isJavaSessionBackend,
-  sessionIdentityHeaders,
-} from "@/lib/ai/session/session-api-base";
+import { getSessionApiBase, sessionIdentityHeaders } from "@/lib/ai/session/session-api-base";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const ENV_BACKUP = { ...process.env };
@@ -20,7 +16,6 @@ describe("session-api-base", () => {
   it("always targets Spring Boot and defaults to the local backend", () => {
     withEnv({ NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL: undefined });
     expect(getSessionApiBase()).toBe("http://127.0.0.1:8080");
-    expect(isJavaSessionBackend()).toBe(true);
   });
 
   it("strips trailing slashes from the configured backend URL", () => {

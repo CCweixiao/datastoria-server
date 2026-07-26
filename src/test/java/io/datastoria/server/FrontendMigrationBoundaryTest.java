@@ -62,6 +62,34 @@ class FrontendMigrationBoundaryTest {
         .noneMatch(dependencies::has);
   }
 
+  @Test
+  void frontendContainsNoLegacyServerRequestValidatorsOrToolExecutors() throws IOException {
+    assertThat(FRONTEND.resolve("src/lib/ai/session/remote-chat-request.ts")).doesNotExist();
+
+    Set<String> forbiddenRuntimeMarkers =
+        Set.of(
+            "validateRemoteChatRequest",
+            "validateUpsertFeedbackEventRequest",
+            "normalizeFeedbackEventForStorage",
+            "generateText(",
+            "streamText(",
+            "executeTool(",
+            "ToolExecutor");
+    try (Stream<Path> paths = Files.walk(FRONTEND.resolve("src"))) {
+      for (Path source :
+          paths
+              .filter(Files::isRegularFile)
+              .filter(path -> path.toString().matches(".*\\.tsx?$"))
+              .filter(path -> !path.toString().matches(".*\\.(test|spec)\\.tsx?$"))
+              .toList()) {
+        String content = Files.readString(source);
+        assertThat(forbiddenRuntimeMarkers)
+            .as("legacy Node runtime marker in %s", source)
+            .noneMatch(content::contains);
+      }
+    }
+  }
+
   private static Set<Path> regularFiles(Path root) throws IOException {
     if (Files.notExists(root)) {
       return Set.of();

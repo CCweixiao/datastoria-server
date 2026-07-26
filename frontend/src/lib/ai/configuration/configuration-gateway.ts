@@ -416,7 +416,3 @@ const gateway: AiConfigurationGateway = new SpringConfigurationGateway();
 export function getAiConfigurationGateway(): AiConfigurationGateway {
   return gateway;
 }
-
-export function isJavaConfigurationBackend(): boolean {
-  return true;
-}
