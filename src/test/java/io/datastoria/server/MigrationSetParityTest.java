@@ -31,6 +31,25 @@ class MigrationSetParityTest {
     assertThat(sqlite).hasSize(15);
   }
 
+  @Test
+  void deploymentSnapshotsContainTheSameTablesAsMigrations() throws Exception {
+    for (String dialect : Set.of("sqlite", "mysql")) {
+      Set<String> migrationTables = createdTables(migrations(dialect).values());
+      Set<String> snapshotTables =
+          createdTables(
+              java.util.List.of(Path.of("src/main/resources/db/schema", dialect, "schema.sql")));
+
+      assertThat(snapshotTables)
+          .as("%s schema snapshot tables", dialect)
+          .isEqualTo(migrationTables);
+      assertThat(Files.readString(Path.of("src/main/resources/db/schema", dialect, "seed.sql")))
+          .as("%s seed must never contain committed secrets", dialect)
+          .doesNotContainIgnoringCase("api_key=")
+          .doesNotContainIgnoringCase("password=")
+          .doesNotContainIgnoringCase("secret=");
+    }
+  }
+
   private Map<String, Path> migrations(String dialect) throws Exception {
     Path directory = Path.of("src/main/resources/db/migration", dialect);
     try (var files = Files.list(directory)) {

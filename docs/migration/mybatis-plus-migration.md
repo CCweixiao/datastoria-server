@@ -122,3 +122,36 @@ curl localhost:8080/api/connections                       # 200
 - **Agent SSE end-to-end** — exercising a live agent run requires a configured LLM provider
   credential. The SSE path (`AgentRunController` + `AgentEventReplayService` + `RunLifecycleRecorder`)
   is covered by the green `AgentRunControllerTest`, replay/HITL, and run-lifecycle suites on SQLite.
+
+## 6. DDL/DML deployment snapshots
+
+Flyway migrations remain the only runtime schema source. For manual inspection and creation of a
+new database, each supported dialect also has a generated deployment snapshot:
+
+```text
+src/main/resources/db/schema/
+├── sqlite/
+│   ├── schema.sql
+│   └── seed.sql
+└── mysql/
+    ├── schema.sql
+    └── seed.sql
+```
+
+`schema.sql` is generated from the ordered V1–V15 DDL and builds an empty database at the current
+schema level. Regenerate and verify it with:
+
+```bash
+node scripts/generate-schema-snapshots.mjs
+node scripts/generate-schema-snapshots.mjs --check
+```
+
+The two `seed.sql` files are intentionally empty. Providers and models are administrator-owned,
+secrets cannot be committed, built-in Skills are provisioned per tenant by
+`BuiltinSkillProvisioner`, and the RCA template is installed idempotently by
+`RcaTemplateBootstrap`.
+
+Spring SQL initialization is explicitly disabled (`spring.sql.init.mode=never`) to prevent these
+manual snapshots from running together with Flyway. Existing installations must always upgrade
+through `db/migration`; snapshots are only for a new empty database and are not a replacement for
+migration history.

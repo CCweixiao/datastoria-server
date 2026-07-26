@@ -1,0 +1,10 @@
+-- Static installation seed for a NEW SQLite database at Flyway V15.
+--
+-- Intentionally empty:
+-- * model providers/models are administrator-owned and must not be pre-populated;
+-- * API keys and other secrets must never be committed;
+-- * built-in Skills are provisioned per tenant by BuiltinSkillProvisioner;
+-- * the RCA template is idempotently installed by RcaTemplateBootstrap.
+--
+-- Application startup uses Flyway plus the Java provisioners above. This file is a documented
+-- deployment hook only and is not executed automatically by Spring.

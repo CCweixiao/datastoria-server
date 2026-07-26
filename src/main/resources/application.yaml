@@ -1,6 +1,11 @@
 spring:
   application:
     name: datastoria-server
+  sql:
+    init:
+      # Flyway is the only runtime schema owner. db/schema/** files are manual deployment
+      # snapshots and must never be auto-executed alongside migrations.
+      mode: never
 
 server:
   port: 8080
