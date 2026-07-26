@@ -97,6 +97,11 @@ handler 集合必须覆盖全部操作。
 - 删除永远不会被 Spring 注入的 `NoOpModelAdapterProvider` 和零调用方
   `RenameSessionRequest`；将只支持 OpenAI-compatible 的旧 adapter 重命名并扩展为真实的
   `ConfiguredModelAdapterProvider`，避免类名与实际 provider 能力不一致。
+- 基于 TypeScript 静态/动态 import 图删除原项目遗留且从未接线的 9 个前端模块：旧连接
+  popover、两个未启用 dashboard 配置弹窗、折叠依赖视图、DataTable 示例、已被内联替代的
+  refresh hook、旧主题按钮及两个未使用 UI wrapper；同时移除其唯一依赖
+  `@radix-ui/react-menubar` 与 `recharts`。路由入口、动态 tab registry、测试和声明文件均
+  不在此清理范围。
 
 ## 5. 当前验证证据
 
