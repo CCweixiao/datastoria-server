@@ -60,9 +60,8 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
             "PROVIDER_INVALID_RESPONSE", 502, "Provider returned an invalid model list");
       }
       return java.util.stream.StreamSupport.stream(data.spliterator(), false)
-          .map(node -> node.path("id").asText(""))
-          .filter(id -> !id.isBlank())
-          .map(id -> new DiscoveredModelResponse(id, id, provider.providerKey()))
+          .filter(node -> !node.path("id").asText("").isBlank())
+          .map(node -> ProviderModelMetadata.from(provider.providerKey(), node))
           .toList();
     } catch (ProviderOperationException ex) {
       throw ex;

@@ -1,0 +1,56 @@
+package io.datastoria.server.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+class ProviderModelMetadataTest {
+
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  @Test
+  void preservesRichMetadataReturnedByProvider() throws Exception {
+    var node =
+        objectMapper.readTree(
+            """
+            {
+              "id": "example-vision-pro",
+              "display_name": "Example Vision Pro",
+              "tier": "flagship",
+              "supports_reasoning": true,
+              "architecture": {"input_modalities": ["text", "image"]},
+              "context_length": 262144,
+              "max_output_tokens": 32768
+            }
+            """);
+
+    var result = ProviderModelMetadata.from("custom", node);
+
+    assertThat(result.displayName()).isEqualTo("Example Vision Pro");
+    assertThat(result.tier()).isEqualTo("flagship");
+    assertThat(result.supportsReasoning()).isTrue();
+    assertThat(result.supportsImageInput()).isTrue();
+    assertThat(result.contextWindowTokens()).isEqualTo(262144);
+    assertThat(result.maxOutputTokens()).isEqualTo(32768);
+  }
+
+  @Test
+  void enrichesKnownProviderFamiliesWithoutInventingUnknownLimits() throws Exception {
+    var deepSeek =
+        ProviderModelMetadata.from(
+            "deepseek", objectMapper.readTree("{\"id\":\"deepseek-v4-pro\"}"));
+    var miniMax =
+        ProviderModelMetadata.from(
+            "minimax", objectMapper.readTree("{\"id\":\"MiniMax-M2.7-highspeed\"}"));
+    var unknown =
+        ProviderModelMetadata.from("custom", objectMapper.readTree("{\"id\":\"private-model\"}"));
+
+    assertThat(deepSeek.tier()).isEqualTo("flagship");
+    assertThat(deepSeek.contextWindowTokens()).isEqualTo(1_000_000);
+    assertThat(miniMax.tier()).isEqualTo("fast");
+    assertThat(miniMax.contextWindowTokens()).isEqualTo(204_800);
+    assertThat(unknown.contextWindowTokens()).isNull();
+  }
+}

@@ -31,6 +31,14 @@ export const PROVIDERS: Record<string, ProviderDefinition> = {
   Groq: { logo: "groq.svg" },
   Cerebras: { logo: "cerebras.svg" },
   Nebius: { logo: "nebius.svg" },
+  DeepSeek: { logo: "deepseek.svg" },
+  "智谱 GLM": { logo: "zhipu.svg" },
+  Zhipu: { logo: "zhipu.svg" },
+  "Kimi / Moonshot": { logo: "kimi.svg" },
+  Kimi: { logo: "kimi.svg" },
+  MiniMax: { logo: "minimax.svg" },
+  阿里云百炼: { logo: "bailian.svg" },
+  BaiLian: { logo: "bailian.svg" },
 };
 
 export function resolveModelSupportsImageInput(

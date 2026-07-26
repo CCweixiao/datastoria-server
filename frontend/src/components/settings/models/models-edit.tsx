@@ -28,7 +28,6 @@ import { toastManager } from "@/lib/toast";
 import {
   Bot,
   CheckCircle2,
-  Cloud,
   Eye,
   EyeOff,
   KeyRound,
@@ -78,6 +77,13 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     color: "from-purple-500/15 to-indigo-500/5",
   },
   {
+    providerKey: "deepseek",
+    displayName: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    hint: "DeepSeek V4 · OpenAI 兼容",
+    color: "from-sky-500/15 to-blue-500/5",
+  },
+  {
     providerKey: "openai-compatible",
     displayName: "OpenAI Compatible",
     baseUrl: "",
@@ -103,6 +109,9 @@ const EMPTY_MODEL: ModelInput = {
   isFree: false,
   supportsImageInput: false,
   supportsReasoning: false,
+  tier: "balanced",
+  contextWindowTokens: undefined,
+  maxOutputTokens: undefined,
 };
 
 function toProviderInput(input: ProviderInput): ProviderInput {
@@ -120,6 +129,9 @@ function modelCapabilities(model: ServerModel) {
     return JSON.parse(model.capabilitiesJson ?? "{}") as {
       supportsImageInput?: boolean;
       supportsReasoning?: boolean;
+      tier?: ModelInput["tier"];
+      contextWindowTokens?: number | null;
+      maxOutputTokens?: number | null;
     };
   } catch {
     return {};
@@ -291,6 +303,9 @@ export function ModelsEdit() {
       isFree: model.isFree,
       supportsImageInput: capabilities.supportsImageInput ?? false,
       supportsReasoning: capabilities.supportsReasoning ?? false,
+      tier: capabilities.tier ?? "balanced",
+      contextWindowTokens: capabilities.contextWindowTokens ?? undefined,
+      maxOutputTokens: capabilities.maxOutputTokens ?? undefined,
     });
     setModelDialog(true);
   };
@@ -344,6 +359,9 @@ export function ModelsEdit() {
         isFree: model.isFree,
         supportsImageInput: capabilities.supportsImageInput ?? false,
         supportsReasoning: capabilities.supportsReasoning ?? false,
+        tier: capabilities.tier ?? "balanced",
+        contextWindowTokens: capabilities.contextWindowTokens ?? undefined,
+        maxOutputTokens: capabilities.maxOutputTokens ?? undefined,
       });
       await Promise.all([load(), refreshModelCatalog()]);
     } catch (error) {
@@ -368,6 +386,12 @@ export function ModelsEdit() {
             providerId: provider.id,
             modelKey: model.modelKey,
             displayName: model.displayName || model.modelKey,
+            supportsReasoning: model.supportsReasoning,
+            supportsImageInput: model.supportsImageInput,
+            tier: model.tier,
+            contextWindowTokens: model.contextWindowTokens ?? undefined,
+            maxOutputTokens: model.maxOutputTokens ?? undefined,
+            source: "discovered",
           })
         )
       );
@@ -398,7 +422,7 @@ export function ModelsEdit() {
             添加供应商
           </Button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
           {PROVIDER_PRESETS.map((preset) => (
             <button
               key={preset.providerKey}
@@ -407,7 +431,7 @@ export function ModelsEdit() {
               className={`rounded-lg border bg-gradient-to-br ${preset.color} p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm`}
             >
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Cloud className="h-4 w-4" />
+                <ProviderLogo provider={preset.displayName} className="h-4 w-4" />
                 {preset.displayName}
               </div>
               <div className="mt-1 truncate text-xs text-muted-foreground">{preset.hint}</div>
@@ -561,6 +585,23 @@ export function ModelsEdit() {
                                         图片
                                       </Badge>
                                     )}
+                                    <Badge variant="outline" className="h-5 text-[10px]">
+                                      {capabilities.tier === "flagship"
+                                        ? "旗舰"
+                                        : capabilities.tier === "fast"
+                                          ? "高速"
+                                          : capabilities.tier === "specialized"
+                                            ? "专项"
+                                            : "均衡"}
+                                    </Badge>
+                                    {capabilities.contextWindowTokens && (
+                                      <Badge variant="outline" className="h-5 text-[10px]">
+                                        {capabilities.contextWindowTokens >= 1_000_000
+                                          ? `${capabilities.contextWindowTokens / 1_000_000}M`
+                                          : `${Math.round(capabilities.contextWindowTokens / 1024)}K`}{" "}
+                                        上下文
+                                      </Badge>
+                                    )}
                                     {model.isFree && (
                                       <Badge variant="secondary" className="h-5 text-[10px]">
                                         免费
@@ -620,17 +661,19 @@ export function ModelsEdit() {
           </DialogHeader>
           {!editingProvider && (
             <div className="grid grid-cols-2 gap-2">
-              {PROVIDER_PRESETS.slice(0, 4).map((preset) => (
-                <button
-                  type="button"
-                  key={preset.providerKey}
-                  onClick={() => setProviderDraft(toProviderInput(preset))}
-                  className="rounded-md border p-2 text-left text-xs hover:border-primary/50 hover:bg-muted/40"
-                >
-                  <div className="font-medium">{preset.displayName}</div>
-                  <div className="mt-0.5 truncate text-muted-foreground">{preset.baseUrl}</div>
-                </button>
-              ))}
+              {PROVIDER_PRESETS.filter((preset) => preset.providerKey !== "openai-compatible").map(
+                (preset) => (
+                  <button
+                    type="button"
+                    key={preset.providerKey}
+                    onClick={() => setProviderDraft(toProviderInput(preset))}
+                    className="rounded-md border p-2 text-left text-xs hover:border-primary/50 hover:bg-muted/40"
+                  >
+                    <div className="font-medium">{preset.displayName}</div>
+                    <div className="mt-0.5 truncate text-muted-foreground">{preset.baseUrl}</div>
+                  </button>
+                )
+              )}
             </div>
           )}
           <div className="grid gap-4 py-2">
@@ -811,6 +854,61 @@ export function ModelsEdit() {
                 placeholder="模型用途、上下文限制或计费提示"
                 rows={3}
               />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="model-tier">模型等级</Label>
+                <select
+                  id="model-tier"
+                  value={modelDraft.tier}
+                  onChange={(event) =>
+                    setModelDraft((current) => ({
+                      ...current,
+                      tier: event.target.value as ModelInput["tier"],
+                    }))
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  <option value="flagship">旗舰</option>
+                  <option value="balanced">均衡</option>
+                  <option value="fast">高速</option>
+                  <option value="specialized">专项</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="model-context">上下文窗口</Label>
+                <Input
+                  id="model-context"
+                  type="number"
+                  min={1}
+                  value={modelDraft.contextWindowTokens ?? ""}
+                  onChange={(event) =>
+                    setModelDraft((current) => ({
+                      ...current,
+                      contextWindowTokens: event.target.value
+                        ? Number(event.target.value)
+                        : undefined,
+                    }))
+                  }
+                  placeholder="Token 数"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="model-output">最大输出</Label>
+                <Input
+                  id="model-output"
+                  type="number"
+                  min={1}
+                  value={modelDraft.maxOutputTokens ?? ""}
+                  onChange={(event) =>
+                    setModelDraft((current) => ({
+                      ...current,
+                      maxOutputTokens: event.target.value ? Number(event.target.value) : undefined,
+                    }))
+                  }
+                  placeholder="Token 数"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {[

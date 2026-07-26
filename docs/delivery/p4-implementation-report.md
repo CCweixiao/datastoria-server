@@ -1344,3 +1344,25 @@ TypeScript、Vitest **58 files / 299 tests** 和包含 `/code-viewer` 的生产�
   SQLite/MySQL migration set parity 均通过。
 - 前端：Prettier、TypeScript、ESLint、Vitest **58 files / 301 tests**、`next build --webpack`
   全部通过。
+
+## P4.8-11. 供应商模板、远程模型目录与能力元数据（2026-07-26）
+
+1. 国内供应商模板补充 DeepSeek，默认 Base URL 为 `https://api.deepseek.com`；模板区现在覆盖
+   智谱 GLM、Kimi/Moonshot、MiniMax、阿里云百炼、DeepSeek 和自定义 OpenAI-compatible。
+2. 为上述五个国内供应商接入本地 SVG 品牌图标，来源固定到 Lobe Icons 版本化静态资产，运行时
+   不依赖第三方 CDN。
+3. 后端远程目录根据 Base URL 调用 OpenAI-compatible `/models`。实际无密钥探测确认五个模板
+   对应模型列表 URL 均存在并返回 401，而不是 404；配置有效 API Key 后由 Java 代浏览器请求。
+4. 远程目录返回模型 ID 的同时，会解析供应商响应中的等级、多模态、推理能力、上下文窗口和最大
+   输出等扩展字段。标准 `/models` 未返回的字段保持未知；仅对有官方稳定依据的 DeepSeek V4
+   1M context、DeepSeek legacy 64K context 和 MiniMax M2 204800 context 做规则补齐。
+5. 模型能力继续写入现有 `capabilities_json`，没有增加或破坏数据库列。设置页支持查看和编辑
+   旗舰/均衡/高速/专项等级、图片输入、推理、上下文窗口和最大输出 Token。
+6. 真实前后端 REST E2E 已覆盖临时供应商创建、带能力元数据模型创建、A12 模型目录可见和完整
+   删除清理；浏览器联调确认全部模板显示及 DeepSeek 模板字段预填正确。
+
+全量回归结果：
+
+- Java 17：`./mvnw spotless:check test`，**396 tests / 0 failure / 0 error**。
+- 前端：Prettier、TypeScript、ESLint、Vitest **58 files / 301 tests**、`next build --webpack`
+  全部通过。

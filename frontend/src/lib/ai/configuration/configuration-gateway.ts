@@ -47,6 +47,21 @@ export interface ModelInput {
   isFree?: boolean;
   supportsImageInput?: boolean;
   supportsReasoning?: boolean;
+  tier?: "flagship" | "balanced" | "fast" | "specialized";
+  contextWindowTokens?: number;
+  maxOutputTokens?: number;
+  source?: "discovered" | "custom";
+}
+
+export interface DiscoveredModel {
+  modelKey: string;
+  displayName: string;
+  providerKey: string;
+  tier: "flagship" | "balanced" | "fast" | "specialized";
+  supportsReasoning: boolean;
+  supportsImageInput: boolean;
+  contextWindowTokens?: number | null;
+  maxOutputTokens?: number | null;
 }
 
 export interface AiConfigurationGateway {
@@ -66,7 +81,7 @@ export interface AiConfigurationGateway {
   createModel(input: ModelInput): Promise<ServerModel>;
   updateModel(model: ServerModel, input: ModelInput): Promise<ServerModel>;
   deleteModel(model: ServerModel): Promise<void>;
-  discoverModels(providerId: string): Promise<Array<{ modelKey: string; displayName: string }>>;
+  discoverModels(providerId: string): Promise<DiscoveredModel[]>;
 }
 
 function javaUrl(path: string): string {
@@ -203,7 +218,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
           modelKey: input.modelKey,
           displayName: input.displayName,
           description: input.description ?? "",
-          source: "custom",
+          source: input.source ?? "custom",
           enabled: input.enabled ?? true,
           isFree: input.isFree ?? false,
           capabilitiesJson: JSON.stringify({
@@ -213,6 +228,9 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
             supportsTemperature: true,
             supportsReasoning: input.supportsReasoning ?? false,
             reasoningLevels: input.supportsReasoning ? ["low", "medium", "high"] : [],
+            tier: input.tier ?? "balanced",
+            contextWindowTokens: input.contextWindowTokens ?? null,
+            maxOutputTokens: input.maxOutputTokens ?? null,
           }),
           generationDefaultsJson: "{}",
         }),
@@ -243,6 +261,9 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
             supportsTemperature: true,
             supportsReasoning: input.supportsReasoning ?? false,
             reasoningLevels: input.supportsReasoning ? ["low", "medium", "high"] : [],
+            tier: input.tier ?? "balanced",
+            contextWindowTokens: input.contextWindowTokens ?? null,
+            maxOutputTokens: input.maxOutputTokens ?? null,
           }),
           generationDefaultsJson: model.generationDefaultsJson ?? "{}",
         }),
@@ -259,9 +280,7 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     if (!response.ok) throw new Error(`Delete model failed: ${response.status}`);
   }
 
-  async discoverModels(
-    providerId: string
-  ): Promise<Array<{ modelKey: string; displayName: string }>> {
+  async discoverModels(providerId: string): Promise<DiscoveredModel[]> {
     return checkedJson(
       await backendApiFetch(javaUrl(`/api/admin/ai/providers/${providerId}/models:discover`), {
         method: "POST",
