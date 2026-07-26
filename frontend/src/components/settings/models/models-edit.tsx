@@ -652,7 +652,7 @@ export function ModelsEdit() {
       </div>
 
       <Dialog open={providerDialog} onOpenChange={setProviderDialog}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="!z-[10020] max-w-xl" overlayClassName="!z-[10010]">
           <DialogHeader>
             <DialogTitle>{editingProvider ? "编辑供应商" : "添加模型供应商"}</DialogTitle>
             <DialogDescription>
@@ -682,6 +682,7 @@ export function ModelsEdit() {
                 <Label htmlFor="provider-name">显示名称</Label>
                 <Input
                   id="provider-name"
+                  autoComplete="off"
                   value={providerDraft.displayName}
                   onChange={(event) =>
                     setProviderDraft((current) => ({
@@ -696,6 +697,7 @@ export function ModelsEdit() {
                 <Label htmlFor="provider-key">供应商标识</Label>
                 <Input
                   id="provider-key"
+                  autoComplete="off"
                   value={providerDraft.providerKey}
                   disabled={!!editingProvider}
                   onChange={(event) =>
@@ -712,6 +714,7 @@ export function ModelsEdit() {
               <Label htmlFor="provider-base-url">Base URL</Label>
               <Input
                 id="provider-base-url"
+                autoComplete="off"
                 value={providerDraft.baseUrl}
                 onChange={(event) =>
                   setProviderDraft((current) => ({
@@ -737,6 +740,7 @@ export function ModelsEdit() {
               <div className="relative">
                 <Input
                   id="provider-api-key"
+                  autoComplete="new-password"
                   type={showCredential ? "text" : "password"}
                   value={credential}
                   onChange={(event) => setCredential(event.target.value)}
@@ -799,7 +803,7 @@ export function ModelsEdit() {
       </Dialog>
 
       <Dialog open={modelDialog} onOpenChange={setModelDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="!z-[10020] max-w-lg" overlayClassName="!z-[10010]">
           <DialogHeader>
             <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
             <DialogDescription>

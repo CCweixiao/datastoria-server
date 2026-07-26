@@ -791,7 +791,7 @@ export function MainPage() {
             <Panel
               id="main-content-panel"
               order={2}
-              defaultSize={100 - DEFAULT_SCHEMA_PANEL_SIZE}
+              defaultSize={showSidebarPanel ? 100 - DEFAULT_SCHEMA_PANEL_SIZE : 100}
               minSize={20}
               className="bg-background"
             >
