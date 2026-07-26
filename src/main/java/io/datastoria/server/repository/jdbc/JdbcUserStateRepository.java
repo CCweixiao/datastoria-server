@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -67,31 +68,19 @@ public class JdbcUserStateRepository implements UserStateRepository {
 
   @Override
   public UserState upsert(UserState state, Long expectedRevision) {
+    if (expectedRevision == null) {
+      return upsertLastWriteWins(state);
+    }
+
     Optional<UserState> existing =
         find(state.tenantId(), state.userId(), state.namespace(), state.key());
     Instant now = Instant.now();
     if (existing.isEmpty()) {
-      if (expectedRevision != null && expectedRevision != 0) {
+      if (expectedRevision != 0) {
         throw new RevisionConflictException("UserState", state.key(), expectedRevision, 0);
       }
-      jdbc.sql(
-              """
-              INSERT INTO ds_user_state
-                (tenant_id, user_id, namespace, state_key, value_json, revision,
-                 created_at, updated_at)
-              VALUES
-                (:tenantId, :userId, :namespace, :key, :valueJson, 0, :createdAt, :updatedAt)
-              """)
-          .param("tenantId", state.tenantId())
-          .param("userId", state.userId())
-          .param("namespace", state.namespace())
-          .param("key", state.key())
-          .param("valueJson", state.valueJson())
-          .param("createdAt", SqlTimestamps.toParam(now))
-          .param("updatedAt", SqlTimestamps.toParam(now))
-          .update();
+      insert(state, now);
     } else {
-      long expected = expectedRevision == null ? existing.get().revision() : expectedRevision;
       int affected =
           jdbc.sql(
                   """
@@ -107,14 +96,64 @@ public class JdbcUserStateRepository implements UserStateRepository {
               .param("userId", state.userId())
               .param("namespace", state.namespace())
               .param("key", state.key())
-              .param("expectedRevision", expected)
+              .param("expectedRevision", expectedRevision)
               .update();
       if (affected == 0) {
         throw new RevisionConflictException(
-            "UserState", state.key(), expected, existing.get().revision());
+            "UserState", state.key(), expectedRevision, existing.get().revision());
       }
     }
     return find(state.tenantId(), state.userId(), state.namespace(), state.key()).orElseThrow();
+  }
+
+  private UserState upsertLastWriteWins(UserState state) {
+    Instant now = Instant.now();
+    if (updateWithoutRevisionCheck(state, now) == 0) {
+      try {
+        insert(state, now);
+      } catch (DataIntegrityViolationException insertRace) {
+        if (updateWithoutRevisionCheck(state, Instant.now()) == 0) {
+          throw insertRace;
+        }
+      }
+    }
+    return find(state.tenantId(), state.userId(), state.namespace(), state.key()).orElseThrow();
+  }
+
+  private int updateWithoutRevisionCheck(UserState state, Instant now) {
+    return jdbc.sql(
+            """
+            UPDATE ds_user_state
+            SET value_json = :valueJson, revision = revision + 1, updated_at = :updatedAt
+            WHERE tenant_id = :tenantId AND user_id = :userId
+              AND namespace = :namespace AND state_key = :key
+            """)
+        .param("valueJson", state.valueJson())
+        .param("updatedAt", SqlTimestamps.toParam(now))
+        .param("tenantId", state.tenantId())
+        .param("userId", state.userId())
+        .param("namespace", state.namespace())
+        .param("key", state.key())
+        .update();
+  }
+
+  private void insert(UserState state, Instant now) {
+    jdbc.sql(
+            """
+            INSERT INTO ds_user_state
+              (tenant_id, user_id, namespace, state_key, value_json, revision,
+               created_at, updated_at)
+            VALUES
+              (:tenantId, :userId, :namespace, :key, :valueJson, 0, :createdAt, :updatedAt)
+            """)
+        .param("tenantId", state.tenantId())
+        .param("userId", state.userId())
+        .param("namespace", state.namespace())
+        .param("key", state.key())
+        .param("valueJson", state.valueJson())
+        .param("createdAt", SqlTimestamps.toParam(now))
+        .param("updatedAt", SqlTimestamps.toParam(now))
+        .update();
   }
 
   @Override

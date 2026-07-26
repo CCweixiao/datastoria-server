@@ -1,6 +1,6 @@
 "use client";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -76,6 +76,9 @@ export function AgreementDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[80vh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogTitle className="sr-only">Agreement</DialogTitle>
+        <DialogDescription className="sr-only">
+          DataStoria terms of service or privacy policy.
+        </DialogDescription>
         <ScrollArea className="flex-1 p-6 pt-4">
           <div className="space-y-2 text-sm text-muted-foreground">
             <ReactMarkdown

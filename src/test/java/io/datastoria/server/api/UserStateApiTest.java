@@ -67,4 +67,42 @@ class UserStateApiTest {
         .expectStatus()
         .isNoContent();
   }
+
+  @Test
+  void supportsLastWriteWinsWithoutIfMatchAndStillRejectsStaleExplicitRevision() {
+    web.put()
+        .uri("/api/me/state/query-draft/sql:input")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"value\":{\"sql\":\"SELECT 1\"}}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("ETag", "\"0\"");
+
+    web.put()
+        .uri("/api/me/state/query-draft/sql:input")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"value\":{\"sql\":\"SELECT 2\"}}")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectHeader()
+        .valueEquals("ETag", "\"1\"")
+        .expectBody()
+        .jsonPath("$.value.sql")
+        .isEqualTo("SELECT 2");
+
+    web.put()
+        .uri("/api/me/state/query-draft/sql:input")
+        .header("x-datastoria-user-email", "dev@example.com")
+        .header("If-Match", "\"0\"")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"value\":{\"sql\":\"SELECT 3\"}}")
+        .exchange()
+        .expectStatus()
+        .isEqualTo(409);
+  }
 }

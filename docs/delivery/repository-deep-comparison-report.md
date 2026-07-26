@@ -5,7 +5,7 @@
 - 原项目：`/Users/jielongping/OpenProjects/datastoria`，
   `22b7ae42bca3927a30dd464f7326a3bbbb2217d7`
 - 迁移项目：`/Users/jielongping/OpenProjects/datastoria-server`，
-  `b5bae62140aa54def3e5623b8c95d1d0c6d7755c` 加本报告所在工作树修改
+  `ffa8c67a` 加本报告所在工作树修改
 - 审计日期：2026-07-26
 - 原项目 `src/app/api`：24 个 `route.ts`，2 个 route 测试
 - 迁移前端 `frontend/src/app/api`：0 个文件
@@ -60,6 +60,10 @@ handler 集合必须覆盖全部操作。
 - 原代码查看器的目录树、搜索、语法高亮、行高亮和有界分页已恢复；文件读取仍只通过
   Spring `/api/code/**`。Java 对源码窗口按 2,000 行/256 KiB 限制并返回 `truncated`，
   同时排除 `.local`、构建目录和非源码文件，避免本地 ClickHouse 数据耗尽文件清单上限。
+- 前端原本由 `localStorage` 覆盖写入的 SQL 草稿、布局、查询历史等状态迁移至
+  `/api/me/state/**` 后继续采用 last-write-wins；只有调用方显式发送 `If-Match` 时才执行
+  乐观锁并返回 409。无版本写入使用先更新、后插入并处理并发插入竞争，避免多个页面或
+  Java 实例同时保存草稿时出现伪冲突。
 
 ## 4. 本轮冗余清理
 
@@ -71,6 +75,8 @@ handler 集合必须覆盖全部操作。
 - 删除 `serverExternalPackages: ["knex"]`、无 API route 后失效的 Server Actions body
   配置、`server-only` Vitest alias、已不存在的 `external/clickhouse` TypeScript 排除项。
 - 修正前端 README，不再把浏览器端描述为 Agent/Skill/Tool/数据库运行时。
+- 增加本地默认 `public/release-notes.json` 空数组，避免非 release 构建每五分钟请求一个
+  不存在的静态资源；`npm run release` 仍会用发布分支的真实内容覆盖该文件。
 
 ## 5. 当前验证证据
 
@@ -80,18 +86,23 @@ handler 集合必须覆盖全部操作。
 | 前端 Vitest | PASS，57 files / 298 tests |
 | 前端生产构建 | PASS；构建路由中无 `/api/**` |
 | Java Spotless | PASS |
-| Java tests | PASS，405 tests |
+| Java tests | PASS，406 tests |
 | SQLite Flyway | PASS，V1–V15 |
 | Spring handler inventory | PASS，覆盖 A01–A29 及 55 个前端操作 |
 | 迁移边界测试 | PASS：无 Next API route、Node 后端依赖、重复 Skill/DDL |
-| 浏览器真实联调 | PASS：Spring 会话、持久化连接、真实 ClickHouse schema/monitoring、模型供应商目录 |
+| 浏览器真实联调 | PASS：Spring 会话、持久化连接、真实 ClickHouse schema/monitoring、模型供应商目录、用户状态覆盖写 |
 | 新增供应商 UI | PASS：GLM、Kimi、MiniMax、百炼、DeepSeek 模板表单可打开 |
 | 恢复页面回归 | PASS：登录未配置提示/隐私弹窗；代码读取/语法高亮/行高亮 |
+| 本地静态资源 | PASS：`release-notes.json` 返回 200，登录协议弹窗无可访问性告警 |
 | MySQL Testcontainers | 未执行：本机无 Docker；双方言 migration 静态 parity 仍由测试覆盖 |
 
-浏览器联调使用 `http://localhost:3000` → `http://127.0.0.1:8080` →
+浏览器联调先使用 `http://localhost:3000` → `http://127.0.0.1:8080`，再使用当前工作树
+独立启动的 `http://localhost:3001` → `http://127.0.0.1:8081` →
 本地 ClickHouse `http://127.0.0.1:18123`，成功读取 5 个数据库、175 张表及节点监控数据。
-控制台没有业务错误；仅保留与迁移无关的 release notes 404 警告。
+最新工作树中连续编辑 SQL 触发多次 `/api/me/state/query-draft/**` 保存，均成功并将 revision
+推进到 12；控制台无 409。`system.opentelemetry_span_log` 不存在时，列能力探测通过
+`system.columns` 安全返回 false，不再调用会抛出 `UNKNOWN_TABLE` 的 `hasColumnInTable`。
+控制台无业务错误或 release notes 404。
 
 ## 6. 后续审计门槛
 
@@ -101,5 +112,5 @@ handler 集合必须覆盖全部操作。
    其中会真实调用模型的场景需要可用 provider credential。
 2. 在可用 MySQL/Docker 环境执行 repository/runtime parity，而不只验证双方言 migration
    文件。当前本机 Testcontainers 探测不到 Docker，因此该项不能用 SQLite 结果替代。
-3. 重启当前由 IDE 管理的 Java 进程后复验更新后的代码目录树；本轮已通过 service 回归测试
-   证明过滤和上限语义，正在运行的旧 JVM 不具备热更新能力。
+3. 用户当前由 IDE 管理的 8080 Java 进程仍需在方便时重启，以加载本轮最后的
+   user-state/repository 修改；本轮已在独立 8081 Java 进程复验最新 class。
