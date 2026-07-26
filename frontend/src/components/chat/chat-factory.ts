@@ -338,9 +338,15 @@ export class ChatFactory {
           }
         }
 
-        await SessionManager.touchSessionById(sessionId, connectionId, provisionalTitle, {
-          shareCode: options.shareCode,
-        });
+        // A01 expects the incoming user message to already exist in the session repository. Create
+        // or idempotently update the session with the complete UI message list before opening the
+        // agent stream so a reload restores both user and assistant turns.
+        await SessionManager.createSessionFromMessages(
+          connectionId,
+          messages,
+          provisionalTitle,
+          sessionId
+        );
       },
       onFinish: async ({ message, connectionId, sessionId }) => {
         let title: string | undefined;
@@ -397,6 +403,7 @@ export class ChatFactory {
       messages: AppUIMessage[],
       signal: AbortSignal
     ): Promise<Response> => {
+      const clientRequestId = uuidv7();
       const currentModel = modelConfig || ChatFactory.getCurrentModelConfig();
       await options.onPrepareSendMessagesRequest?.({
         sessionId,
@@ -430,7 +437,13 @@ export class ChatFactory {
       });
       return backendApiFetch(`${javaApiBase}/api/ai/agent`, {
         method: "POST",
-        headers: buildChatRequestHeaders({ "Content-Type": "application/json" }, options.shareCode),
+        headers: buildChatRequestHeaders(
+          {
+            "Content-Type": "application/json",
+            "Idempotency-Key": clientRequestId,
+          },
+          options.shareCode
+        ),
         body: JSON.stringify(body),
         signal,
       });

@@ -185,7 +185,29 @@ export class RemoteSessionRepository implements SessionRepository {
     return toChat(data.session);
   }
 
-  async saveSession(_session: Chat): Promise<void> {}
+  async saveSession(session: Chat): Promise<void> {
+    const response = await sessionFetch(`${getSessionApiBase()}/api/ai/chat/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        connectionId: session.databaseId,
+        sessionId: session.chatId,
+        title: session.title,
+        messages: [],
+      }),
+    });
+    const persisted = await parseJson<{ session: ChatSessionDTO }>(response);
+
+    // Session creation is idempotent on sessionId. For an existing session the create endpoint
+    // intentionally preserves its current title, so apply a later local title change explicitly.
+    if (
+      session.title &&
+      session.title.trim().length > 0 &&
+      persisted.session.title !== session.title
+    ) {
+      await this.renameSession(session.chatId, session.title);
+    }
+  }
 
   async saveMessages(_chatId: string, _messages: Message[]): Promise<void> {}
 

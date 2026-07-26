@@ -109,6 +109,34 @@ class AgentRunServiceTest {
   }
 
   @Test
+  void agentCreationErrorBecomesSanitizedRunFailed() {
+    AgentRunService service =
+        new AgentRunService(new HarnessAgentFactory(), new CancellationRegistry(), Runnable::run);
+
+    List<AgentRunEvent> events =
+        service
+            .start(
+                new RunRequest(
+                    ctx("run-create-failure"),
+                    ignored -> {
+                      throw new IllegalStateException("leak sk-SECRET factory details");
+                    },
+                    AgentRuntimeConfig.minimal("sys"),
+                    "hi"))
+            .collectList()
+            .block();
+
+    assertThat(events).hasSize(1);
+    assertThat(events.get(0)).isInstanceOf(AgentRunEvent.RunFailed.class);
+    AgentRunEvent.RunFailed failed = (AgentRunEvent.RunFailed) events.get(0);
+    assertThat(failed.sequence()).isEqualTo(1);
+    assertThat(failed.code()).isEqualTo("AGENT_INTERNAL");
+    assertThat(failed.message())
+        .isEqualTo(RunFailureCode.AGENT_INTERNAL.safeMessage())
+        .doesNotContain("SECRET", "factory");
+  }
+
+  @Test
   void serverCancelStopsProviderFlux() throws Exception {
     FakeStreamModel model =
         FakeStreamModel.builder()

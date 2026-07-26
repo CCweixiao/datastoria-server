@@ -4,8 +4,10 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import io.datastoria.server.agent.domain.AgentRunEvent;
+import io.datastoria.server.agent.domain.RunFailureCode;
 import io.datastoria.server.agent.runtime.ApprovalResumeRequest;
 import io.datastoria.server.agent.runtime.CancellationRegistry;
 import io.datastoria.server.agent.runtime.HarnessAgentFactory;
@@ -72,6 +74,7 @@ public final class AgentRunService {
   public Flux<AgentRunEvent> start(RunRequest request) {
     return execute(
         request,
+        0L,
         () ->
             factory.create(
                 request.context(),
@@ -87,6 +90,7 @@ public final class AgentRunService {
   public Flux<AgentRunEvent> resume(RunRequest request, ApprovalResumeRequest resume) {
     return execute(
         request,
+        resume.checkpointSequence(),
         () ->
             factory.resumeApprovals(
                 request.context(),
@@ -113,6 +117,7 @@ public final class AgentRunService {
         Flux.just(answer),
         execute(
             request,
+            resume.checkpointSequence() + 1,
             () ->
                 factory.resumeQuestion(
                     request.context(),
@@ -124,7 +129,7 @@ public final class AgentRunService {
   }
 
   private Flux<AgentRunEvent> execute(
-      RunRequest request, java.util.function.Supplier<RunnableAgent> agentSupplier) {
+      RunRequest request, long initialSequence, Supplier<RunnableAgent> agentSupplier) {
     AtomicBoolean subscribed = new AtomicBoolean();
     return Flux.defer(
         () -> {
@@ -133,7 +138,12 @@ public final class AgentRunService {
                 new IllegalStateException("An agent run stream can only be subscribed once"));
           }
 
-          RunnableAgent agent = agentSupplier.get();
+          RunnableAgent agent;
+          try {
+            agent = agentSupplier.get();
+          } catch (RuntimeException ignored) {
+            return Flux.just(internalFailure(request, initialSequence));
+          }
           String runId = request.context().runId();
           if (!registry.register(request.context(), agent)) {
             closeAsync(agent);
@@ -141,8 +151,16 @@ public final class AgentRunService {
                 new IllegalStateException("An agent run with this id is already active"));
           }
 
-          return agent
-              .streamEvents()
+          Flux<AgentRunEvent> events;
+          try {
+            events = agent.streamEvents();
+          } catch (RuntimeException ignored) {
+            registry.unregister(runId, agent);
+            closeAsync(agent);
+            return Flux.just(internalFailure(request, initialSequence));
+          }
+
+          return events
               .doFinally(
                   signal -> {
                     if (signal == SignalType.CANCEL) {
@@ -154,6 +172,16 @@ public final class AgentRunService {
               // Keep this outermost: cancelling the stored subscription must traverse doFinally.
               .doOnSubscribe(subscription -> registry.bindSubscription(runId, agent, subscription));
         });
+  }
+
+  private AgentRunEvent.RunFailed internalFailure(RunRequest request, long initialSequence) {
+    RunFailureCode code = RunFailureCode.AGENT_INTERNAL;
+    return new AgentRunEvent.RunFailed(
+        request.context().runId(),
+        initialSequence + 1,
+        java.time.Instant.now(),
+        code.name(),
+        code.safeMessage());
   }
 
   /**

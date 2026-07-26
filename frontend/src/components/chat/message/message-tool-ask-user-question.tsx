@@ -59,6 +59,79 @@ function isAskUserQuestionInput(value: unknown): value is AskUserQuestionInput {
   });
 }
 
+function normalizeAskUserQuestionInput(value: unknown): AskUserQuestionInput | undefined {
+  if (isAskUserQuestionInput(value)) {
+    return value;
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const questions = (value as { questions?: unknown }).questions;
+  if (!Array.isArray(questions) || questions.length !== 1) {
+    return undefined;
+  }
+  const question = questions[0];
+  if (!question || typeof question !== "object") {
+    return undefined;
+  }
+
+  // Some OpenAI-compatible providers follow the semantic tool description but emit the common
+  // compact shape { question, options: string[] }. Normalize it to DataStoria's richer UI shape
+  // instead of leaving a durable WAITING_INPUT run stuck on "Preparing question...".
+  const header = (question as { question?: unknown }).question;
+  const options = (question as { options?: unknown }).options;
+  if (typeof header === "string" && header.trim().length > 0 && Array.isArray(options)) {
+    if (
+      options.length > 0 &&
+      options.every((option) => typeof option === "string" && option.trim().length > 0)
+    ) {
+      return {
+        questions: [
+          {
+            header: header.trim(),
+            options: options.map((option, index) => ({
+              id: `option-${index + 1}`,
+              label: (option as string).trim(),
+              input: "none" as const,
+            })),
+          },
+        ],
+      };
+    }
+  }
+
+  const choices = (question as { choices?: unknown }).choices;
+  if (
+    typeof header === "string" &&
+    header.trim().length > 0 &&
+    Array.isArray(choices) &&
+    choices.length > 0 &&
+    choices.every(
+      (choice) =>
+        choice !== null &&
+        typeof choice === "object" &&
+        typeof (choice as { label?: unknown }).label === "string" &&
+        ((choice as { label: string }).label as string).trim().length > 0
+    )
+  ) {
+    return {
+      questions: [
+        {
+          header: header.trim(),
+          options: choices.map((choice, index) => ({
+            id: `option-${index + 1}`,
+            label: (choice as { label: string }).label.trim(),
+            input: "none" as const,
+          })),
+        },
+      ],
+    };
+  }
+
+  return undefined;
+}
+
 function extractAskUserQuestionInput(toolPart: ToolPart): AskUserQuestionInput | undefined {
   const candidates = [
     toolPart.input,
@@ -67,7 +140,13 @@ function extractAskUserQuestionInput(toolPart: ToolPart): AskUserQuestionInput |
     (toolPart as { toolCall?: { input?: unknown; args?: unknown } }).toolCall?.args,
   ];
 
-  return candidates.find(isAskUserQuestionInput);
+  for (const candidate of candidates) {
+    const normalized = normalizeAskUserQuestionInput(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return undefined;
 }
 
 export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuestion({
@@ -294,8 +373,8 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
                   >
                     {isSubmitting || hasSubmitted ? (
                       <>
-                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        Submitting
+                        {isSubmitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                        {isSubmitting ? "Submitting" : "Submitted"}
                       </>
                     ) : (
                       "Submit"

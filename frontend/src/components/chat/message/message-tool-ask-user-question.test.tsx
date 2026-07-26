@@ -138,6 +138,77 @@ describe("MessageToolAskUserQuestion", () => {
     expect(container.textContent).not.toContain("Question unavailable.");
   });
 
+  it("normalizes compact provider questions with string options", async () => {
+    act(() => {
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart({
+            input: {
+              questions: [
+                {
+                  question: "下一步您想做什么？",
+                  options: ["查看 Schema", "查看监控"],
+                },
+              ],
+            },
+          })}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("下一步您想做什么？");
+    clickText(container, "查看 Schema");
+
+    await act(async () => {
+      clickText(container, "Submit");
+      await Promise.resolve();
+    });
+
+    expect(onToolOutputMock).toHaveBeenCalledWith({
+      runId: "run-1",
+      actionId: "question-1",
+      toolCallId: "ask-user-question-1",
+      output: {
+        optionId: "option-1",
+        label: "查看 Schema",
+        input: "none",
+        value: "查看 Schema",
+      },
+    });
+  });
+
+  it("normalizes provider questions with labeled choices", () => {
+    act(() => {
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart({
+            input: {
+              questions: [
+                {
+                  question: "请选择检查方向",
+                  header: "检查方向",
+                  choices: [
+                    { label: "Schema", description: "检查数据库 Schema" },
+                    { label: "监控", description: "检查监控指标" },
+                  ],
+                },
+              ],
+            },
+          })}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("请选择检查方向");
+    expect(container.textContent).toContain("Schema");
+    expect(container.textContent).toContain("监控");
+    expect(container.textContent).not.toContain("Question unavailable.");
+  });
+
   it("submits direct radio choices without requiring extra text", async () => {
     act(() => {
       root.render(

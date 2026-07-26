@@ -72,4 +72,49 @@ describe("RemoteSessionRepository", () => {
       cache: "no-store",
     });
   });
+
+  it("persists a new session before the first agent request", async () => {
+    process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL = "http://localhost:8080";
+    process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL = "dev@example.com";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          session: {
+            chatId: "session-1",
+            databaseId: "conn-1",
+            title: "First prompt",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { RemoteSessionRepository } = await import("./remote-session-repository");
+    const repository = new RemoteSessionRepository();
+    await repository.saveSession({
+      chatId: "session-1",
+      databaseId: "conn-1",
+      title: "First prompt",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8080/api/ai/chat/sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-datastoria-user-email": "dev@example.com",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        connectionId: "conn-1",
+        sessionId: "session-1",
+        title: "First prompt",
+        messages: [],
+      }),
+    });
+  });
 });

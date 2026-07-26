@@ -1,10 +1,10 @@
-import type { Chat, Message } from "@/lib/ai/ai-types";
+import type { AppUIMessage, Chat, Message } from "@/lib/ai/ai-types";
 
 export interface CreateSessionFromMessagesInput {
   connectionId: string;
   sessionId?: string;
   title?: string;
-  messages: Message[];
+  messages: Array<Message | AppUIMessage>;
 }
 
 export interface SessionPageInput {

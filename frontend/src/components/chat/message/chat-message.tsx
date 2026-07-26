@@ -283,6 +283,15 @@ const ChatMessagePart = memo(
     // Custom comparison: only re-render if the part actually changed
     if (prevProps.messageId !== nextProps.messageId) return false;
     if (prevProps.isUser !== nextProps.isUser) return false;
+    const prevToolCallId = (prevProps.part as ToolPart).toolCallId;
+    const nextToolCallId = (nextProps.part as ToolPart).toolCallId;
+    const prevActionId = prevToolCallId
+      ? prevProps.pendingActions?.get(prevToolCallId)?.actionId
+      : undefined;
+    const nextActionId = nextToolCallId
+      ? nextProps.pendingActions?.get(nextToolCallId)?.actionId
+      : undefined;
+    if (prevActionId !== nextActionId) return false;
     if (prevProps.part === nextProps.part) return true;
 
     // Text and reasoning parts do not depend on isRunning.
