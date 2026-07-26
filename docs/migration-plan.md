@@ -393,7 +393,7 @@ curl http://localhost:8080/actuator/health
 
 - WebTestClient REST/SSE。
 - SQLite 临时数据库、MySQL/ClickHouse Testcontainers。
-- 三方言 schema parity 与 repository contract test。
+- SQLite/MySQL schema parity 与 repository contract test。
 - AgentStateStore 暂停恢复。
 - 数据库迁移和租户隔离。
 
@@ -444,7 +444,7 @@ curl http://localhost:8080/actuator/health
 本计划负责阶段边界；可直接开发的详细任务与设计见：
 
 - [现状与迁移矩阵](inventory/current-state.md)
-- [SQLite / MySQL / PostgreSQL 三方言数据模型](design/database-data-model.md)
+- [SQLite / MySQL 双方言数据模型](design/database-data-model.md)
 - [HTTP 与流式契约](design/api-contracts.md)
 - [Harness Agent 设计](design/harness-agent.md)
 - [分阶段 PRD/PDC](delivery/phase-prds.md)

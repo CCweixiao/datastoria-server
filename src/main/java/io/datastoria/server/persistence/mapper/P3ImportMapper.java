@@ -1,12 +1,14 @@
 package io.datastoria.server.persistence.mapper;
 
+import java.time.Instant;
+
 import org.apache.ibatis.annotations.Param;
 
 /**
  * Dedicated mapper for the P3 importer's idempotent lookup-then-upsert across the four P3 tables.
- * Timestamps are bound as raw ISO-8601 strings (the row's {@code Instant.toString()}), preserving
- * the original JDBC behaviour exactly; the per-table transaction/rollback wrapping is kept in
- * {@code P3Importer} via {@code TransactionTemplate}.
+ * Timestamps are bound as {@link Instant} values through the shared cross-dialect type handler; the
+ * per-table transaction/rollback wrapping is kept in {@code P3Importer} via {@code
+ * TransactionTemplate}.
  */
 public interface P3ImportMapper {
 
@@ -20,15 +22,15 @@ public interface P3ImportMapper {
       @Param("connectionId") String connectionId,
       @Param("title") String title,
       @Param("revision") long revision,
-      @Param("createdAt") String createdAt,
-      @Param("updatedAt") String updatedAt);
+      @Param("createdAt") Instant createdAt,
+      @Param("updatedAt") Instant updatedAt);
 
   int updateSession(
       @Param("userId") String userId,
       @Param("connectionId") String connectionId,
       @Param("title") String title,
       @Param("revision") long revision,
-      @Param("updatedAt") String updatedAt,
+      @Param("updatedAt") Instant updatedAt,
       @Param("tenantId") String tenantId,
       @Param("id") String id);
 
@@ -47,8 +49,8 @@ public interface P3ImportMapper {
       @Param("partsJson") String partsJson,
       @Param("metadataJson") String metadataJson,
       @Param("sequence") long sequence,
-      @Param("createdAt") String createdAt,
-      @Param("updatedAt") String updatedAt);
+      @Param("createdAt") Instant createdAt,
+      @Param("updatedAt") Instant updatedAt);
 
   int updateMessage(
       @Param("userId") String userId,
@@ -56,7 +58,7 @@ public interface P3ImportMapper {
       @Param("partsJson") String partsJson,
       @Param("metadataJson") String metadataJson,
       @Param("sequence") long sequence,
-      @Param("updatedAt") String updatedAt,
+      @Param("updatedAt") Instant updatedAt,
       @Param("tenantId") String tenantId,
       @Param("sessionId") String sessionId,
       @Param("id") String id);
@@ -81,8 +83,8 @@ public interface P3ImportMapper {
       @Param("payloadJson") String payloadJson,
       @Param("freeText") String freeText,
       @Param("recoveryActionTaken") boolean recoveryActionTaken,
-      @Param("createdAt") String createdAt,
-      @Param("updatedAt") String updatedAt);
+      @Param("createdAt") Instant createdAt,
+      @Param("updatedAt") Instant updatedAt);
 
   int updateFeedback(
       @Param("solved") boolean solved,
@@ -90,7 +92,7 @@ public interface P3ImportMapper {
       @Param("payloadJson") String payloadJson,
       @Param("freeText") String freeText,
       @Param("recoveryActionTaken") boolean recoveryActionTaken,
-      @Param("updatedAt") String updatedAt,
+      @Param("updatedAt") Instant updatedAt,
       @Param("tenantId") String tenantId,
       @Param("userId") String userId,
       @Param("source") String source,
@@ -106,13 +108,13 @@ public interface P3ImportMapper {
       @Param("sessionId") String sessionId,
       @Param("ownerUserId") String ownerUserId,
       @Param("tokenHash") String tokenHash,
-      @Param("expiresAt") String expiresAt,
-      @Param("revokedAt") String revokedAt,
-      @Param("createdAt") String createdAt);
+      @Param("expiresAt") Instant expiresAt,
+      @Param("revokedAt") Instant revokedAt,
+      @Param("createdAt") Instant createdAt);
 
   int updateShare(
-      @Param("expiresAt") String expiresAt,
-      @Param("revokedAt") String revokedAt,
+      @Param("expiresAt") Instant expiresAt,
+      @Param("revokedAt") Instant revokedAt,
       @Param("tenantId") String tenantId,
       @Param("tokenHash") String tokenHash);
 }

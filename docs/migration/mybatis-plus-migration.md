@@ -27,9 +27,9 @@ resources/mapper/*.xml               # ONE XML namespace per mapper, loaded by b
 - `application.yaml` carries the shared `mybatis-plus` config (mapper-locations,
   type-handlers-package, `map-underscore-to-camel-case`). Per-profile yaml only swaps the
   datasource (Flyway location + JDBC driver). No dynamic-datasource framework is introduced.
-- `InstantTypeHandler` serialises every `Instant` to a millisecond-truncated ISO-8601 string and
-  parses both ISO (SQLite TEXT) and `datetime(6)` (MySQL) forms — so TEXT lexicographic ordering and
-  the opaque keyset cursor (`SessionListCursor`) stay correct on both databases.
+- `InstantTypeHandler` serialises SQLite values as millisecond-truncated ISO-8601 text and binds
+  MySQL values as UTC JDBC timestamps; it parses both ISO text and MySQL datetime forms. This keeps
+  SQLite keyset ordering correct and avoids MySQL strict-mode/timezone conversion ambiguity.
 - Boolean columns rely on MyBatis' default `BooleanTypeHandler` (`setBoolean`/`getBoolean`), which
   works on SQLite INTEGER(0/1) and MySQL TINYINT/BOOLEAN alike.
 - JSON columns stay open strings (`setString`/`getString`), never dropping unknown fields.
@@ -63,7 +63,7 @@ contains `ON CONFLICT`, `INSERT OR REPLACE`, `ON DUPLICATE KEY UPDATE`, `RETURNI
 **Added**
 - `mybatis-plus-spring-boot3-starter` 3.5.12 (fixed version; raw `mybatis-spring-boot-starter` NOT added).
 - `persistence/{entity,mapper,repository,typehandler}` packages and `resources/mapper/*.xml`.
-- `MyBatisPlusConfig` (`@MapperScan`), `InstantTypeHandler`, 19 entities, 16 mappers + XML, 16 adapters.
+- `MyBatisPlusConfig` (`@MapperScan`), `InstantTypeHandler`, 25 entities, 23 mappers + XML, 21 adapters.
 - `ModelProviderSecretRepository` (new port so `ProviderService` no longer depends on a concrete repo).
 - `MyBatisMigrationBoundaryTest` (architecture gate).
 
@@ -95,7 +95,7 @@ Java (JDK 17):
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw spotless:check          # formatting
-./mvnw test                    # 417 tests, 0 failures (SQLite: full migration + repository + API)
+./mvnw test                    # 419 tests, 0 failures (SQLite: full migration + repository + API)
 ./mvnw -Pmysql-it verify       # MySQL Testcontainers contract (requires Docker)
 ```
 

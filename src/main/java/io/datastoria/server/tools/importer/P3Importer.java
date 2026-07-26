@@ -180,8 +180,8 @@ public class P3Importer {
           row.connectionId(),
           row.title(),
           row.safeRevision(),
-          row.createdAt().toString(),
-          row.updatedAt().toString());
+          row.createdAt(),
+          row.updatedAt());
       result.inserted(P3ImportManifest.SESSIONS);
     } else {
       db.updateSession(
@@ -189,7 +189,7 @@ public class P3Importer {
           row.connectionId(),
           row.title(),
           row.safeRevision(),
-          row.updatedAt().toString(),
+          row.updatedAt(),
           row.tenantId(),
           row.id());
       result.updated(P3ImportManifest.SESSIONS);
@@ -247,8 +247,8 @@ public class P3Importer {
           row.partsJson(),
           row.metadataJson(),
           row.safeSequence(),
-          row.createdAt().toString(),
-          row.updatedAt().toString());
+          row.createdAt(),
+          row.updatedAt());
       result.inserted(P3ImportManifest.MESSAGES);
     } else {
       db.updateMessage(
@@ -257,7 +257,7 @@ public class P3Importer {
           row.partsJson(),
           row.metadataJson(),
           row.safeSequence(),
-          row.updatedAt().toString(),
+          row.updatedAt(),
           row.tenantId(),
           row.sessionId(),
           row.id());
@@ -321,8 +321,8 @@ public class P3Importer {
           row.payloadJson(),
           row.freeText(),
           row.safeRecovery(),
-          row.createdAt().toString(),
-          row.updatedAt().toString());
+          row.createdAt(),
+          row.updatedAt());
       result.inserted(P3ImportManifest.FEEDBACK);
     } else {
       db.updateFeedback(
@@ -331,7 +331,7 @@ public class P3Importer {
           row.payloadJson(),
           row.freeText(),
           row.safeRecovery(),
-          row.updatedAt().toString(),
+          row.updatedAt(),
           row.tenantId(),
           row.userId(),
           row.source(),
@@ -387,17 +387,13 @@ public class P3Importer {
           row.sessionId(),
           row.ownerUserId(),
           row.tokenHash(),
-          row.expiresAt().toString(),
-          row.revokedAt() == null ? null : row.revokedAt().toString(),
-          row.createdAt().toString());
+          row.expiresAt(),
+          row.revokedAt(),
+          row.createdAt());
       result.inserted(P3ImportManifest.SHARES);
     } else {
       // Update: refresh expiry/revocation; do not flip token_hash (that would break existing JWTs).
-      db.updateShare(
-          row.expiresAt().toString(),
-          row.revokedAt() == null ? null : row.revokedAt().toString(),
-          row.tenantId(),
-          row.tokenHash());
+      db.updateShare(row.expiresAt(), row.revokedAt(), row.tenantId(), row.tokenHash());
       result.updated(P3ImportManifest.SHARES);
     }
   }

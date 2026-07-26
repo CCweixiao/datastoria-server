@@ -20,14 +20,14 @@
 - 初期保持单 Maven module，按 package 隔离。
 - Controller 只做 transport、validation、identity；业务在 application service。
 - domain 不依赖 WebFlux/JPA/AgentScope wire types。
-- 三方言首选 Spring JDBC `JdbcClient`/`NamedParameterJdbcTemplate` + Spring transaction，
-  SQL 由 repository adapter 显式维护；不要依赖 ORM 自动建表。
+- SQLite/MySQL 共用一套 MyBatis-Plus Entity、Mapper、XML 和 repository adapter；
+  复杂 SQL 与事务语义显式维护，不依赖 ORM 自动建表。
 - JDBC 和 AgentScope 阻塞调用放到有上限的专用 scheduler/executor，不阻塞 Netty event
-  loop。若改用 R2DBC，必须先证明 SQLite/MySQL/PostgreSQL driver、Flyway 和事务语义均满足三方言
+  loop。若改用 R2DBC，必须先证明 SQLite/MySQL driver、Flyway 和事务语义均满足双方言
   contract，并记录 ADR。
-- 所有 DDL 通过 Flyway；每个版本同时维护 `db/migration/sqlite`、
-  `db/migration/mysql` 和 `db/migration/postgresql`，版本号与业务语义一致。
-- 本地开发使用 SQLite；生产使用 MySQL 或 PostgreSQL。生产 profile 不得自动回落到 SQLite。
+- 所有 DDL 通过 Flyway；每个版本同时维护 `db/migration/sqlite` 和
+  `db/migration/mysql`，版本号与业务语义一致。
+- 本地开发使用 SQLite；生产使用 MySQL。生产 profile 不得自动回落到 SQLite。
 - `spring.jpa.hibernate.ddl-auto`（若引入 JPA）必须为 `none`；schema 的唯一来源是 Flyway。
 - API DTO 使用 Bean Validation；开放 UI message parts 使用 Jackson `JsonNode` 保真。
 - `ProblemDetail` 统一错误；兼容纯文本由显式 adapter 产生。
@@ -49,8 +49,7 @@
 1. 写/更新 OpenAPI 和 Schema。
 2. 写失败的 controller/contract test。
 3. 写 domain model 和 application service test。
-4. 写 repository contract test，并对 SQLite、MySQL Testcontainers 与 PostgreSQL
-   Testcontainers 复用同一测试集。
+4. 写 repository contract test，并对 SQLite 与 MySQL Testcontainers 复用同一测试集。
 5. 实现 controller/adapter。
 6. 跑窄测试。
 7. 接前端 adapter，保持页面和 UIMessage 结构。
@@ -85,8 +84,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 
 - 默认 `test`：SQLite migration、约束和 repository contract，保证开发环境快速运行。
 - `verify -Pmysql-it`：MySQL Testcontainers、migration、同一 repository contract。
-- `verify -Ppostgres-it`：PostgreSQL Testcontainers、migration、同一 repository contract。
-- dialect parity：比较三套 migration 后的逻辑 schema，不允许漏表、漏列、漏约束或索引。
+- dialect parity：比较两套 migration 后的逻辑 schema，不允许漏表、漏列、漏约束或索引。
 
 DataStoria 前端遵循其仓库命令：
 
@@ -142,7 +140,7 @@ npm run build
 
 - 只提交本阶段文件，不夹带用户已有改动。
 - changed files 与任务一一对应。
-- SQLite/MySQL/PostgreSQL migration、API、实现、测试、文档同步。
+- SQLite/MySQL migration、API、实现、测试、文档同步。
 - 没有 TODO 代替本阶段必需行为。
 - mock 测试不能作为真实数据库/流协议/前端兼容的唯一证据。
 - 完成声明必须引用命令结果或报告 artifact。
