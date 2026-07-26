@@ -78,4 +78,42 @@ describe("configuration gateway", () => {
       })
     );
   });
+
+  it("creates a provider before sending its credential to the dedicated secret endpoint", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "provider-zhipu",
+            providerKey: "zhipu",
+            displayName: "智谱 GLM",
+            authType: "api_key",
+            enabled: true,
+            revision: 0,
+            credentialConfigured: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAiConfigurationGateway } = await import("./configuration-gateway");
+    await getAiConfigurationGateway().createProvider(
+      {
+        providerKey: "zhipu",
+        displayName: "智谱 GLM",
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+      },
+      "server-only-secret"
+    );
+
+    const createBody = String(fetchMock.mock.calls[0][1]?.body);
+    expect(createBody).not.toContain("server-only-secret");
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "http://127.0.0.1:8080/api/admin/ai/providers/provider-zhipu/credential"
+    );
+    expect(String(fetchMock.mock.calls[1][1]?.body)).toContain("server-only-secret");
+  });
 });

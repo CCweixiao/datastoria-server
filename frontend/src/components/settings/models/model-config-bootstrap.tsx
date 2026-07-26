@@ -26,45 +26,22 @@ async function bootstrapModelCatalog(): Promise<boolean> {
   const manager = ModelManager.getInstance();
 
   try {
-    const [{ systemModels, githubModels, codexModels = [] }] = await Promise.all([
+    const [{ systemModels }] = await Promise.all([
       fetchAvailableModels(),
       AgentConfigurationManager.hydrate(),
     ]);
-    // The catalog call materializes missing tenant built-ins. Load providers afterwards so the
-    // credential state always corresponds to the returned models on a brand-new database.
     const providers = await getAiConfigurationGateway().listProviders();
 
-    manager.setSystemModels([...systemModels, ...githubModels, ...codexModels], false);
-    const oauthProviders = [
-      ...(githubModels.length > 0
-        ? [
-            {
-              provider: "GitHub Copilot",
-              providerId: "oauth:github",
-              credentialConfigured: true,
-              maskedHint: "OAuth connected",
-            },
-          ]
-        : []),
-      ...(codexModels.length > 0
-        ? [
-            {
-              provider: "OpenAI Codex",
-              providerId: "oauth:codex",
-              credentialConfigured: true,
-              maskedHint: "OAuth connected",
-            },
-          ]
-        : []),
-    ];
+    manager.setSystemModels(systemModels, false);
     manager.setProviderSettings([
-      ...providers.map((provider) => ({
-        provider: provider.providerKey,
-        providerId: provider.id,
-        credentialConfigured: provider.credentialConfigured,
-        maskedHint: provider.maskedHint,
-      })),
-      ...oauthProviders,
+      ...providers
+        .filter((provider) => provider.authType !== "oauth")
+        .map((provider) => ({
+          provider: provider.displayName,
+          providerId: provider.id,
+          credentialConfigured: provider.credentialConfigured,
+          maskedHint: provider.maskedHint,
+        })),
     ]);
     const selectedModelId = await getAiConfigurationGateway().getModelPreference();
     manager.setServerSelectedModel(selectedModelId);
@@ -73,6 +50,11 @@ async function bootstrapModelCatalog(): Promise<boolean> {
     console.error("Failed to bootstrap model catalog:", error);
     return false;
   }
+}
+
+export async function refreshModelCatalog(): Promise<void> {
+  bootstrapCatalog = undefined;
+  await getBootstrapCatalogPromise();
 }
 
 function getBootstrapCatalogPromise(): Promise<void> {

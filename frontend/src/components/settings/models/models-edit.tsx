@@ -1,485 +1,854 @@
-import { StatusPopover } from "@/components/connection/connection-edit-component";
-import {
-  ModelManager,
-  type ModelSetting,
-  type ProviderSetting,
-} from "@/components/settings/models/model-manager";
+"use client";
+
+import { refreshModelCatalog } from "@/components/settings/models/model-config-bootstrap";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useModelConfig } from "@/hooks/use-model-config";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   getAiConfigurationGateway,
-  isJavaConfigurationBackend,
+  type ModelInput,
+  type ProviderInput,
+  type ServerModel,
+  type ServerProvider,
 } from "@/lib/ai/configuration/configuration-gateway";
-import { resolveModelSupportsImageInput, type ModelProps } from "@/lib/ai/llm/llm-provider-factory";
-import { TextHighlighter } from "@/lib/text-highlighter";
-import { AlertCircle, Check, ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
-import { CodexOAuthConnect } from "./codex-oauth-connect";
-import { GitHubOAuthConnect } from "./github-oauth-connect";
+import { toastManager } from "@/lib/toast";
+import {
+  Bot,
+  CheckCircle2,
+  Cloud,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Server,
+  Trash2,
+  WandSparkles,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type ProviderPreset = ProviderInput & {
+  hint: string;
+  color: string;
+};
+
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    providerKey: "zhipu",
+    displayName: "智谱 GLM",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    hint: "GLM 系列 · OpenAI 兼容",
+    color: "from-blue-500/15 to-cyan-500/5",
+  },
+  {
+    providerKey: "kimi",
+    displayName: "Kimi / Moonshot",
+    baseUrl: "https://api.moonshot.cn/v1",
+    hint: "Moonshot 与 Kimi 系列",
+    color: "from-violet-500/15 to-fuchsia-500/5",
+  },
+  {
+    providerKey: "minimax",
+    displayName: "MiniMax",
+    baseUrl: "https://api.minimaxi.com/v1",
+    hint: "MiniMax OpenAI 兼容接口",
+    color: "from-orange-500/15 to-amber-500/5",
+  },
+  {
+    providerKey: "dashscope",
+    displayName: "阿里云百炼",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    hint: "通义千问 · DashScope",
+    color: "from-purple-500/15 to-indigo-500/5",
+  },
+  {
+    providerKey: "openai-compatible",
+    displayName: "OpenAI Compatible",
+    baseUrl: "",
+    hint: "自定义兼容服务",
+    color: "from-slate-500/15 to-zinc-500/5",
+  },
+];
+
+const EMPTY_PROVIDER: ProviderInput = {
+  providerKey: "",
+  displayName: "",
+  baseUrl: "",
+  authType: "api_key",
+  enabled: true,
+};
+
+const EMPTY_MODEL: ModelInput = {
+  providerId: "",
+  modelKey: "",
+  displayName: "",
+  description: "",
+  enabled: true,
+  isFree: false,
+  supportsImageInput: false,
+  supportsReasoning: false,
+};
+
+function toProviderInput(input: ProviderInput): ProviderInput {
+  return {
+    providerKey: input.providerKey,
+    displayName: input.displayName,
+    baseUrl: input.baseUrl,
+    authType: input.authType ?? "api_key",
+    enabled: input.enabled ?? true,
+  };
+}
+
+function modelCapabilities(model: ServerModel) {
+  try {
+    return JSON.parse(model.capabilitiesJson ?? "{}") as {
+      supportsImageInput?: boolean;
+      supportsReasoning?: boolean;
+    };
+  } catch {
+    return {};
+  }
+}
 
 export function ModelsEdit() {
-  const { allModels, modelSettings, providerSettings } = useModelConfig();
-  const modelManager = ModelManager.getInstance();
+  const gateway = getAiConfigurationGateway();
+  const [providers, setProviders] = useState<ServerProvider[]>([]);
+  const [models, setModels] = useState<ServerModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string>();
+  const [search, setSearch] = useState("");
+  const [providerDialog, setProviderDialog] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ServerProvider>();
+  const [providerDraft, setProviderDraft] = useState<ProviderInput>(EMPTY_PROVIDER);
+  const [credential, setCredential] = useState("");
+  const [showCredential, setShowCredential] = useState(false);
+  const [modelDialog, setModelDialog] = useState(false);
+  const [editingModel, setEditingModel] = useState<ServerModel>();
+  const [modelDraft, setModelDraft] = useState<ModelInput>(EMPTY_MODEL);
 
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Start with all providers collapsed (empty set) to show only provider headers by default
-  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
-
-  // Track which providers have visible API keys
-  const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set());
-  const [clearConfirmProvider, setClearConfirmProvider] = useState<string | null>(null);
-  const [serverCredentialDrafts, setServerCredentialDrafts] = useState<Record<string, string>>({});
-  const javaConfiguration = isJavaConfigurationBackend();
-  const providerSources = allModels.reduce(
-    (acc, model) => {
-      if (!acc[model.provider]) {
-        acc[model.provider] = {
-          hasSystemModels: false,
-          hasUserModels: false,
-        };
-      }
-
-      if (model.source === "system") {
-        acc[model.provider].hasSystemModels = true;
-      } else {
-        acc[model.provider].hasUserModels = true;
-      }
-
-      return acc;
-    },
-    {} as Record<string, { hasSystemModels: boolean; hasUserModels: boolean }>
-  );
-  const modelCatalog = allModels.reduce(
-    (acc, model) => {
-      acc[`${model.provider}:${model.modelId}`] = model;
-      return acc;
-    },
-    {} as Record<string, ModelProps>
-  );
-
-  const handleModelDisabled = useCallback(
-    (provider: string, modelId: string, disabled: boolean) => {
-      modelManager.updateModelSetting(provider, modelId, { disabled });
-      const model = modelCatalog[`${provider}:${modelId}`];
-      if (model) {
-        void getAiConfigurationGateway()
-          .setModelEnabled(model, !disabled)
-          .catch((error) => console.error(`Failed to update ${provider}/${modelId}:`, error));
-      }
-    },
-    [modelCatalog, modelManager]
-  );
-
-  const handleProviderApiKeyChange = useCallback((provider: string, apiKey: string) => {
-    setServerCredentialDrafts((current) => ({ ...current, [provider]: apiKey }));
-  }, []);
-
-  const persistServerCredential = useCallback(
-    async (provider: string) => {
-      const credential = serverCredentialDrafts[provider]?.trim();
-      if (!javaConfiguration || !credential) return;
-      try {
-        await getAiConfigurationGateway().saveProviderCredential(provider, credential);
-        const refreshed = await getAiConfigurationGateway().listProviders();
-        const configured = refreshed.find((candidate) => candidate.providerKey === provider);
-        if (configured) {
-          modelManager.updateProviderSetting(provider, {
-            credentialConfigured: configured.credentialConfigured,
-            maskedHint: configured.maskedHint,
-          });
-        }
-        setServerCredentialDrafts((current) => ({ ...current, [provider]: "" }));
-      } catch (error) {
-        console.error(`Failed to save ${provider} credential:`, error);
-      }
-    },
-    [javaConfiguration, modelManager, serverCredentialDrafts]
-  );
-
-  const [providers, setProviders] = useState<Array<[string, ModelSetting[]]>>([]);
-
-  useEffect(() => {
-    const queryLower = searchQuery.toLowerCase().trim();
-    const currentModelSettings = allModels.map((model: ModelProps) => {
-      const stored = modelSettings.find(
-        (m: ModelSetting) => m.modelId === model.modelId && m.provider === model.provider
-      );
-      return (
-        stored || {
-          modelId: model.modelId,
-          provider: model.provider,
-          disabled: !!model.disabled,
-          free: !!model.free,
-        }
-      );
-    });
-
-    const filtered = queryLower
-      ? currentModelSettings.filter((model) => model.modelId.toLowerCase().includes(queryLower))
-      : currentModelSettings;
-
-    const grouped = filtered.reduce(
-      (acc: Record<string, ModelSetting[]>, model: ModelSetting) => {
-        const provider = model.provider;
-        if (!acc[provider]) {
-          acc[provider] = [];
-        }
-        acc[provider].push(model);
-        return acc;
-      },
-      {} as Record<string, ModelSetting[]>
-    );
-
-    const entries = Object.entries(grouped);
-    entries.sort(([a], [b]) => a.localeCompare(b));
-    setProviders(entries);
-  }, [allModels, modelSettings, searchQuery]);
-
-  // Expand all providers when searching
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const allProviders = providers.map(([provider]) => provider);
-      if (allProviders.length > 0) {
-        setExpandedProviders((prev) => {
-          const next = new Set(prev);
-          allProviders.forEach((p) => next.add(p));
-          return next;
-        });
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [nextProviders, nextModels] = await Promise.all([
+        gateway.listProviders(),
+        gateway.listModels(),
+      ]);
+      setProviders(nextProviders.filter((provider) => provider.authType !== "oauth"));
+      setModels(nextModels);
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "模型配置加载失败", "error");
+    } finally {
+      setLoading(false);
     }
-  }, [providers, searchQuery]);
+  }, [gateway]);
 
-  const toggleProvider = useCallback((provider: string) => {
-    setExpandedProviders((prev) => {
-      const next = new Set(prev);
-      if (next.has(provider)) {
-        next.delete(provider);
-      } else {
-        next.add(provider);
-      }
-      return next;
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const visibleProviders = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return providers;
+    return providers.filter((provider) => {
+      const providerModels = models.filter((model) => model.providerId === provider.id);
+      return (
+        provider.displayName.toLowerCase().includes(query) ||
+        provider.providerKey.toLowerCase().includes(query) ||
+        providerModels.some(
+          (model) =>
+            model.modelKey.toLowerCase().includes(query) ||
+            model.displayName.toLowerCase().includes(query)
+        )
+      );
     });
-  }, []);
+  }, [models, providers, search]);
 
-  const toggleApiKeyVisibility = useCallback((provider: string) => {
-    setVisibleApiKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(provider)) {
-        next.delete(provider);
-      } else {
-        next.add(provider);
-      }
-      return next;
+  const openNewProvider = (preset: ProviderInput = EMPTY_PROVIDER) => {
+    setEditingProvider(undefined);
+    setProviderDraft(toProviderInput(preset));
+    setCredential("");
+    setShowCredential(false);
+    setProviderDialog(true);
+  };
+
+  const openEditProvider = (provider: ServerProvider) => {
+    setEditingProvider(provider);
+    setProviderDraft({
+      providerKey: provider.providerKey,
+      displayName: provider.displayName,
+      baseUrl: provider.baseUrl ?? "",
+      authType: provider.authType === "none" ? "none" : "api_key",
+      enabled: provider.enabled,
     });
-  }, []);
+    setCredential("");
+    setShowCredential(false);
+    setProviderDialog(true);
+  };
 
-  const handleClearProviderKey = useCallback(
-    (provider: string) => {
-      if (javaConfiguration) {
-        void getAiConfigurationGateway()
-          .clearProviderCredential(provider)
-          .then(() =>
-            modelManager.updateProviderSetting(provider, {
-              credentialConfigured: false,
-              maskedHint: null,
-            })
-          )
-          .catch((error) => console.error(`Failed to clear ${provider} credential:`, error));
-        setServerCredentialDrafts((current) => ({ ...current, [provider]: "" }));
-        setClearConfirmProvider(null);
-        return;
+  const saveProvider = async () => {
+    if (!providerDraft.providerKey.trim() || !providerDraft.displayName.trim()) {
+      toastManager.show("请填写供应商标识和名称", "warning");
+      return;
+    }
+    if (providerDraft.baseUrl && !/^https?:\/\//i.test(providerDraft.baseUrl)) {
+      toastManager.show("Base URL 必须以 http:// 或 https:// 开头", "warning");
+      return;
+    }
+    setBusy("provider");
+    try {
+      if (editingProvider) {
+        const saved = await gateway.updateProvider(editingProvider, providerDraft);
+        if (credential.trim()) {
+          await gateway.saveProviderCredentialById(saved.id, credential.trim());
+        }
+      } else {
+        await gateway.createProvider(providerDraft, credential);
       }
-      modelManager.deleteProviderSetting(provider);
-      setClearConfirmProvider(null);
-    },
-    [javaConfiguration, modelManager]
-  );
+      setProviderDialog(false);
+      await Promise.all([load(), refreshModelCatalog()]);
+      toastManager.show(editingProvider ? "供应商已更新" : "供应商已添加", "success");
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "保存失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
-  // Auto-reveal API key when user focuses on the input
-  const handleApiKeyFocus = useCallback(
-    (provider: string) => {
-      if (!visibleApiKeys.has(provider)) {
-        setVisibleApiKeys((prev) => new Set(prev).add(provider));
+  const removeProvider = async (provider: ServerProvider) => {
+    const providerModels = models.filter((model) => model.providerId === provider.id);
+    if (providerModels.length) {
+      toastManager.show("请先删除该供应商下的模型", "warning");
+      return;
+    }
+    if (!window.confirm(`确定删除供应商“${provider.displayName}”吗？`)) return;
+    setBusy(provider.id);
+    try {
+      await gateway.deleteProvider(provider);
+      await Promise.all([load(), refreshModelCatalog()]);
+      toastManager.show("供应商已删除", "success");
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "删除失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const clearCredential = async (provider: ServerProvider) => {
+    if (!window.confirm(`确定清除“${provider.displayName}”的 API Key 吗？`)) return;
+    setBusy(`key:${provider.id}`);
+    try {
+      await gateway.clearProviderCredentialById(provider.id);
+      await Promise.all([load(), refreshModelCatalog()]);
+      setEditingProvider((current) =>
+        current?.id === provider.id
+          ? { ...current, credentialConfigured: false, maskedHint: null }
+          : current
+      );
+      toastManager.show("API Key 已清除", "success");
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "清除失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const openNewModel = (provider: ServerProvider, modelKey = "", displayName = "") => {
+    setEditingModel(undefined);
+    setModelDraft({
+      ...EMPTY_MODEL,
+      providerId: provider.id,
+      modelKey,
+      displayName: displayName || modelKey,
+    });
+    setModelDialog(true);
+  };
+
+  const openEditModel = (model: ServerModel) => {
+    const capabilities = modelCapabilities(model);
+    setEditingModel(model);
+    setModelDraft({
+      providerId: model.providerId,
+      modelKey: model.modelKey,
+      displayName: model.displayName,
+      description: model.description ?? "",
+      enabled: model.enabled,
+      isFree: model.isFree,
+      supportsImageInput: capabilities.supportsImageInput ?? false,
+      supportsReasoning: capabilities.supportsReasoning ?? false,
+    });
+    setModelDialog(true);
+  };
+
+  const saveModel = async () => {
+    if (!modelDraft.modelKey.trim() || !modelDraft.displayName.trim()) {
+      toastManager.show("请填写模型 ID 和显示名称", "warning");
+      return;
+    }
+    setBusy("model");
+    try {
+      if (editingModel) {
+        await gateway.updateModel(editingModel, modelDraft);
+      } else {
+        await gateway.createModel(modelDraft);
       }
-    },
-    [visibleApiKeys]
-  );
+      setModelDialog(false);
+      await Promise.all([load(), refreshModelCatalog()]);
+      toastManager.show(editingModel ? "模型已更新" : "模型已添加", "success");
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "保存失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const removeModel = async (model: ServerModel) => {
+    if (!window.confirm(`确定删除模型“${model.displayName}”吗？`)) return;
+    setBusy(model.id);
+    try {
+      await gateway.deleteModel(model);
+      await Promise.all([load(), refreshModelCatalog()]);
+      toastManager.show("模型已删除", "success");
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "删除失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const toggleModel = async (model: ServerModel, enabled: boolean) => {
+    const capabilities = modelCapabilities(model);
+    setBusy(`model:${model.id}`);
+    try {
+      await gateway.updateModel(model, {
+        providerId: model.providerId,
+        modelKey: model.modelKey,
+        displayName: model.displayName,
+        description: model.description ?? "",
+        enabled,
+        isFree: model.isFree,
+        supportsImageInput: capabilities.supportsImageInput ?? false,
+        supportsReasoning: capabilities.supportsReasoning ?? false,
+      });
+      await Promise.all([load(), refreshModelCatalog()]);
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "更新模型失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const discover = async (provider: ServerProvider) => {
+    setBusy(`discover:${provider.id}`);
+    try {
+      const discovered = await gateway.discoverModels(provider.id);
+      const existing = new Set(
+        models.filter((model) => model.providerId === provider.id).map((model) => model.modelKey)
+      );
+      const additions = discovered.filter((model) => !existing.has(model.modelKey));
+      await Promise.all(
+        additions.map((model) =>
+          gateway.createModel({
+            ...EMPTY_MODEL,
+            providerId: provider.id,
+            modelKey: model.modelKey,
+            displayName: model.displayName || model.modelKey,
+          })
+        )
+      );
+      await Promise.all([load(), refreshModelCatalog()]);
+      toastManager.show(
+        additions.length ? `已同步 ${additions.length} 个新模型` : "模型目录已是最新",
+        "success"
+      );
+    } catch (error) {
+      toastManager.show(error instanceof Error ? error.message : "发现模型失败", "error");
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   return (
-    <>
-      <div className="h-full flex flex-col">
-        <GitHubOAuthConnect
-          connected={providerSettings.some(
-            (setting) => setting.providerId === "oauth:github" && setting.credentialConfigured
-          )}
-        />
-        <CodexOAuthConnect
-          connected={providerSettings.some(
-            (setting) => setting.providerId === "oauth:codex" && setting.credentialConfigured
-          )}
-        />
-        {/* Search Input */}
-        <div className="flex-shrink-0 relative">
-          <Search className="h-4 w-4 text-muted-foreground absolute left-2 top-1/2 transform -translate-y-1/2" />
+    <div className="flex h-full min-h-0 flex-col bg-muted/10">
+      <div className="border-b bg-background px-6 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">模型与供应商</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              API Key 由 Java 后端加密保存。新环境不自动创建任何供应商或模型。
+            </p>
+          </div>
+          <Button onClick={() => openNewProvider()}>
+            <Plus className="mr-2 h-4 w-4" />
+            添加供应商
+          </Button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
+          {PROVIDER_PRESETS.map((preset) => (
+            <button
+              key={preset.providerKey}
+              type="button"
+              onClick={() => openNewProvider(preset)}
+              className={`rounded-lg border bg-gradient-to-br ${preset.color} p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm`}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Cloud className="h-4 w-4" />
+                {preset.displayName}
+              </div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">{preset.hint}</div>
+            </button>
+          ))}
+        </div>
+        <div className="relative mt-4 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search models by ID..."
-            className="w-full border-none pl-8"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="搜索供应商或模型..."
+            className="pl-9"
           />
         </div>
-
-        <div className="overflow-hidden flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-auto">
-            <Table className="border-t">
-              <TableHeader>
-                <TableRow className="h-9">
-                  <TableHead className="w-[300px] py-2 pl-8 font-bold">Model ID</TableHead>
-                  <TableHead className="w-[100px] py-2 font-bold">Free</TableHead>
-                  <TableHead className="w-[160px] py-2 font-bold text-center">
-                    Support Image Input
-                  </TableHead>
-                  <TableHead className="w-[140px] py-2 font-bold">Disabled</TableHead>
-                  <TableHead className="min-w-[200px] py-2 font-bold">API Key</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {providers.map(([provider, providerModels]: [string, ModelSetting[]]) => {
-                  const isExpanded = expandedProviders.has(provider);
-                  const providerSetting = providerSettings.find(
-                    (p: ProviderSetting) => p.provider === provider
-                  );
-                  const sourceInfo = providerSources[provider];
-                  const hasSystemModels = !!sourceInfo?.hasSystemModels;
-                  const disabledModelCount = providerModels.filter(
-                    (model) => model.disabled
-                  ).length;
-                  const totalModelCount = providerModels.length;
-
-                  return (
-                    <React.Fragment key={provider}>
-                      {/* Provider Group Header */}
-                      <TableRow className="h-10 bg-muted/50 hover:bg-muted/70">
-                        <TableCell colSpan={3} className="px-1 py-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleProvider(provider)}
-                            className="flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity"
-                          >
-                            <ChevronDown
-                              className={`h-4 w-4 transition-transform duration-200 ${
-                                isExpanded ? "rotate-0" : "-rotate-90"
-                              }`}
-                            />
-                            <ProviderLogo
-                              provider={provider}
-                              className="h-4 w-4 text-muted-foreground"
-                            />
-                            <span className="font-semibold text-sm">{provider}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {hasSystemModels
-                                ? `(${providerModels.length} ${
-                                    providerModels.length === 1 ? "model" : "models"
-                                  }, system-backed available)`
-                                : `(${providerModels.length} ${
-                                    providerModels.length === 1 ? "model" : "models"
-                                  })`}
-                            </span>
-                          </button>
-                        </TableCell>
-                        <TableCell className="w-[140px] py-1.5 text-sm text-muted-foreground whitespace-nowrap">
-                          {disabledModelCount}/{totalModelCount}
-                        </TableCell>
-                        <TableCell className="py-1.5 pr-4">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 flex-1 ">
-                              {provider === "GitHub Copilot" || provider === "OpenAI Codex" ? (
-                                <span className="text-xs text-muted-foreground">
-                                  OAuth credential managed by Java
-                                </span>
-                              ) : (
-                                <>
-                                  <Input
-                                    type={visibleApiKeys.has(provider) ? "text" : "password"}
-                                    value={
-                                      javaConfiguration
-                                        ? (serverCredentialDrafts[provider] ?? "")
-                                        : ""
-                                    }
-                                    onChange={(e) => {
-                                      handleProviderApiKeyChange(provider, e.target.value);
-                                      // Auto-reveal when user starts typing
-                                      if (e.target.value && !visibleApiKeys.has(provider)) {
-                                        setVisibleApiKeys((prev) => new Set(prev).add(provider));
-                                      }
-                                    }}
-                                    onBlur={() => void persistServerCredential(provider)}
-                                    onFocus={() => handleApiKeyFocus(provider)}
-                                    placeholder={
-                                      providerSetting?.credentialConfigured
-                                        ? `${providerSetting.maskedHint ?? "Credential configured"} — enter a new key to rotate`
-                                        : `Enter ${provider} API key (encrypted by Java backend)`
-                                    }
-                                    className="w-full h-8 border-0 border-b border-muted-foreground/20 rounded-none pl-0 bg-transparent focus-visible:ring-0 pr-8"
-                                  />
-                                  {(serverCredentialDrafts[provider] ||
-                                    providerSetting?.credentialConfigured) && (
-                                    <div className="right-0 flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleApiKeyVisibility(provider)}
-                                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                                        title={
-                                          visibleApiKeys.has(provider)
-                                            ? "Hide API key"
-                                            : "Show API key"
-                                        }
-                                      >
-                                        {visibleApiKeys.has(provider) ? (
-                                          <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                          <Eye className="h-4 w-4" />
-                                        )}
-                                      </button>
-                                      <StatusPopover
-                                        open={clearConfirmProvider === provider}
-                                        onOpenChange={(open) =>
-                                          setClearConfirmProvider(open ? provider : null)
-                                        }
-                                        trigger={
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-6 px-2 text-xs"
-                                          >
-                                            Clear
-                                          </Button>
-                                        }
-                                        side="left"
-                                        align="end"
-                                        sideOffset={4}
-                                        icon={
-                                          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-                                        }
-                                        title="Clear API key"
-                                      >
-                                        <div className="text-xs mb-3">
-                                          Remove the saved API key for {provider}?
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-8 rounded-sm text-sm"
-                                            onClick={() => setClearConfirmProvider(null)}
-                                          >
-                                            Cancel
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            variant="destructive"
-                                            size="sm"
-                                            className="h-8 rounded-sm text-sm"
-                                            onClick={() => handleClearProviderKey(provider)}
-                                          >
-                                            Clear
-                                          </Button>
-                                        </div>
-                                      </StatusPopover>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {/* Provider Models */}
-                      {isExpanded &&
-                        providerModels.map((model) => (
-                          <TableRow key={`${model.provider}-${model.modelId}`} className="h-10">
-                            <TableCell className="py-1.5 pl-8">
-                              <div className="text-sm font-medium">
-                                {searchQuery.trim()
-                                  ? TextHighlighter.highlight(model.modelId, searchQuery)
-                                  : model.modelId}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-1.5">
-                              {model.free ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-none hover:bg-green-100 dark:hover:bg-green-900/30"
-                                  title="This is a hint, whehter it's a free model, you should always follow the provider's documentation to know more about the pricing."
-                                >
-                                  Free *
-                                </Badge>
-                              ) : (
-                                <div className="text-sm text-muted-foreground">No</div>
-                              )}
-                            </TableCell>
-                            <TableCell className="py-1.5 text-center">
-                              <div className="flex items-center justify-center h-full text-muted-foreground">
-                                {resolveModelSupportsImageInput(
-                                  modelCatalog[`${model.provider}:${model.modelId}`] ?? model
-                                ) ? (
-                                  <Check
-                                    className="h-4 w-4 text-green-600 dark:text-green-400"
-                                    aria-label="Supports image input"
-                                  />
-                                ) : (
-                                  <X
-                                    className="h-4 w-4 text-muted-foreground"
-                                    aria-label="Does not support image input"
-                                  />
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-1.5">
-                              <div className="flex items-center h-full">
-                                <Switch
-                                  checked={!model.disabled}
-                                  onCheckedChange={(checked) =>
-                                    handleModelDisabled(model.provider, model.modelId, !checked)
-                                  }
-                                  className="h-4 w-8 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-4"
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-1.5" />
-                          </TableRow>
-                        ))}
-                    </React.Fragment>
-                  );
-                })}
-                {providers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                      {searchQuery.trim() ? "No models found" : "No models available"}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
       </div>
-    </>
+
+      <div className="flex-1 overflow-y-auto p-6">
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            正在加载后端配置
+          </div>
+        ) : visibleProviders.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed bg-background p-10 text-center">
+            <div className="rounded-full bg-primary/10 p-4">
+              <Server className="h-7 w-7 text-primary" />
+            </div>
+            <h3 className="mt-4 font-semibold">{search ? "没有匹配的配置" : "还没有模型供应商"}</h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              使用上方预设快速接入国内模型平台，或添加任意 OpenAI 兼容服务。
+            </p>
+            {!search && (
+              <Button className="mt-4" variant="outline" onClick={() => openNewProvider()}>
+                <Plus className="mr-2 h-4 w-4" />
+                创建第一个供应商
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {visibleProviders.map((provider) => {
+              const providerModels = models.filter((model) => model.providerId === provider.id);
+              return (
+                <Card key={provider.id} className="overflow-hidden shadow-none">
+                  <CardHeader className="border-b bg-muted/20 px-5 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="rounded-lg border bg-background p-2">
+                          <ProviderLogo provider={provider.displayName} className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            {provider.displayName}
+                            {!provider.enabled && <Badge variant="secondary">已停用</Badge>}
+                          </CardTitle>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <code>{provider.providerKey}</code>
+                            <span>·</span>
+                            <span className="max-w-[420px] truncate">
+                              {provider.baseUrl || "未配置 Base URL"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={provider.credentialConfigured ? "default" : "outline"}
+                          className="gap-1"
+                        >
+                          {provider.credentialConfigured ? (
+                            <CheckCircle2 className="h-3 w-3" />
+                          ) : (
+                            <KeyRound className="h-3 w-3" />
+                          )}
+                          {provider.credentialConfigured
+                            ? provider.maskedHint || "密钥已配置"
+                            : "未配置密钥"}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!provider.credentialConfigured || !!busy}
+                          onClick={() => void discover(provider)}
+                        >
+                          {busy === `discover:${provider.id}` ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          同步模型
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditProvider(provider)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          disabled={busy === provider.id}
+                          onClick={() => void removeProvider(provider)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {providerModels.length === 0 ? (
+                      <div className="flex items-center justify-between px-5 py-5">
+                        <div className="text-sm text-muted-foreground">
+                          该供应商尚未添加模型。可手动添加，或配置密钥后同步目录。
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => openNewModel(provider)}>
+                          <Plus className="mr-1 h-4 w-4" />
+                          添加模型
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {providerModels.map((model) => {
+                          const capabilities = modelCapabilities(model);
+                          return (
+                            <div
+                              key={model.id}
+                              className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 hover:bg-muted/20"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate text-sm font-medium">
+                                      {model.displayName}
+                                    </span>
+                                    <code className="text-xs text-muted-foreground">
+                                      {model.modelKey}
+                                    </code>
+                                  </div>
+                                  <div className="mt-1 flex gap-1.5">
+                                    {capabilities.supportsReasoning && (
+                                      <Badge variant="outline" className="h-5 text-[10px]">
+                                        推理
+                                      </Badge>
+                                    )}
+                                    {capabilities.supportsImageInput && (
+                                      <Badge variant="outline" className="h-5 text-[10px]">
+                                        图片
+                                      </Badge>
+                                    )}
+                                    {model.isFree && (
+                                      <Badge variant="secondary" className="h-5 text-[10px]">
+                                        免费
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={model.enabled}
+                                  disabled={busy === `model:${model.id}`}
+                                  onCheckedChange={(enabled) => void toggleModel(model, enabled)}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditModel(model)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => void removeModel(model)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div className="px-5 py-3">
+                          <Button size="sm" variant="ghost" onClick={() => openNewModel(provider)}>
+                            <Plus className="mr-1 h-4 w-4" />
+                            添加模型
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={providerDialog} onOpenChange={setProviderDialog}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{editingProvider ? "编辑供应商" : "添加模型供应商"}</DialogTitle>
+            <DialogDescription>
+              配置 OpenAI 兼容端点。API Key 只会提交到 Java 后端并加密保存。
+            </DialogDescription>
+          </DialogHeader>
+          {!editingProvider && (
+            <div className="grid grid-cols-2 gap-2">
+              {PROVIDER_PRESETS.slice(0, 4).map((preset) => (
+                <button
+                  type="button"
+                  key={preset.providerKey}
+                  onClick={() => setProviderDraft(toProviderInput(preset))}
+                  className="rounded-md border p-2 text-left text-xs hover:border-primary/50 hover:bg-muted/40"
+                >
+                  <div className="font-medium">{preset.displayName}</div>
+                  <div className="mt-0.5 truncate text-muted-foreground">{preset.baseUrl}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="provider-name">显示名称</Label>
+                <Input
+                  id="provider-name"
+                  value={providerDraft.displayName}
+                  onChange={(event) =>
+                    setProviderDraft((current) => ({
+                      ...current,
+                      displayName: event.target.value,
+                    }))
+                  }
+                  placeholder="例如：智谱 GLM"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="provider-key">供应商标识</Label>
+                <Input
+                  id="provider-key"
+                  value={providerDraft.providerKey}
+                  disabled={!!editingProvider}
+                  onChange={(event) =>
+                    setProviderDraft((current) => ({
+                      ...current,
+                      providerKey: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+                    }))
+                  }
+                  placeholder="zhipu"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="provider-base-url">Base URL</Label>
+              <Input
+                id="provider-base-url"
+                value={providerDraft.baseUrl}
+                onChange={(event) =>
+                  setProviderDraft((current) => ({
+                    ...current,
+                    baseUrl: event.target.value,
+                  }))
+                }
+                placeholder="https://example.com/v1"
+              />
+              <p className="text-xs text-muted-foreground">
+                填写兼容端点根地址，不要追加 /chat/completions。
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="provider-api-key">
+                API Key
+                {editingProvider?.credentialConfigured && (
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    已保存 {editingProvider.maskedHint}
+                  </span>
+                )}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="provider-api-key"
+                  type={showCredential ? "text" : "password"}
+                  value={credential}
+                  onChange={(event) => setCredential(event.target.value)}
+                  placeholder={
+                    editingProvider?.credentialConfigured
+                      ? "留空保留现有密钥，输入新值可轮换"
+                      : "输入 API Key"
+                  }
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCredential((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                >
+                  {showCredential ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label>启用供应商</Label>
+                <p className="text-xs text-muted-foreground">
+                  停用后其模型不会出现在模型选择器中。
+                </p>
+              </div>
+              <Switch
+                checked={providerDraft.enabled}
+                onCheckedChange={(enabled) =>
+                  setProviderDraft((current) => ({ ...current, enabled }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter className="items-center sm:justify-between">
+            <div>
+              {editingProvider?.credentialConfigured && (
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  disabled={busy === `key:${editingProvider.id}`}
+                  onClick={() => void clearCredential(editingProvider)}
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  清除密钥
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setProviderDialog(false)}>
+                取消
+              </Button>
+              <Button disabled={busy === "provider"} onClick={() => void saveProvider()}>
+                {busy === "provider" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                保存
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modelDialog} onOpenChange={setModelDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
+            <DialogDescription>
+              模型 ID 必须与供应商 API 接受的 model 参数完全一致。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="model-key">模型 ID</Label>
+              <Input
+                id="model-key"
+                value={modelDraft.modelKey}
+                disabled={!!editingModel}
+                onChange={(event) =>
+                  setModelDraft((current) => ({
+                    ...current,
+                    modelKey: event.target.value,
+                    displayName:
+                      current.displayName === current.modelKey
+                        ? event.target.value
+                        : current.displayName,
+                  }))
+                }
+                placeholder="例如 glm-5 或 qwen-max"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="model-name">显示名称</Label>
+              <Input
+                id="model-name"
+                value={modelDraft.displayName}
+                onChange={(event) =>
+                  setModelDraft((current) => ({
+                    ...current,
+                    displayName: event.target.value,
+                  }))
+                }
+                placeholder="用户界面中显示的名称"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="model-description">说明</Label>
+              <Textarea
+                id="model-description"
+                value={modelDraft.description}
+                onChange={(event) =>
+                  setModelDraft((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                placeholder="模型用途、上下文限制或计费提示"
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ["supportsReasoning", "支持推理", "展示推理强度选项"],
+                ["supportsImageInput", "支持图片", "允许发送图片输入"],
+                ["isFree", "免费模型", "仅作为价格提示"],
+                ["enabled", "启用模型", "可在聊天中选择"],
+              ].map(([key, title, description]) => (
+                <div key={key} className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <div className="text-sm font-medium">{title}</div>
+                    <div className="text-xs text-muted-foreground">{description}</div>
+                  </div>
+                  <Switch
+                    checked={Boolean(modelDraft[key as keyof ModelInput])}
+                    onCheckedChange={(checked) =>
+                      setModelDraft((current) => ({ ...current, [key]: checked }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModelDialog(false)}>
+              取消
+            </Button>
+            <Button disabled={busy === "model"} onClick={() => void saveModel()}>
+              {busy === "model" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <WandSparkles className="mr-2 h-4 w-4" />
+              )}
+              保存模型
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -2,7 +2,6 @@ package io.datastoria.server.service;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -22,8 +21,6 @@ import io.datastoria.server.dto.DiscoveredModelResponse;
 @Component
 public class HttpProviderRemoteClient implements ProviderRemoteClient {
 
-  private static final Set<String> SUPPORTED =
-      Set.of("openai", "openrouter", "deepseek", "anthropic");
   private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
   private final WebClient.Builder webClientBuilder;
@@ -34,7 +31,7 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
 
   @Override
   public boolean supports(String providerKey) {
-    return providerKey != null && SUPPORTED.contains(providerKey.toLowerCase());
+    return providerKey != null && !providerKey.isBlank();
   }
 
   @Override
@@ -45,12 +42,15 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
     }
     String providerKey = provider.providerKey().toLowerCase();
     String baseUrl = resolveBaseUrl(provider);
+    String modelsUrl =
+        baseUrl.endsWith("/v1") || baseUrl.endsWith("/v4")
+            ? baseUrl + "/models"
+            : baseUrl + "/v1/models";
     WebClient.RequestHeadersSpec<?> request =
         webClientBuilder
-            .baseUrl(baseUrl)
             .build()
             .get()
-            .uri("/v1/models")
+            .uri(modelsUrl)
             .headers(headers -> applyCredential(headers, providerKey, credential));
     try {
       JsonNode body = request.retrieve().bodyToMono(JsonNode.class).block(TIMEOUT);

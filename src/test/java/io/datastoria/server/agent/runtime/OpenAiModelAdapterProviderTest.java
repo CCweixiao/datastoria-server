@@ -42,6 +42,25 @@ class OpenAiModelAdapterProviderTest {
   }
 
   @Test
+  void supportsDomesticOpenAiCompatibleProvider() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(
+            Optional.of(
+                provider("zhipu", "https://open.bigmodel.cn/api/paas/v4", "provider-secret")));
+    when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
+
+    ModelAdapter adapter =
+        new OpenAiModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+            .adapterFor(model(null));
+
+    assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
+    verify(secrets).decrypt("provider-secret", "tenant-1");
+  }
+
+  @Test
   void rejectsUnsupportedProviderBeforeDecrypting() {
     ModelProviderRepository providers = mock(ModelProviderRepository.class);
     SecretService secrets = mock(SecretService.class);

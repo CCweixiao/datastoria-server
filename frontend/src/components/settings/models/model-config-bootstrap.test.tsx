@@ -10,7 +10,8 @@ const { fetchAvailableModels, setSystemModels, setProviderSettings, setServerSel
   vi.hoisted(() => ({
     fetchAvailableModels: vi.fn().mockResolvedValue({
       systemModels: [{ provider: "OpenAI", modelId: "gpt-5", source: "system" }],
-      githubModels: [{ provider: "GitHub Copilot", modelId: "copilot-model", source: "user" }],
+      githubModels: [],
+      codexModels: [],
     }),
     setSystemModels: vi.fn(),
     setProviderSettings: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/lib/ai/configuration/configuration-gateway", () => ({
         id: "provider-1",
         providerKey: "OpenAI",
         displayName: "OpenAI",
+        authType: "api_key",
         credentialConfigured: true,
         maskedHint: "sk-…test",
       },
@@ -58,10 +60,7 @@ it("loads only the Spring model catalog and server-side preference", async () =>
 
   expect(fetchAvailableModels).toHaveBeenCalledWith();
   expect(setSystemModels).toHaveBeenCalledWith(
-    [
-      { provider: "OpenAI", modelId: "gpt-5", source: "system" },
-      { provider: "GitHub Copilot", modelId: "copilot-model", source: "user" },
-    ],
+    [{ provider: "OpenAI", modelId: "gpt-5", source: "system" }],
     false
   );
   expect(setProviderSettings).toHaveBeenCalledWith([
@@ -70,12 +69,6 @@ it("loads only the Spring model catalog and server-side preference", async () =>
       providerId: "provider-1",
       credentialConfigured: true,
       maskedHint: "sk-…test",
-    },
-    {
-      provider: "GitHub Copilot",
-      providerId: "oauth:github",
-      credentialConfigured: true,
-      maskedHint: "OAuth connected",
     },
   ]);
   expect(setServerSelectedModel).toHaveBeenCalledWith("model-config-1");

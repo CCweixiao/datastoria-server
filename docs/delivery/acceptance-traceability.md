@@ -25,7 +25,7 @@
 | R14 | 每阶段最小可运行可测试可验证 | 全部 | 每阶段实施报告与退出条件证据 | PASS：P0–P10 delivery reports |
 | R15 | 数据迁移可对账、切换可回滚 | P3/P5/P11 | dry-run/import checksum、灰度/回滚演练 | PASS：P3 importer/checksum/dry-run tests |
 | R16 | 多租户、权限和审计 | P2-P11 | 双方言 cross-tenant negatives、RBAC、audit queries | PASS：RBAC/tenant/audit negative tests |
-| R17 | 开发 SQLite、生产 MySQL，两套 DDL 同步 | P2-P11 | 同版本 migration、schema parity、双 repository contract、prod fail-fast | PARTIAL：V1–V14 同步；本机无 Docker，MySQL runtime parity 未执行 |
+| R17 | 开发 SQLite、生产 MySQL，两套 DDL 同步 | P2-P11 | 同版本 migration、schema parity、双 repository contract、prod fail-fast | PARTIAL：V1–V15 同步；本机无 Docker，MySQL runtime parity 未执行 |
 
 ## 3. Node API 清零审计
 

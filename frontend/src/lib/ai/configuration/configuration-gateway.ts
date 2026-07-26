@@ -7,8 +7,46 @@ export interface ServerProvider {
   id: string;
   providerKey: string;
   displayName: string;
+  baseUrl?: string | null;
+  authType: "api_key" | "oauth" | "none";
+  enabled: boolean;
+  configJson?: string | null;
+  revision: number;
   credentialConfigured: boolean;
   maskedHint?: string | null;
+}
+
+export interface ServerModel {
+  id: string;
+  providerId: string;
+  modelKey: string;
+  displayName: string;
+  description?: string | null;
+  source: "system" | "discovered" | "custom";
+  enabled: boolean;
+  isFree: boolean;
+  capabilitiesJson?: string | null;
+  generationDefaultsJson?: string | null;
+  revision: number;
+}
+
+export interface ProviderInput {
+  providerKey: string;
+  displayName: string;
+  baseUrl: string;
+  authType?: "api_key" | "none";
+  enabled?: boolean;
+}
+
+export interface ModelInput {
+  providerId: string;
+  modelKey: string;
+  displayName: string;
+  description?: string;
+  enabled?: boolean;
+  isFree?: boolean;
+  supportsImageInput?: boolean;
+  supportsReasoning?: boolean;
 }
 
 export interface AiConfigurationGateway {
@@ -17,8 +55,18 @@ export interface AiConfigurationGateway {
   getModelPreference(): Promise<string | undefined>;
   setModelPreference(model: ServerModelProps): Promise<void>;
   saveProviderCredential(provider: string, credential: string): Promise<void>;
+  saveProviderCredentialById(providerId: string, credential: string): Promise<void>;
+  clearProviderCredentialById(providerId: string): Promise<void>;
   clearProviderCredential(provider: string): Promise<void>;
   setModelEnabled(model: ServerModelProps, enabled: boolean): Promise<void>;
+  listModels(): Promise<ServerModel[]>;
+  createProvider(input: ProviderInput, credential?: string): Promise<ServerProvider>;
+  updateProvider(provider: ServerProvider, input: ProviderInput): Promise<ServerProvider>;
+  deleteProvider(provider: ServerProvider): Promise<void>;
+  createModel(input: ModelInput): Promise<ServerModel>;
+  updateModel(model: ServerModel, input: ModelInput): Promise<ServerModel>;
+  deleteModel(model: ServerModel): Promise<void>;
+  discoverModels(providerId: string): Promise<Array<{ modelKey: string; displayName: string }>>;
 }
 
 function javaUrl(path: string): string {
@@ -89,6 +137,140 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
     );
   }
 
+  async listModels(): Promise<ServerModel[]> {
+    return checkedJson(
+      await backendApiFetch(javaUrl("/api/admin/ai/models"), { headers: identityHeaders() }),
+      "Load models"
+    );
+  }
+
+  async createProvider(input: ProviderInput, credential?: string): Promise<ServerProvider> {
+    const provider = await checkedJson<ServerProvider>(
+      await backendApiFetch(javaUrl("/api/admin/ai/providers"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...identityHeaders() },
+        body: JSON.stringify({
+          ...input,
+          authType: input.authType ?? "api_key",
+          enabled: input.enabled ?? true,
+          configJson: "{}",
+        }),
+      }),
+      "Create provider"
+    );
+    if (credential?.trim()) {
+      await this.saveCredentialById(provider.id, credential.trim());
+    }
+    return provider;
+  }
+
+  async updateProvider(provider: ServerProvider, input: ProviderInput): Promise<ServerProvider> {
+    return checkedJson(
+      await backendApiFetch(javaUrl(`/api/admin/ai/providers/${provider.id}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"${provider.revision}"`,
+          ...identityHeaders(),
+        },
+        body: JSON.stringify({
+          displayName: input.displayName,
+          baseUrl: input.baseUrl,
+          authType: input.authType ?? "api_key",
+          enabled: input.enabled ?? true,
+          configJson: provider.configJson ?? "{}",
+        }),
+      }),
+      "Update provider"
+    );
+  }
+
+  async deleteProvider(provider: ServerProvider): Promise<void> {
+    const response = await backendApiFetch(javaUrl(`/api/admin/ai/providers/${provider.id}`), {
+      method: "DELETE",
+      headers: { "If-Match": `"${provider.revision}"`, ...identityHeaders() },
+    });
+    if (!response.ok) throw new Error(`Delete provider failed: ${response.status}`);
+  }
+
+  async createModel(input: ModelInput): Promise<ServerModel> {
+    return checkedJson(
+      await backendApiFetch(javaUrl("/api/admin/ai/models"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...identityHeaders() },
+        body: JSON.stringify({
+          providerId: input.providerId,
+          modelKey: input.modelKey,
+          displayName: input.displayName,
+          description: input.description ?? "",
+          source: "custom",
+          enabled: input.enabled ?? true,
+          isFree: input.isFree ?? false,
+          capabilitiesJson: JSON.stringify({
+            supportedEndpoints: ["chat"],
+            autoSelectable: true,
+            supportsImageInput: input.supportsImageInput ?? false,
+            supportsTemperature: true,
+            supportsReasoning: input.supportsReasoning ?? false,
+            reasoningLevels: input.supportsReasoning ? ["low", "medium", "high"] : [],
+          }),
+          generationDefaultsJson: "{}",
+        }),
+      }),
+      "Create model"
+    );
+  }
+
+  async updateModel(model: ServerModel, input: ModelInput): Promise<ServerModel> {
+    return checkedJson(
+      await backendApiFetch(javaUrl(`/api/admin/ai/models/${model.id}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"${model.revision}"`,
+          ...identityHeaders(),
+        },
+        body: JSON.stringify({
+          displayName: input.displayName,
+          description: input.description ?? "",
+          source: model.source,
+          enabled: input.enabled ?? true,
+          isFree: input.isFree ?? false,
+          capabilitiesJson: JSON.stringify({
+            supportedEndpoints: ["chat"],
+            autoSelectable: true,
+            supportsImageInput: input.supportsImageInput ?? false,
+            supportsTemperature: true,
+            supportsReasoning: input.supportsReasoning ?? false,
+            reasoningLevels: input.supportsReasoning ? ["low", "medium", "high"] : [],
+          }),
+          generationDefaultsJson: model.generationDefaultsJson ?? "{}",
+        }),
+      }),
+      "Update model"
+    );
+  }
+
+  async deleteModel(model: ServerModel): Promise<void> {
+    const response = await backendApiFetch(javaUrl(`/api/admin/ai/models/${model.id}`), {
+      method: "DELETE",
+      headers: { "If-Match": `"${model.revision}"`, ...identityHeaders() },
+    });
+    if (!response.ok) throw new Error(`Delete model failed: ${response.status}`);
+  }
+
+  async discoverModels(
+    providerId: string
+  ): Promise<Array<{ modelKey: string; displayName: string }>> {
+    return checkedJson(
+      await backendApiFetch(javaUrl(`/api/admin/ai/providers/${providerId}/models:discover`), {
+        method: "POST",
+        headers: identityHeaders(),
+      }),
+      "Discover models"
+    );
+  }
+
   async getModelPreference(): Promise<string | undefined> {
     const result = await checkedJson<{ selectedModelId: string | null }>(
       await backendApiFetch(javaUrl("/api/me/ai/model-preference"), {
@@ -115,8 +297,26 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
 
   async saveProviderCredential(provider: string, credential: string): Promise<void> {
     const configured = await this.findOrCreateProvider(provider);
+    await this.saveCredentialById(configured.id, credential);
+  }
+
+  async saveProviderCredentialById(providerId: string, credential: string): Promise<void> {
+    await this.saveCredentialById(providerId, credential);
+  }
+
+  async clearProviderCredentialById(providerId: string): Promise<void> {
     const response = await backendApiFetch(
-      javaUrl(`/api/admin/ai/providers/${configured.id}/credential`),
+      javaUrl(`/api/admin/ai/providers/${providerId}/credential`),
+      { method: "DELETE", headers: identityHeaders() }
+    );
+    if (!response.ok) {
+      throw new Error(`Clear provider credential failed: ${response.status}`);
+    }
+  }
+
+  private async saveCredentialById(providerId: string, credential: string): Promise<void> {
+    const response = await backendApiFetch(
+      javaUrl(`/api/admin/ai/providers/${providerId}/credential`),
       {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...identityHeaders() },

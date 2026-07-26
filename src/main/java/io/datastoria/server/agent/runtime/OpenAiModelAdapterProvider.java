@@ -52,7 +52,7 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
             .orElseThrow(() -> new NotFoundException("ModelProvider", modelConfig.providerId()));
     boolean githubCopilot = "github-copilot".equalsIgnoreCase(provider.providerKey());
     boolean openAiCodex = "openai-codex".equalsIgnoreCase(provider.providerKey());
-    if (!githubCopilot && !openAiCodex && !isOpenAiCompatible(provider.providerKey())) {
+    if (!githubCopilot && !openAiCodex && !isOpenAiCompatible(provider)) {
       throw new IllegalArgumentException("Unsupported provider type");
     }
     if (openAiCodex) {
@@ -94,8 +94,9 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
     return ignored -> providerModel;
   }
 
-  private static boolean isOpenAiCompatible(String key) {
-    if (key == null) {
+  private static boolean isOpenAiCompatible(ModelProvider provider) {
+    String key = provider.providerKey();
+    if (key == null || "oauth".equalsIgnoreCase(provider.authType())) {
       return false;
     }
     String normalized = key.toLowerCase(java.util.Locale.ROOT);
@@ -105,6 +106,17 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
         || normalized.equals("deepseek")
         || normalized.equals("kimi")
         || normalized.equals("moonshot")
-        || normalized.equals("xai");
+        || normalized.equals("zhipu")
+        || normalized.equals("glm")
+        || normalized.equals("minimax")
+        || normalized.equals("dashscope")
+        || normalized.equals("bailian")
+        || normalized.equals("qwen")
+        || normalized.equals("aliyun-bailian")
+        || normalized.equals("custom")
+        || normalized.equals("xai")
+        || (!normalized.equals("anthropic")
+            && provider.baseUrl() != null
+            && !provider.baseUrl().isBlank());
   }
 }

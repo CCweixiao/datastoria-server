@@ -1317,3 +1317,30 @@ TypeScript、Vitest **58 files / 299 tests** 和包含 `/code-viewer` 的生产�
   Testcontainers MySQL runtime parity 仍未执行。
 - 前端：Prettier、TypeScript、ESLint、Vitest **58 files / 300 tests**、`next build --webpack`
   全部通过；构建路由仍只有页面，无 `/api/*`。
+
+## P4.8-10. 模型供应商管理改版（2026-07-26）
+
+模型设置改为完全由管理员维护的后端目录：
+
+1. 删除设置页的 GitHub Copilot OAuth 和 OpenAI Codex OAuth 入口；A12 不再物化或返回这两类
+   OAuth 模型。兼容 REST 路径暂时保留，但不会进入模型选择器或创建模型数据。
+2. 删除 `ModelCatalogProvisioner`。空数据库调用模型目录接口仍保持为空，不再自动写入 OpenAI、
+   OpenRouter、DeepSeek 或任何默认模型。
+3. Flyway V15（SQLite/MySQL）清理旧 provisioner 写入的供应商/模型、旧 Copilot/Codex
+   materialized model 及指向它们的用户偏好；管理员创建的普通供应商不受影响。
+4. 设置页新增供应商、编辑名称/Base URL、启停、API Key 新增/轮换/清除、删除、远程模型发现，
+   以及多模型新增、编辑、启停和删除。API Key 始终通过独立 secret API 交给 Java 加密保存。
+5. GLM、Kimi/Moonshot、MiniMax、阿里云百炼作为纯 UI 预设，仅预填官方 OpenAI-compatible
+   Base URL；选择预设不会写数据库，只有管理员点击保存才创建记录。另提供任意 OpenAI-compatible
+   自定义供应商。
+6. AgentScope Java 的 OpenAI-compatible adapter 与 `/models` discovery 扩展到上述国内平台及
+   具有显式 Base URL 的自定义供应商，仍使用现有 `ds_model_provider`、`ds_secret`、`ds_model`
+   和 `ds_user_model_preference` 结构。
+
+全量回归结果：
+
+- Java 17：`./mvnw spotless:check test`，**394 tests / 0 failure / 0 error**；本机无 Docker，
+  Testcontainers MySQL runtime parity 未执行，但 SQLite V14 → V15 真实升级测试与
+  SQLite/MySQL migration set parity 均通过。
+- 前端：Prettier、TypeScript、ESLint、Vitest **58 files / 301 tests**、`next build --webpack`
+  全部通过。

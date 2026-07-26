@@ -25,13 +25,11 @@ export interface ProviderDefinition {
 
 export const PROVIDERS: Record<string, ProviderDefinition> = {
   OpenAI: { logo: "openai.svg" },
-  "OpenAI Codex": { logo: "openai.svg" },
   Anthropic: { logo: "anthropic.svg" },
   Google: { logo: "google.svg" },
   OpenRouter: { logo: "openrouter.svg" },
   Groq: { logo: "groq.svg" },
   Cerebras: { logo: "cerebras.svg" },
-  "GitHub Copilot": { logo: "github-copilot.svg" },
   Nebius: { logo: "nebius.svg" },
 };
 

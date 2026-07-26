@@ -25,7 +25,7 @@ class MigrationSetParityTest {
 
     assertThat(mysql.keySet()).isEqualTo(sqlite.keySet());
     assertThat(createdTables(mysql.values())).isEqualTo(createdTables(sqlite.values()));
-    assertThat(sqlite).hasSize(14);
+    assertThat(sqlite).hasSize(15);
   }
 
   private Map<String, Path> migrations(String dialect) throws Exception {

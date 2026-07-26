@@ -29,7 +29,7 @@ class AvailableModelsApiTest {
   }
 
   @Test
-  void emptyDbIsProvisionedWithBackendManagedBuiltins() {
+  void emptyDbDoesNotProvisionProvidersOrModels() {
     web.post()
         .uri("/api/ai/models/available")
         .header("x-datastoria-user-email", "dev@example.com")
@@ -40,11 +40,7 @@ class AvailableModelsApiTest {
         .isOk()
         .expectBody()
         .jsonPath("$.systemModels.length()")
-        .isEqualTo(4)
-        .jsonPath("$.systemModels[*].modelId")
-        .value(org.hamcrest.Matchers.hasItem("gpt-5.4"))
-        .jsonPath("$.systemModels[*].supportsReasoning")
-        .value(org.hamcrest.Matchers.hasItem(true))
+        .isEqualTo(0)
         .jsonPath("$.githubModels.length()")
         .isEqualTo(0)
         .jsonPath("$.codexModels.length()")
@@ -82,7 +78,7 @@ class AvailableModelsApiTest {
   }
 
   @Test
-  void seededModelsAppearInSystemModels() {
+  void explicitlyCreatedModelsAppearInCatalog() {
     createProviderAndModel("openai", "gpt-4", "GPT-4");
     createProviderAndModel("anthropic", "claude-3", "Claude 3");
 
@@ -96,13 +92,13 @@ class AvailableModelsApiTest {
         .isOk()
         .expectBody()
         .jsonPath("$.systemModels.length()")
-        .isEqualTo(6)
+        .isEqualTo(2)
         .jsonPath("$.systemModels[*].modelId")
         .value(org.hamcrest.Matchers.hasItems("gpt-4", "claude-3"));
   }
 
   @Test
-  void storedGitHubOAuthCredentialPopulatesGitHubModels() throws Exception {
+  void storedGitHubOAuthCredentialDoesNotPopulateModels() throws Exception {
     org.mockito.Mockito.when(
             oauthRemote.postJson(
                 org.mockito.ArgumentMatchers.eq("https://github.com/login/oauth/access_token"),
@@ -141,14 +137,10 @@ class AvailableModelsApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
-        .jsonPath("$.systemModels[*].modelId")
-        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("copilot-model")))
-        .jsonPath("$.githubModels[0].provider")
-        .isEqualTo("GitHub Copilot")
-        .jsonPath("$.githubModels[0].modelId")
-        .isEqualTo("copilot-model")
-        .jsonPath("$.githubModels[0].configId")
-        .isNotEmpty();
+        .jsonPath("$.systemModels.length()")
+        .isEqualTo(0)
+        .jsonPath("$.githubModels.length()")
+        .isEqualTo(0);
 
     web.post()
         .uri("/api/ai/models/available")
@@ -159,14 +151,14 @@ class AvailableModelsApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
-        .jsonPath("$.systemModels[*].modelId")
-        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("copilot-model")))
+        .jsonPath("$.systemModels.length()")
+        .isEqualTo(0)
         .jsonPath("$.githubModels.length()")
-        .isEqualTo(1);
+        .isEqualTo(0);
   }
 
   @Test
-  void storedCodexOAuthCredentialMaterializesExecutableCodexModels() throws Exception {
+  void storedCodexOAuthCredentialDoesNotMaterializeModels() throws Exception {
     org.mockito.Mockito.when(
             oauthRemote.postForm(
                 org.mockito.ArgumentMatchers.eq("https://auth.openai.com/oauth/token"),
@@ -201,18 +193,10 @@ class AvailableModelsApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
-        .jsonPath("$.systemModels[*].provider")
-        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("OpenAI Codex")))
+        .jsonPath("$.systemModels.length()")
+        .isEqualTo(0)
         .jsonPath("$.codexModels.length()")
-        .isEqualTo(5)
-        .jsonPath("$.codexModels[*].modelId")
-        .value(
-            org.hamcrest.Matchers.hasItems(
-                "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"))
-        .jsonPath("$.codexModels[*].configId")
-        .value(
-            org.hamcrest.Matchers.everyItem(
-                org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyString())));
+        .isEqualTo(0);
   }
 
   private void createProviderAndModel(String providerKey, String modelKey, String displayName) {

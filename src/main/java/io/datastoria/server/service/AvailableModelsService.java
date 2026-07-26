@@ -1,10 +1,6 @@
 package io.datastoria.server.service;
 
-import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -12,11 +8,9 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.config.JdbcSchedulerConfig;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
-import io.datastoria.server.domain.Ulid;
 import io.datastoria.server.dto.AvailableModelsResponse;
 import io.datastoria.server.dto.ModelProps;
 import io.datastoria.server.identity.Identity;
@@ -35,286 +29,51 @@ public class AvailableModelsService {
 
   private final ModelRepository modelRepo;
   private final ModelProviderRepository providerRepo;
-  private final ModelCatalogProvisioner catalogProvisioner;
-  private final OAuthCredentialService oauthCredentials;
   private final ObjectMapper mapper;
   private final Scheduler jdbcScheduler;
 
   public AvailableModelsService(
       ModelRepository modelRepo,
       ModelProviderRepository providerRepo,
-      ModelCatalogProvisioner catalogProvisioner,
-      OAuthCredentialService oauthCredentials,
       ObjectMapper mapper,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.modelRepo = modelRepo;
     this.providerRepo = providerRepo;
-    this.catalogProvisioner = catalogProvisioner;
-    this.oauthCredentials = oauthCredentials;
     this.mapper = mapper;
     this.jdbcScheduler = jdbcScheduler;
   }
 
   public Mono<AvailableModelsResponse> getAvailableModels(Identity identity) {
-    Mono<List<ModelProps>> system =
-        Mono.fromCallable(() -> buildSystemModels(identity)).subscribeOn(jdbcScheduler);
-    Mono<List<ModelProps>> github =
-        oauthCredentials
-            .githubModels(identity)
-            .flatMap(
-                payload ->
-                    Mono.fromCallable(() -> githubModels(identity, payload))
-                        .subscribeOn(jdbcScheduler))
-            .onErrorResume(NotFoundException.class, ignored -> Mono.just(List.of()));
-    Mono<List<ModelProps>> codex =
-        Mono.fromCallable(() -> codexModels(identity)).subscribeOn(jdbcScheduler);
-    return Mono.zip(system, github, codex)
-        .map(result -> new AvailableModelsResponse(result.getT1(), result.getT2(), result.getT3()));
-  }
-
-  private List<ModelProps> codexModels(Identity identity) {
-    if (!oauthCredentials.hasCredential("codex", identity)) {
-      return List.of();
-    }
-    ModelProvider provider =
-        oauthProvider(
-            identity, "openai-codex", "OpenAI Codex", "https://chatgpt.com/backend-api/codex");
-    Map<String, Model> stored =
-        modelRepo.findAll(identity.tenantId()).stream()
-            .filter(model -> provider.id().equals(model.providerId()))
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    Model::modelKey, model -> model, (left, right) -> left));
-    return List.of(
-            new CodexModel("gpt-5.4", true),
-            new CodexModel("gpt-5.4-mini", true),
-            new CodexModel("gpt-5.3-codex", true),
-            new CodexModel("gpt-5.3-codex-spark", false),
-            new CodexModel("gpt-5.2", true))
-        .stream()
-        .map(
-            definition -> {
-              Model model =
-                  stored.computeIfAbsent(
-                      definition.modelKey(),
-                      ignored -> modelRepo.save(codexModel(identity, provider, definition)));
-              return new ModelProps(
-                  "OpenAI Codex",
-                  definition.modelKey(),
-                  "Codex model accessed with ChatGPT/Codex subscription authentication.",
-                  false,
-                  false,
-                  !model.enabled(),
-                  List.of("responses"),
-                  definition.vision(),
-                  false,
-                  true,
-                  List.of("low", "medium", "high", "xhigh"),
-                  "user",
-                  model.id());
-            })
-        .toList();
-  }
-
-  private List<ModelProps> githubModels(Identity identity, JsonNode payload) {
-    JsonNode models = payload.isArray() ? payload : payload.path("data");
-    if (!models.isArray()) {
-      return List.of();
-    }
-    ModelProvider provider = githubProvider(identity);
-    Map<String, Model> stored =
-        modelRepo.findAll(identity.tenantId()).stream()
-            .filter(model -> provider.id().equals(model.providerId()))
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    Model::modelKey, model -> model, (left, right) -> left));
-    return java.util.stream.StreamSupport.stream(models.spliterator(), false)
-        .filter(model -> model.path("model_picker_enabled").asBoolean(true))
-        .map(
-            node -> {
-              String modelKey = node.path("id").asText();
-              Model model =
-                  stored.computeIfAbsent(
-                      modelKey, ignored -> modelRepo.save(githubModel(identity, provider, node)));
-              return new ModelProps(
-                  "GitHub Copilot",
-                  modelKey,
-                  githubDescription(node),
-                  isFreeGitHubModel(modelKey),
-                  true,
-                  !model.enabled(),
-                  stringList(node.path("supported_endpoints"), List.of("chat")),
-                  supportsVision(node, modelKey),
-                  true,
-                  supportsReasoning(modelKey),
-                  supportsReasoning(modelKey) ? List.of("low", "medium", "high") : List.of(),
-                  "user",
-                  model.id());
-            })
-        .filter(model -> !model.modelId().isBlank())
-        .sorted(java.util.Comparator.comparing(ModelProps::modelId))
-        .toList();
-  }
-
-  private ModelProvider githubProvider(Identity identity) {
-    return oauthProvider(
-        identity, "github-copilot", "GitHub Copilot", "https://api.githubcopilot.com");
-  }
-
-  private ModelProvider oauthProvider(
-      Identity identity, String providerKey, String displayName, String baseUrl) {
-    return providerRepo.findAll(identity.tenantId()).stream()
-        .filter(provider -> providerKey.equalsIgnoreCase(provider.providerKey()))
-        .findFirst()
-        .orElseGet(
-            () ->
-                providerRepo.save(
-                    new ModelProvider(
-                        Ulid.next(),
-                        identity.tenantId(),
-                        providerKey,
-                        displayName,
-                        baseUrl,
-                        "oauth",
-                        true,
-                        "{}",
-                        null,
-                        0,
-                        "system",
-                        "system",
-                        Instant.now(),
-                        Instant.now(),
-                        null)));
-  }
-
-  private Model codexModel(Identity identity, ModelProvider provider, CodexModel definition) {
-    com.fasterxml.jackson.databind.node.ObjectNode capabilities = mapper.createObjectNode();
-    capabilities
-        .put("autoSelectable", false)
-        .put("supportsImageInput", definition.vision())
-        .put("supportsTemperature", false)
-        .put("supportsReasoning", true);
-    capabilities.set("supportedEndpoints", mapper.valueToTree(List.of("responses")));
-    capabilities.set(
-        "reasoningLevels", mapper.valueToTree(List.of("low", "medium", "high", "xhigh")));
-    Instant now = Instant.now();
-    return new Model(
-        Ulid.next(),
-        identity.tenantId(),
-        provider.id(),
-        definition.modelKey(),
-        definition.modelKey(),
-        "Codex model accessed with ChatGPT/Codex subscription authentication.",
-        "discovered",
-        true,
-        false,
-        capabilities.toString(),
-        "{}",
-        null,
-        0,
-        now,
-        now,
-        null);
-  }
-
-  private Model githubModel(Identity identity, ModelProvider provider, JsonNode node) {
-    String modelKey = node.path("id").asText();
-    boolean reasoning = supportsReasoning(modelKey);
-    com.fasterxml.jackson.databind.node.ObjectNode capabilityNode = mapper.createObjectNode();
-    capabilityNode
-        .put("autoSelectable", true)
-        .put("supportsImageInput", supportsVision(node, modelKey))
-        .put("supportsTemperature", true)
-        .put("supportsReasoning", reasoning);
-    capabilityNode.set(
-        "supportedEndpoints",
-        mapper.valueToTree(stringList(node.path("supported_endpoints"), List.of("chat"))));
-    capabilityNode.set(
-        "reasoningLevels",
-        mapper.valueToTree(reasoning ? List.of("low", "medium", "high") : List.of()));
-    String capabilities = capabilityNode.toString();
-    Instant now = Instant.now();
-    return new Model(
-        Ulid.next(),
-        identity.tenantId(),
-        provider.id(),
-        modelKey,
-        node.path("name").asText(modelKey),
-        githubDescription(node),
-        "discovered",
-        true,
-        isFreeGitHubModel(modelKey),
-        capabilities,
-        "{}",
-        null,
-        0,
-        now,
-        now,
-        null);
-  }
-
-  private static boolean supportsVision(JsonNode model, String modelKey) {
-    if (model.path("capabilities").path("supports").path("vision").asBoolean(false)) {
-      return true;
-    }
-    String normalized = modelKey.toLowerCase(Locale.ROOT);
-    return normalized.contains("gpt-4o")
-        || normalized.contains("gpt-5")
-        || normalized.contains("claude")
-        || normalized.contains("gemini");
-  }
-
-  private static boolean supportsReasoning(String modelKey) {
-    String normalized = modelKey.toLowerCase(Locale.ROOT);
-    return normalized.contains("gpt-5")
-        || normalized.contains("o1")
-        || normalized.contains("o3")
-        || normalized.contains("o4")
-        || normalized.contains("claude")
-        || normalized.contains("gemini");
-  }
-
-  private static boolean isFreeGitHubModel(String modelKey) {
-    return java.util.Set.of("gpt-4.1", "gpt-4o", "gpt-5-mini")
-        .contains(modelKey.toLowerCase(Locale.ROOT));
-  }
-
-  private static String githubDescription(JsonNode model) {
-    String name = model.path("name").asText();
-    String vendor = model.path("vendor").asText();
-    if (!name.isBlank() && !vendor.isBlank()) {
-      return "- **Vendor**: " + vendor + "\n\n- **Model**: " + name;
-    }
-    return !name.isBlank() ? name : model.path("id").asText();
+    return Mono.fromCallable(
+            () -> new AvailableModelsResponse(buildSystemModels(identity), List.of(), List.of()))
+        .subscribeOn(jdbcScheduler);
   }
 
   private List<ModelProps> buildSystemModels(Identity identity) {
-    catalogProvisioner.provision(identity);
     List<ModelProvider> providers = providerRepo.findAll(identity.tenantId());
-    Set<String> oauthProviderIds =
-        providers.stream()
-            .filter(provider -> "oauth".equalsIgnoreCase(provider.authType()))
-            .map(ModelProvider::id)
-            .collect(java.util.stream.Collectors.toSet());
     return modelRepo.findEnabled(identity.tenantId()).stream()
-        // User-scoped OAuth models are returned in their dedicated response collection. Keeping
-        // them out of systemModels avoids exposing a model to users who do not own the credential
-        // and prevents duplicates after a discovered model has been materialized.
-        .filter(model -> !oauthProviderIds.contains(model.providerId()))
+        .filter(
+            model ->
+                providers.stream()
+                    .anyMatch(
+                        provider ->
+                            provider.id().equals(model.providerId())
+                                && provider.enabled()
+                                && !"oauth".equalsIgnoreCase(provider.authType())))
         .map(m -> toModelProps(m, providers))
         .toList();
   }
 
   private ModelProps toModelProps(Model model, List<ModelProvider> providers) {
     JsonNode capabilities = parseObject(model.capabilitiesJson());
-    String providerKey =
+    String providerName =
         providers.stream()
             .filter(p -> p.id().equals(model.providerId()))
-            .map(ModelProvider::providerKey)
+            .map(ModelProvider::displayName)
             .findFirst()
             .orElse("unknown");
     return new ModelProps(
-        providerKey,
+        providerName,
         model.modelKey(),
         model.description(),
         model.isFree(),
@@ -350,6 +109,4 @@ public class AvailableModelsService {
         .map(JsonNode::asText)
         .toList();
   }
-
-  private record CodexModel(String modelKey, boolean vision) {}
 }
