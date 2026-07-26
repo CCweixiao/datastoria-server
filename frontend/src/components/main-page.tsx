@@ -249,9 +249,11 @@ async function getConnectionMetadata(connection: Connection): Promise<void> {
     });
 
   const queryLogTableQuery = connection
-    .query(`SELECT hasColumnInTable('system', 'query_log', 'hostname')`, {
-      default_format: "JSONCompact",
-    })
+    .query(
+      `SELECT count() > 0 FROM system.columns
+WHERE database = 'system' AND table = 'query_log' AND name = 'hostname'`,
+      { default_format: "JSONCompact" }
+    )
     .response.then((response) => {
       if (response.httpStatus === 200) {
         const data = response.data.json<JSONCompactFormatResponse>();
@@ -266,9 +268,11 @@ async function getConnectionMetadata(connection: Connection): Promise<void> {
     });
 
   const spanLogTableQuery = connection
-    .query(`SELECT hasColumnInTable('system', 'opentelemetry_span_log', 'hostname')`, {
-      default_format: "JSONCompact",
-    })
+    .query(
+      `SELECT count() > 0 FROM system.columns
+WHERE database = 'system' AND table = 'opentelemetry_span_log' AND name = 'hostname'`,
+      { default_format: "JSONCompact" }
+    )
     .response.then((response) => {
       if (response.httpStatus === 200) {
         const data = response.data.json<JSONCompactFormatResponse>();
@@ -283,9 +287,11 @@ async function getConnectionMetadata(connection: Connection): Promise<void> {
     });
 
   const partLogTableQuery = connection
-    .query(`SELECT hasColumnInTable('system', 'part_log', 'hostname')`, {
-      default_format: "JSONCompact",
-    })
+    .query(
+      `SELECT count() > 0 FROM system.columns
+WHERE database = 'system' AND table = 'part_log' AND name = 'hostname'`,
+      { default_format: "JSONCompact" }
+    )
     .response.then((response) => {
       if (response.httpStatus === 200) {
         const data = response.data.json<JSONCompactFormatResponse>();
