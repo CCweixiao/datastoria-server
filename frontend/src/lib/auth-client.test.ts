@@ -19,4 +19,10 @@ describe("buildSignInUrl", () => {
       new URL(buildSignInUrl(provider, "https://evil.example")).searchParams.get("callbackUrl")
     ).toBe("/");
   });
+
+  it("rejects a sign-in URL outside the Java authentication endpoints", () => {
+    expect(() =>
+      buildSignInUrl({ ...provider, signinUrl: "https://evil.example/signin" }, "/")
+    ).toThrow("invalid sign-in URL");
+  });
 });

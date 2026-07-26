@@ -36,7 +36,6 @@ export default defineConfig({
         "external/number-flow/packages/number-flow/src/plugins/index.ts"
       ),
       cmdk: path.resolve(__dirname, "src/test/cmdk-stub.tsx"),
-      "server-only": path.resolve(__dirname, "src/test/server-only.ts"),
     },
   },
   test: {

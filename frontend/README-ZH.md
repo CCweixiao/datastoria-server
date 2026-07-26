@@ -56,9 +56,9 @@ npm install -g pnpm
 ## 项目结构
 
 ```
-datastoria/
+frontend/
 ├── src/                      # 源代码
-│   ├── app/                  # Next.js App Routes 和 API Handlers
+│   ├── app/                  # Next.js 页面（不包含业务 API Handler）
 │   ├── components/            # React 组件
 │   │   ├── ai/             # AI 相关组件
 │   │   ├── chat/           # 聊天界面
@@ -66,24 +66,22 @@ datastoria/
 │   │   ├── cluster-tab/    # 集群监控
 │   │   └── ui/            # UI 通用组件
 │   └── lib/                   # 核心库
-│       ├── ai/             # AI 引擎 (Agent/Skill/Tool/Model)
+│       ├── ai/             # Spring API 客户端、共享契约和 UI 类型
 │       ├── clickhouse/      # ClickHouse 客户端
 │       ├── connection/      # 连接管理
-│       └── storage/        # 数据持久化
 ├── external/                  # 外部依赖 (git 子模块)
 │   ├── number-flow/       # 数字动画库 (pnpm workspace)
 │   ├── vizlayer/          # 可视化引擎 (pnpm workspace)
-│   ├── cmdk/              # 命令面板 (pnpm workspace)
-│   └── clickhouse/        # Agent Skills (submodule)
+│   └── cmdk/              # 命令面板 (pnpm workspace)
 ├── docs/                     # VitePress 文档
-├── resources/skills/         # 运行时技能文件 (从 external 同步)
 └── AGENTS.md                # AI Agent 开发指南
 
 ```
 
 ### 核心目录说明
 
-- **`src/lib/ai/`**: AI 引擎核心，包含 Agent、Skill、Tool、Model 管理
+- **`src/lib/ai/`**: 浏览器端 AI 交互协议、Spring API 客户端与展示类型；Agent、Skill
+  加载和 Tool 执行均位于 Java 后端
 - **`external/`**: 嵌入的第三方依赖，**不要**当作普通应用代码修改
 - **`worktrees/`**: 本地并行工作树，不要主动修改
 
@@ -138,12 +136,11 @@ npm install && npm run build:deps
 
 此脚本按顺序构建所有外部依赖：
 
-1. **sync:skills** → 同步技能文件到 `resources/skills/`
-2. **build:number-flow-core** → 构建 `number-flow` 核心包
-3. **build:number-flow-react** → 构建 `number-flow` React 包
-4. **build:vizlayer-core** → 构建 `vizlayer` 核心包 (需要 pnpm)
-5. **build:vizlayer-react** → 构建 `vizlayer` React 包 (需要 pnpm)
-6. **build:cmdk** → 构建 `cmdk` 命令面板
+1. **build:number-flow-core** → 构建 `number-flow` 核心包
+2. **build:number-flow-react** → 构建 `number-flow` React 包
+3. **build:vizlayer-core** → 构建 `vizlayer` 核心包 (需要 pnpm)
+4. **build:vizlayer-react** → 构建 `vizlayer` React 包 (需要 pnpm)
+5. **build:cmdk** → 构建 `cmdk` 命令面板
 
 ---
 
@@ -367,7 +364,8 @@ gh pr create --title "feat: add xyz feature" --body "..."
 **注意**：当前项目未配置 `pre-commit` hook。以下 npm 生命周期脚本仅在运行对应命令时触发：
 
 - `npm run build` 前会通过 `prebuild` 运行 `build:deps`
-- `npm run dev` 前会通过 `predev` 运行 `sync:skills`
+- `npm run dev` 会同时启动外部 UI 包的 watch 构建和 Next.js 页面服务；业务 API、Agent、
+  Skill、Tool 与持久化由 Spring Boot 提供
 
 **需要手动执行**：
 

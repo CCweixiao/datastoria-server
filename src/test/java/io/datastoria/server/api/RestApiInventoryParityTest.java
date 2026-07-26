@@ -9,6 +9,9 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,8 @@ import org.yaml.snakeyaml.Yaml;
 @SpringBootTest
 @ActiveProfiles("test")
 class RestApiInventoryParityTest {
+
+  private static final Pattern API_LITERAL = Pattern.compile("/api/[A-Za-z0-9_./:${}-]+");
 
   @Autowired
   @Qualifier("requestMappingHandlerMapping")
@@ -53,7 +58,46 @@ class RestApiInventoryParityTest {
             });
 
     Set<Operation> expected = baselineOperations();
+    expected.addAll(frontendOperations());
     assertThat(actual).containsAll(expected);
+  }
+
+  @Test
+  void everyFrontendBackendApiLiteralIsInventoried() throws Exception {
+    Set<String> inventoriedPrefixes =
+        frontendOperations().stream()
+            .map(Operation::path)
+            .map(path -> path.split("\\{", 2)[0])
+            .collect(java.util.stream.Collectors.toSet());
+    try (Stream<Path> files = Files.walk(Path.of("frontend/src"))) {
+      for (Path file :
+          files
+              .filter(Files::isRegularFile)
+              .filter(path -> path.toString().matches(".*\\.tsx?$"))
+              .filter(path -> !path.toString().matches(".*\\.(test|spec)\\.tsx?$"))
+              .toList()) {
+        for (String line : Files.readAllLines(file)) {
+          if (!line.contains("/api/")
+              || (!line.contains("Api")
+                  && !line.contains("apiUrl")
+                  && !line.contains("Fetch")
+                  && !line.contains("fetch")
+                  && !line.contains("SessionApiBase"))) {
+            continue;
+          }
+          Matcher matcher = API_LITERAL.matcher(line);
+          while (matcher.find()) {
+            String literalPrefix = matcher.group().split("\\$", 2)[0];
+            assertThat(inventoriedPrefixes)
+                .as("%s contains an API path missing from the frontend inventory: %s", file, line)
+                .anyMatch(
+                    inventoryPrefix ->
+                        inventoryPrefix.startsWith(literalPrefix)
+                            || literalPrefix.startsWith(inventoryPrefix));
+          }
+        }
+      }
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -80,6 +124,29 @@ class RestApiInventoryParityTest {
             }
           }
         });
+    return operations;
+  }
+
+  @SuppressWarnings("unchecked")
+  private Set<Operation> frontendOperations() throws Exception {
+    Map<String, Object> document;
+    try (InputStream input =
+        Files.newInputStream(Path.of("docs/api/frontend-spring-call-inventory.yaml"))) {
+      document = new Yaml().load(input);
+    }
+    Set<Operation> operations = new HashSet<>();
+    for (Map<String, Object> item : (Iterable<Map<String, Object>>) document.get("operations")) {
+      String path = String.valueOf(item.get("path"));
+      Path callSite = Path.of("frontend/src").resolve(String.valueOf(item.get("callSite")));
+      assertThat(callSite).isRegularFile();
+      String staticPathPrefix = path.split("\\{", 2)[0];
+      assertThat(Files.readString(callSite))
+          .as("%s must still call %s", callSite, path)
+          .contains(staticPathPrefix);
+      operations.add(
+          new Operation(
+              String.valueOf(item.get("method")).toUpperCase(Locale.ROOT), normalize(path)));
+    }
     return operations;
   }
 

@@ -737,6 +737,85 @@ class P3ApiTest extends AbstractP3ApiTest {
     }
 
     @Test
+    @DisplayName("A08 persistence omits image payloads and transient stream markers")
+    void a08MessagesSanitizeRequestOnlyParts() {
+      String sessionId = "019523a0f0a64d6c8a3e2b9c1f0d7e32";
+      String body =
+          """
+          {
+            "connectionId": "ch-test",
+            "sessionId": "%s",
+            "messages": [
+              {
+                "id": "msg_image_with_text",
+                "role": "user",
+                "parts": [
+                  { "type": "step-start" },
+                  { "type": "reasoning", "text": "   " },
+                  { "type": "text", "text": "Inspect this image" },
+                  {
+                    "type": "file",
+                    "mediaType": "image/png",
+                    "url": "data:image/png;base64,c2VjcmV0LWltYWdl",
+                    "filename": "chart.png"
+                  },
+                  {
+                    "type": "reasoning",
+                    "text": "",
+                    "providerMetadata": { "openai": { "itemId": "reasoning-1" } }
+                  }
+                ]
+              },
+              {
+                "id": "msg_image_only",
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "file",
+                    "mediaType": "image/jpeg",
+                    "url": "data:image/jpeg;base64,c2VjcmV0LWltYWdl"
+                  }
+                ]
+              }
+            ]
+          }
+          """
+              .formatted(sessionId);
+
+      web.post()
+          .uri("/api/ai/chat/sessions")
+          .header("x-datastoria-user-email", OWNER_EMAIL)
+          .contentType(MediaType.APPLICATION_JSON)
+          .bodyValue(body)
+          .exchange()
+          .expectStatus()
+          .isOk();
+
+      JsonNode messages =
+          web.get()
+              .uri("/api/ai/chat/sessions/{id}/messages", sessionId)
+              .header("x-datastoria-user-email", OWNER_EMAIL)
+              .exchange()
+              .expectStatus()
+              .isOk()
+              .expectBody(JsonNode.class)
+              .returnResult()
+              .getResponseBody();
+
+      JsonNode mixedParts = messages.get(0).get("parts");
+      assertThat(mixedParts.size()).isEqualTo(2);
+      assertThat(mixedParts.get(0).path("text").asText()).isEqualTo("Inspect this image");
+      assertThat(mixedParts.get(1).path("providerMetadata").isObject()).isTrue();
+      assertThat(mixedParts.toString()).doesNotContain("data:image", "secret-image");
+
+      JsonNode imageOnlyParts = messages.get(1).get("parts");
+      assertThat(imageOnlyParts.size()).isEqualTo(1);
+      assertThat(imageOnlyParts.get(0).path("type").asText()).isEqualTo("text");
+      assertThat(imageOnlyParts.get(0).path("text").asText())
+          .isEqualTo("[Image attachment omitted from saved history]");
+    }
+
+    @Test
     @DisplayName("A08-messages-unknown-part-preserved: unknown type round-trips byte-for-byte")
     void a08MessagesUnknownPartPreserved() throws Exception {
       String sessionId = "019523a0f0a64d6c8a3e2b9c1f0d7e31";

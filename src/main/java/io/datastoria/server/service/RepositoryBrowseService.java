@@ -17,11 +17,40 @@ import io.datastoria.server.api.error.PlainTextException;
 @Service
 public class RepositoryBrowseService {
 
-  private static final int MAX_LINES = 400;
-  private static final int MAX_BYTES = 100_000;
+  private static final int MAX_LINES = 2_000;
+  private static final int MAX_BYTES = 256 * 1_024;
   private static final int MAX_SOURCE_FILE_BYTES = 2_000_000;
   private static final Set<String> SKIPPED =
-      Set.of(".git", ".next", "node_modules", "target", "dist", "build", ".idea");
+      Set.of(".git", ".next", ".local", "node_modules", "target", "dist", "build", ".idea");
+  private static final Set<String> BROWSEABLE_SUFFIXES =
+      Set.of(
+          ".c",
+          ".cc",
+          ".cpp",
+          ".cxx",
+          ".h",
+          ".hh",
+          ".hpp",
+          ".hxx",
+          ".java",
+          ".kt",
+          ".ts",
+          ".tsx",
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".json",
+          ".yaml",
+          ".yml",
+          ".xml",
+          ".properties",
+          ".md",
+          ".sql",
+          ".sh",
+          ".css",
+          ".html",
+          ".toml",
+          ".gradle");
 
   private final Path root;
 
@@ -43,12 +72,18 @@ public class RepositoryBrowseService {
               path ->
                   java.util.stream.StreamSupport.stream(root.relativize(path).spliterator(), false)
                       .noneMatch(segment -> SKIPPED.contains(segment.toString())))
+          .filter(RepositoryBrowseService::isBrowseable)
           .map(root::relativize)
           .map(path -> path.toString().replace(java.io.File.separatorChar, '/'))
           .sorted()
           .limit(10_000)
           .toList();
     }
+  }
+
+  private static boolean isBrowseable(Path path) {
+    String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+    return BROWSEABLE_SUFFIXES.stream().anyMatch(name::endsWith);
   }
 
   public FileView read(String relativePath, Integer requestedStart, Integer requestedEnd)
@@ -67,27 +102,57 @@ public class RepositoryBrowseService {
           0,
           0,
           false,
+          false,
           false);
     }
     int start = Math.max(1, requestedStart == null ? 1 : requestedStart);
     int end =
         Math.min(
             total, requestedEnd == null ? Math.min(total, start + MAX_LINES - 1) : requestedEnd);
-    if (end < start || end - start + 1 > MAX_LINES) {
-      throw PlainTextException.badRequest("Requested file range is invalid or too large");
+    if (end < start) {
+      throw PlainTextException.badRequest("Requested file range is invalid");
     }
-    String content = String.join("\n", lines.subList(start - 1, end));
-    if (content.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) {
-      throw PlainTextException.badRequest("Requested file range is too large");
+    end = Math.min(end, start + MAX_LINES - 1);
+    StringBuilder content = new StringBuilder();
+    int usedBytes = 0;
+    boolean truncated = false;
+    for (int lineIndex = start - 1; lineIndex < end; lineIndex++) {
+      String next = (lineIndex == start - 1 ? "" : "\n") + lines.get(lineIndex);
+      byte[] bytes = next.getBytes(StandardCharsets.UTF_8);
+      if (usedBytes + bytes.length > MAX_BYTES) {
+        usedBytes += appendWithinUtf8Limit(content, next, MAX_BYTES - usedBytes);
+        truncated = true;
+        break;
+      }
+      content.append(next);
+      usedBytes += bytes.length;
     }
     return new FileView(
         root.relativize(file).toString().replace(java.io.File.separatorChar, '/'),
-        content,
+        content.toString(),
         start,
         end,
         total,
         start > 1,
-        end < total);
+        end < total,
+        truncated);
+  }
+
+  private static int appendWithinUtf8Limit(
+      StringBuilder destination, String value, int remainingBytes) {
+    int appendedBytes = 0;
+    for (int offset = 0; offset < value.length(); ) {
+      int codePoint = value.codePointAt(offset);
+      String character = new String(Character.toChars(codePoint));
+      int characterBytes = character.getBytes(StandardCharsets.UTF_8).length;
+      if (appendedBytes + characterBytes > remainingBytes) {
+        break;
+      }
+      destination.append(character);
+      appendedBytes += characterBytes;
+      offset += Character.charCount(codePoint);
+    }
+    return appendedBytes;
   }
 
   private Path resolve(String relativePath) throws IOException {
@@ -112,5 +177,6 @@ public class RepositoryBrowseService {
       int endLine,
       int totalLines,
       boolean hasPrevious,
-      boolean hasNext) {}
+      boolean hasNext,
+      boolean truncated) {}
 }

@@ -94,11 +94,7 @@ function mergeHeaders(
   return merged;
 }
 
-/**
- * Wraps {@code fetch} for P3 calls so the gateway can inject the dev identity header when the
- * Java backend is selected. In Node mode the call is identical to a direct {@code fetch} with
- * {@code credentials: "same-origin"}.
- */
+/** Adds the development identity header to direct Spring session API calls. */
 async function sessionFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const identity = sessionIdentityHeaders() as Record<string, string>;
   const headers = mergeHeaders(init.headers as HeadersInit | undefined, identity);

@@ -61,6 +61,7 @@ import io.datastoria.server.service.ClickHouseConnectionService;
 import io.datastoria.server.service.RcaTemplateCatalog;
 import io.datastoria.server.skill.BuiltinSkillProvisioner;
 import io.datastoria.server.skill.SkillToolAvailability;
+import io.datastoria.server.skill.SlashCommandExpander;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -126,6 +127,7 @@ public class ChatRunService {
   private final AuditLogRepository auditLogRepository;
   private final BuiltinSkillProvisioner builtinSkillProvisioner;
   private final SkillToolAvailability skillToolAvailability;
+  private final SlashCommandExpander slashCommandExpander;
   private final ClickHouseConnectionService clickHouseConnectionService;
   private final RcaTemplateCatalog rcaTemplateCatalog;
   private final ModelAdapterProvider modelAdapterProvider;
@@ -154,6 +156,7 @@ public class ChatRunService {
       AuditLogRepository auditLogRepository,
       BuiltinSkillProvisioner builtinSkillProvisioner,
       SkillToolAvailability skillToolAvailability,
+      SlashCommandExpander slashCommandExpander,
       ClickHouseConnectionService clickHouseConnectionService,
       RcaTemplateCatalog rcaTemplateCatalog,
       ModelAdapterProvider modelAdapterProvider,
@@ -178,6 +181,7 @@ public class ChatRunService {
     this.auditLogRepository = auditLogRepository;
     this.builtinSkillProvisioner = builtinSkillProvisioner;
     this.skillToolAvailability = skillToolAvailability;
+    this.slashCommandExpander = slashCommandExpander;
     this.clickHouseConnectionService = clickHouseConnectionService;
     this.rcaTemplateCatalog = rcaTemplateCatalog;
     this.modelAdapterProvider = modelAdapterProvider;
@@ -654,7 +658,8 @@ public class ChatRunService {
                 AgentContextOptions.apply(agent.config(), req.agentContext()), req.context()),
             resolvedCapabilities.capabilities(),
             req.ephemeral() ? java.util.List.of() : loadHistory(req, tenant),
-            enrichedUserText(req, tenant),
+            slashCommandExpander.expand(
+                enrichedUserText(req, tenant), resolvedCapabilities.selectedSkills()),
             currentAttachments);
     return new PreparedRun(runId, runRequest);
   }
@@ -704,7 +709,8 @@ public class ChatRunService {
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
                 new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
                 new HumanInteractionAgentTools())),
-        pins);
+        pins,
+        selectedSkills);
   }
 
   private java.util.List<io.agentscope.core.skill.AgentSkill> toRuntimeSkills(
@@ -712,6 +718,8 @@ public class ChatRunService {
     return selectedSkills.stream()
         .map(
             skill -> {
+              io.datastoria.server.skill.SkillMetadataParser.ParsedSkillMetadata metadata =
+                  slashCommandExpander.metadata(skill);
               java.util.Map<String, String> resources =
                   skillRepository
                       .findResources(skill.tenantId(), skill.id(), skill.revision())
@@ -721,8 +729,8 @@ public class ChatRunService {
                               io.datastoria.server.domain.AgentSkillResource::path,
                               io.datastoria.server.domain.AgentSkillResource::content));
               return io.agentscope.core.skill.AgentSkill.builder()
-                  .name(skill.id())
-                  .description(skill.id())
+                  .name(metadata.name())
+                  .description(metadata.description())
                   .skillContent(skill.content())
                   .resources(resources)
                   .source("datastoria-database")
@@ -992,5 +1000,7 @@ public class ChatRunService {
   private record TitleRequest(ModelAdapter adapter, RunContext context) {}
 
   private record ResolvedCapabilities(
-      AgentRunCapabilities capabilities, java.util.List<AgentRunSkillPin> skillPins) {}
+      AgentRunCapabilities capabilities,
+      java.util.List<AgentRunSkillPin> skillPins,
+      java.util.List<io.datastoria.server.domain.AgentSkill> selectedSkills) {}
 }

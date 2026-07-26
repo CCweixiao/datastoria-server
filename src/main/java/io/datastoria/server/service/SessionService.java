@@ -14,6 +14,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.datastoria.server.api.error.PlainTextException;
 import io.datastoria.server.api.error.SharePermissionDeniedException;
@@ -48,6 +50,9 @@ import reactor.core.scheduler.Scheduler;
  */
 @Service
 public class SessionService {
+
+  private static final String IMAGE_HISTORY_PLACEHOLDER =
+      "[Image attachment omitted from saved history]";
 
   private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
@@ -344,7 +349,7 @@ public class SessionService {
               session.id(),
               identity.userId(),
               m.role(),
-              writeJson(m.parts()),
+              writeJson(sanitizePartsForPersistence(m.parts())),
               m.metadata() == null ? null : writeJson(m.metadata()),
               seq++,
               null,
@@ -359,6 +364,44 @@ public class SessionService {
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialise message parts", e);
     }
+  }
+
+  /**
+   * Preserves the Node persistence contract without making the browser responsible for storage
+   * safety. Image data URLs are request-only model inputs and must not be copied into chat history;
+   * transient stream markers are likewise not replayable UI state.
+   */
+  private JsonNode sanitizePartsForPersistence(JsonNode parts) {
+    ArrayNode sanitized = objectMapper.createArrayNode();
+    boolean removedImage = false;
+    for (JsonNode part : parts) {
+      if (!part.isObject()) {
+        sanitized.add(part.deepCopy());
+        continue;
+      }
+      String type = part.path("type").asText("");
+      if ("file".equals(type)
+          && part.path("mediaType").asText("").startsWith("image/")
+          && part.path("url").isTextual()) {
+        removedImage = true;
+        continue;
+      }
+      if ("step-start".equals(type)) {
+        continue;
+      }
+      if ("reasoning".equals(type)
+          && part.path("text").asText("").isBlank()
+          && !part.path("providerMetadata").isObject()) {
+        continue;
+      }
+      sanitized.add(part.deepCopy());
+    }
+    if (sanitized.isEmpty() && removedImage) {
+      ObjectNode placeholder = sanitized.addObject();
+      placeholder.put("type", "text");
+      placeholder.put("text", IMAGE_HISTORY_PLACEHOLDER);
+    }
+    return sanitized;
   }
 
   /** Internal resolved-access tuple. */

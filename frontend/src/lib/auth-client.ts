@@ -1,5 +1,7 @@
 import { backendApiFetch, backendApiUrl } from "@/lib/backend-api";
 
+const SIGNIN_PATH_PREFIX = "/api/auth/signin/";
+
 export type AuthProvider = {
   id: string;
   name: string;
@@ -40,6 +42,9 @@ export function beginSignIn(provider: AuthProvider, callbackUrl = "/"): void {
 }
 
 export function buildSignInUrl(provider: AuthProvider, callbackUrl = "/"): string {
+  if (!provider.signinUrl.startsWith(SIGNIN_PATH_PREFIX)) {
+    throw new Error("Authentication provider returned an invalid sign-in URL");
+  }
   const url = new URL(backendApiUrl(provider.signinUrl));
   const safeCallback =
     callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/";
