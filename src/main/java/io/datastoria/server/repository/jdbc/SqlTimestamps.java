@@ -9,8 +9,9 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Cross-dialect timestamp conversion. SQLite stores ISO-8601 TEXT; MySQL stores datetime(6). Both
- * drivers accept and return these values as strings via {@link ResultSet#getString(String)}.
+ * Cross-dialect timestamp conversion. SQLite and PostgreSQL store ISO-8601 TEXT; MySQL stores
+ * datetime(6). All drivers accept and return these values as strings via {@link
+ * ResultSet#getString(String)}.
  */
 final class SqlTimestamps {
 

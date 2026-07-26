@@ -8,15 +8,15 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 
-/** Executes the shared repository contract against real MySQL 8.0 when Docker is available. */
+/** Executes the shared repository contract against real PostgreSQL 16 when Docker is available. */
 @SpringBootTest
-@ActiveProfiles("mysql-it")
+@ActiveProfiles("postgres-it")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class MysqlRepositoryIT extends RelationalRepositoryContractIT {
+class PostgresRepositoryIT extends RelationalRepositoryContractIT {
 
-  private static MySQLContainer<?> mysql;
+  private static PostgreSQLContainer<?> postgres;
   private static boolean dockerAvailable;
 
   @DynamicPropertySource
@@ -26,13 +26,13 @@ class MysqlRepositoryIT extends RelationalRepositoryContractIT {
       useSqliteFallback(registry);
       return;
     }
-    mysql = new MySQLContainer<>("mysql:8.0").withDatabaseName("datastoria_it");
-    mysql.start();
-    registry.add("spring.datasource.url", mysql::getJdbcUrl);
-    registry.add("spring.datasource.username", mysql::getUsername);
-    registry.add("spring.datasource.password", mysql::getPassword);
-    registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
-    registry.add("spring.flyway.locations", () -> "classpath:db/migration/mysql");
+    postgres = new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("datastoria_it");
+    postgres.start();
+    registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    registry.add("spring.datasource.username", postgres::getUsername);
+    registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+    registry.add("spring.flyway.locations", () -> "classpath:db/migration/postgresql");
   }
 
   private static void useSqliteFallback(DynamicPropertyRegistry registry) {
@@ -43,11 +43,11 @@ class MysqlRepositoryIT extends RelationalRepositoryContractIT {
 
   @BeforeAll
   void checkDocker() {
-    Assumptions.assumeTrue(dockerAvailable, "Docker unavailable — skipping MySQL IT");
+    Assumptions.assumeTrue(dockerAvailable, "Docker unavailable — skipping PostgreSQL IT");
   }
 
   @Override
   protected String tenantId() {
-    return "tenant-mysql-it";
+    return "tenant-postgres-it";
   }
 }

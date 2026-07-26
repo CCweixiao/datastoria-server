@@ -10,7 +10,7 @@ AgentScope Java 的实施依据。文档以现有代码为基线，目标读者�
 2. [现状与迁移矩阵](inventory/current-state.md)：现有 API、存储、Agent、Skill、Tool
    的权威盘点。
 3. [目标架构](target-architecture.md)：系统边界、模块和关键数据流。
-4. [SQLite / MySQL 双方言数据模型](design/database-data-model.md)：模型、Agent、Skill、
+4. [SQLite / MySQL / PostgreSQL 三方言数据模型](design/database-data-model.md)：模型、Agent、Skill、
    会话、运行状态及两套 DDL。
 5. [HTTP 与流式契约](design/api-contracts.md)：前端所需 Java API 和兼容规则。
 6. [Harness Agent 设计](design/harness-agent.md)：AgentScope Java、Skill、Toolkit、
@@ -56,7 +56,7 @@ AgentScope Java 的实施依据。文档以现有代码为基线，目标读者�
 1. 每阶段开始前冻结该阶段 API、表结构和验收样例。
 2. 每阶段结束时填写实际验证证据、已知差异和回滚结果。
 3. API 迁移先更新 OpenAPI/事件 Schema，再修改实现。
-4. 数据库变更只能通过 Flyway；SQLite/MySQL 两套 migration 必须同版本同步，已执行的
+4. 数据库变更只能通过 Flyway；SQLite/MySQL/PostgreSQL 三套 migration 必须同版本同步，已执行的
    migration 不可修改。
 5. 架构选择变化时新增 ADR，并同步需求追踪表。
 6. 不把“Java 接口存在”视为迁移完成；必须有前端调用和行为等价证据。

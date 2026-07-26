@@ -25,7 +25,7 @@ public class JdbcModelProviderRepository implements ModelProviderRepository {
               rs.getString("display_name"),
               rs.getString("base_url"),
               rs.getString("auth_type"),
-              rs.getInt("enabled") != 0,
+              rs.getBoolean("enabled"),
               rs.getString("config_json"),
               rs.getString("secret_id"),
               rs.getLong("revision"),
@@ -57,7 +57,7 @@ public class JdbcModelProviderRepository implements ModelProviderRepository {
         .param("displayName", p.displayName())
         .param("baseUrl", p.baseUrl())
         .param("authType", p.authType())
-        .param("enabled", p.enabled() ? 1 : 0)
+        .param("enabled", p.enabled())
         .param("configJson", p.configJson())
         .param("secretId", p.secretId())
         .param("createdBy", p.createdBy())
@@ -103,7 +103,7 @@ public class JdbcModelProviderRepository implements ModelProviderRepository {
             .param("displayName", p.displayName())
             .param("baseUrl", p.baseUrl())
             .param("authType", p.authType())
-            .param("enabled", p.enabled() ? 1 : 0)
+            .param("enabled", p.enabled())
             .param("configJson", p.configJson())
             .param("updatedBy", p.updatedBy())
             .param("updatedAt", SqlTimestamps.toParam(now))

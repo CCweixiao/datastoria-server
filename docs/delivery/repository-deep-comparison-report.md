@@ -5,7 +5,7 @@
 - 原项目：`/Users/jielongping/OpenProjects/datastoria`，
   `22b7ae42bca3927a30dd464f7326a3bbbb2217d7`
 - 迁移项目：`/Users/jielongping/OpenProjects/datastoria-server`，
-  `3fc331b` 加本报告所在工作树修改
+  `e201dc9` 加本报告所在工作树修改
 - 审计日期：2026-07-26
 - 原项目 `src/app/api`：24 个 `route.ts`，2 个 route 测试
 - 迁移前端 `frontend/src/app/api`：0 个文件
@@ -51,7 +51,21 @@ handler 集合必须覆盖全部操作。
 - 运行时 9 个内置 Skill 与引用资源只存在于 `src/main/resources/skills` 并由 Java 加载。
   前端生成的 `resources/skills` 副本已清除。
 - 原 Node 的 SQLite/MySQL/PostgreSQL 会话与 Skill DDL 已从前端删除；数据库结构唯一来源为
-  Spring Flyway 的 SQLite/MySQL V1–V15。
+  Spring Flyway 的 SQLite/MySQL/PostgreSQL V1–V15。`postgres` profile、JDBC/Flyway
+  driver、生产安全配置和 URL 方言 fail-fast 已补齐，恢复原 Node 已承诺的 PostgreSQL
+  持久化兼容能力。
+- 三种关系数据库共用同一套 repository contract。为 PostgreSQL 修正了 BOOLEAN 参数/
+  读取、审计自增主键、RCA/Skill 布尔条件等 JDBC 方言差异；Flyway 版本、`ds_*` 表集合和
+  禁用方言 token 由 `MigrationSetParityTest` 固定校验。
+- 模型运行时继续固定 AgentScope 2.0.0，不升级依赖。原 Node 支持的 Anthropic 与 Google
+  Gemini 改用同版本原生 adapter；OpenAI、OpenRouter、Groq、Cerebras、Nebius、GLM、
+  Kimi/Moonshot、MiniMax、百炼、DeepSeek、xAI 继续使用 OpenAI-compatible adapter，
+  且内置供应商在未显式填写 Base URL 时使用兼容默认地址。
+- 供应商模型发现支持 OpenAI-compatible、Anthropic 和 Gemini 三类目录。Gemini 使用
+  `/v1beta/models` 和服务端 `x-goog-api-key` header，过滤不支持 `generateContent` 的
+  embedding-only 模型，并映射输入/输出窗口元数据；密钥不进入 URL 或浏览器。
+- AgentScope 运行时的 `load_skill_through_path` 事件已映射到现有 Skill 专用渲染组件，
+  前端同时兼容历史 `skill`/`skill_resource` 事件，不恢复任何客户端 Tool executor。
 - 原 Node 会话持久化时的消息清理语义已迁入 `SessionService`：不保存图片 data URL、
   `step-start` 和无 provider continuation metadata 的空 reasoning；仅图片消息保存安全占位符。
   已删除前端未被任何运行路径引用的旧 `serialization.ts`。
@@ -80,24 +94,29 @@ handler 集合必须覆盖全部操作。
 - 删除迁移后只被自身测试引用的 Node `remote-chat-request` 服务端请求校验器及测试；反馈事件
   文件从请求校验/存储规范化实现缩减为 UI 使用的原因码，ClickHouse tool wrapper 缩减为
   SSE 展示名称。删除永远返回 true 的 Java backend feature flags 和未使用的 share 常量。
+- 删除永远不会被 Spring 注入的 `NoOpModelAdapterProvider` 和零调用方
+  `RenameSessionRequest`；将只支持 OpenAI-compatible 的旧 adapter 重命名并扩展为真实的
+  `ConfiguredModelAdapterProvider`，避免类名与实际 provider 能力不一致。
 
 ## 5. 当前验证证据
 
 | 验证 | 结果 |
 |---|---|
 | 前端格式、TypeScript、ESLint | PASS |
-| 前端 Vitest | PASS，56 files / 290 tests |
+| 前端 Vitest | PASS，56 files / 291 tests |
 | 前端生产构建 | PASS；构建路由中无 `/api/**` |
 | Java Spotless | PASS |
-| Java tests | PASS，407 tests |
+| Java tests | PASS，414 tests |
 | SQLite Flyway | PASS，V1–V15 |
+| PostgreSQL Flyway | PASS，V1–V15 在 PGlite/PostgreSQL 引擎执行，25 张 `ds_*` 表 |
+| 三方言 migration 静态 parity | PASS：版本、表集合及禁用方言 token |
 | Spring handler inventory | PASS，覆盖 A01–A29 及 55 个前端操作 |
 | 迁移边界测试 | PASS：无 Next API route、Node 后端依赖、重复 Skill/DDL、Node 请求校验器或 Tool executor |
 | 浏览器真实联调 | PASS：Spring 会话、持久化连接、真实 ClickHouse schema/monitoring、模型供应商目录、用户状态覆盖写 |
 | 新增供应商 UI | PASS：GLM、Kimi、MiniMax、百炼、DeepSeek 模板表单可打开 |
 | 恢复页面回归 | PASS：登录未配置提示/隐私弹窗；代码读取/语法高亮/行高亮 |
 | 本地静态资源 | PASS：`release-notes.json` 返回 200，登录协议弹窗无可访问性告警 |
-| MySQL Testcontainers | 未执行：本机无 Docker；双方言 migration 静态 parity 仍由测试覆盖 |
+| MySQL/PostgreSQL Testcontainers | 本机无 Docker，集成测试无法启动；CI 分别执行真实容器 migration、共享 repository contract 与三方言 schema parity |
 
 浏览器联调先使用 `http://localhost:3000` → `http://127.0.0.1:8080`，再使用当前工作树
 独立启动的 `http://localhost:3001` → `http://127.0.0.1:8081` →
@@ -113,7 +132,8 @@ handler 集合必须覆盖全部操作。
 
 1. 对设置、连接、SQL、Session、Skill、Agent chat/HITL/重放继续执行浏览器网络轨迹回归；
    其中会真实调用模型的场景需要可用 provider credential。
-2. 在可用 MySQL/Docker 环境执行 repository/runtime parity，而不只验证双方言 migration
-   文件。当前本机 Testcontainers 探测不到 Docker，因此该项不能用 SQLite 结果替代。
+2. 查看 CI 的 MySQL/PostgreSQL Testcontainers 结果；本机无 Docker，真实容器 repository
+   contract 不能用 SQLite 结果替代。PostgreSQL V1–V15 已额外在本地 PGlite 引擎完整执行，
+   但 JDBC repository contract 仍以 CI 容器结果为发布门。
 3. 用户当前由 IDE 管理的 8080 Java 进程仍需在方便时重启，以加载本轮最后的
    user-state/repository 修改；本轮已在独立 8081 Java 进程复验最新 class。

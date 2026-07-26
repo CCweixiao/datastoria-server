@@ -24,7 +24,7 @@ public class RcaTemplateCatalog {
     Map<String, String> templates = new LinkedHashMap<>();
     jdbc.sql(
             "SELECT template_key, source_yaml FROM ds_rca_template"
-                + " WHERE enabled = 1 ORDER BY template_key")
+                + " WHERE enabled = TRUE ORDER BY template_key")
         .query(
             rs -> {
               while (rs.next()) {
@@ -38,7 +38,7 @@ public class RcaTemplateCatalog {
   public Optional<TemplateSnapshot> findEnabled(String key) {
     return jdbc.sql(
             "SELECT template_key, revision, source_yaml FROM ds_rca_template"
-                + " WHERE template_key = :key AND enabled = 1")
+                + " WHERE template_key = :key AND enabled = TRUE")
         .param("key", key)
         .query(
             (rs, rowNum) -> {

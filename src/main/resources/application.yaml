@@ -27,4 +27,5 @@ info:
 #   local  -> SQLite file (./data/datastoria.db)
 #   test   -> SQLite in-memory
 #   prod   -> MySQL (fail-fast on missing env vars)
+#   postgres -> PostgreSQL (fail-fast on missing env vars)
 # Running without a profile intentionally has no datasource.

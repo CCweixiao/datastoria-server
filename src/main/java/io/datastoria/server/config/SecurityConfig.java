@@ -17,7 +17,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
  */
 @Configuration
 @EnableWebFluxSecurity
-@Profile({"local", "test", "mysql-it"})
+@Profile({"local", "test", "mysql-it", "postgres-it"})
 public class SecurityConfig {
 
   @Bean

@@ -6,6 +6,7 @@ export const SERVER_TOOL_NAMES = {
   PLAN: "plan",
   SKILL: "skill",
   SKILL_RESOURCE: "skill_resource",
+  SKILL_LOAD_PATH: "load_skill_through_path",
   SEARCH_FILE: "search_file",
   READ_FILE: "read_file",
 } as const;

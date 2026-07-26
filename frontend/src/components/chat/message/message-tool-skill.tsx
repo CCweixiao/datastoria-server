@@ -7,11 +7,20 @@ import type {
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
 
-type SkillInput = SkillToolInput | SkillResourceToolInput;
+type SkillInput = SkillToolInput | SkillResourceToolInput | { skillId?: unknown; path?: unknown };
 
 const MAX_HEADER_LENGTH = 80;
 
 function getRequestedItems(input: SkillInput): string[] {
+  if (
+    "skillId" in input &&
+    typeof input.skillId === "string" &&
+    "path" in input &&
+    typeof input.path === "string"
+  ) {
+    return [`${input.skillId} | ${input.path}`];
+  }
+
   if ("names" in input && Array.isArray(input.names)) {
     return input.names.filter(Boolean);
   }

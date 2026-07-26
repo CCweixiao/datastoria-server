@@ -53,4 +53,27 @@ class ProviderModelMetadataTest {
     assertThat(miniMax.contextWindowTokens()).isEqualTo(204_800);
     assertThat(unknown.contextWindowTokens()).isNull();
   }
+
+  @Test
+  void mapsNativeGeminiCatalogFields() throws Exception {
+    var node =
+        objectMapper.readTree(
+            """
+            {
+              "name": "models/gemini-2.5-pro",
+              "baseModelId": "gemini-2.5-pro",
+              "displayName": "Gemini 2.5 Pro",
+              "inputTokenLimit": 1048576,
+              "outputTokenLimit": 65536,
+              "supportedGenerationMethods": ["generateContent"]
+            }
+            """);
+
+    var result = ProviderModelMetadata.from("google", node);
+
+    assertThat(result.modelKey()).isEqualTo("gemini-2.5-pro");
+    assertThat(result.displayName()).isEqualTo("Gemini 2.5 Pro");
+    assertThat(result.contextWindowTokens()).isEqualTo(1_048_576);
+    assertThat(result.maxOutputTokens()).isEqualTo(65_536);
+  }
 }

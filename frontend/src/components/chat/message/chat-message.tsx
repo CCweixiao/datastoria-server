@@ -222,6 +222,8 @@ const ChatMessagePart = memo(
       return <MessageToolSkill part={part} isRunning={isRunning} />;
     } else if (toolName === SERVER_TOOL_NAMES.SKILL_RESOURCE) {
       return <MessageToolSkill part={part} isRunning={isRunning} label="Load Skill Resources" />;
+    } else if (toolName === SERVER_TOOL_NAMES.SKILL_LOAD_PATH) {
+      return <MessageToolSkill part={part} isRunning={isRunning} />;
     } else if (toolName === SERVER_TOOL_NAMES.SEARCH_FILE) {
       return <MessageToolSearchFile part={part} isRunning={isRunning} />;
     } else if (toolName === SERVER_TOOL_NAMES.READ_FILE) {

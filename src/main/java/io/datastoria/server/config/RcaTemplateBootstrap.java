@@ -35,10 +35,11 @@ public class RcaTemplateBootstrap implements ApplicationRunner {
     jdbc.sql(
             "INSERT INTO ds_rca_template"
                 + " (id, template_key, source_yaml, enabled, revision, created_at, updated_at)"
-                + " VALUES (:id, :key, :source, 1, 1, :now, :now)")
+                + " VALUES (:id, :key, :source, :enabled, 1, :now, :now)")
         .param("id", UUID.randomUUID().toString())
         .param("key", "high_part_count")
         .param("source", source)
+        .param("enabled", true)
         .param("now", now)
         .update();
   }

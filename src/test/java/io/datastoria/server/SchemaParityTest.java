@@ -24,26 +24,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
- * Verifies that the SQLite and MySQL migration trees produce a logically equivalent schema: same
- * tables, same column names, same primary keys, same foreign-key relationships, and same unique
- * constraints. Type names are allowed to differ (TEXT vs varchar, INTEGER vs boolean, etc.) per the
- * dual-dialect type-mapping rules.
+ * Verifies that the SQLite, MySQL, and PostgreSQL migration trees produce a logically equivalent
+ * schema: same tables, columns, keys, and unique constraints. Type names may differ by dialect.
  *
- * <p>Requires Docker for the MySQL Testcontainer; skipped automatically if Docker is unavailable.
+ * <p>Requires Docker; skipped automatically only if Docker itself is unavailable. Container or
+ * migration failures remain hard test failures.
  */
 @SpringBootTest
 @ActiveProfiles("test")
 class SchemaParityTest {
 
   private static MySQLContainer<?> mysql;
+  private static PostgreSQLContainer<?> postgres;
 
   @Autowired DataSource sqliteDataSource;
 
   @BeforeAll
-  static void startMysql() {
+  static void startDatabases() throws Exception {
+    Assumptions.assumeTrue(
+        DockerClientFactory.instance().isDockerAvailable(),
+        "Docker unavailable — skipping relational schema parity");
     try {
       mysql = new MySQLContainer<>("mysql:8.0").withDatabaseName("parity_test");
       mysql.start();
@@ -52,37 +57,50 @@ class SchemaParityTest {
           .locations("classpath:db/migration/mysql")
           .load()
           .migrate();
+      postgres = new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("parity_test");
+      postgres.start();
+      Flyway.configure()
+          .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+          .locations("classpath:db/migration/postgresql")
+          .load()
+          .migrate();
     } catch (Exception e) {
+      if (postgres != null && postgres.isRunning()) {
+        postgres.stop();
+      }
+      if (mysql != null && mysql.isRunning()) {
+        mysql.stop();
+      }
       mysql = null;
-      Assumptions.abort("Docker unavailable — skipping MySQL parity test: " + e.getMessage());
+      postgres = null;
+      throw e;
     }
   }
 
   @AfterAll
-  static void stopMysql() {
+  static void stopDatabases() {
     if (mysql != null) {
       mysql.stop();
     }
-  }
-
-  @Test
-  void sqliteAndMySQLHaveSameTables() throws SQLException {
-    SchemaSnapshot sqlite = snapshot(sqliteDataSource);
-    try (Connection c =
-        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      SchemaSnapshot mysqlSnap = snapshot(c);
-      assertThat(mysqlSnap.tables()).isEqualTo(sqlite.tables());
+    if (postgres != null) {
+      postgres.stop();
     }
   }
 
   @Test
-  void sqliteAndMySQLHaveSameColumns() throws SQLException {
+  void allDialectsHaveSameTables() throws SQLException {
     SchemaSnapshot sqlite = snapshot(sqliteDataSource);
-    try (Connection c =
-        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      SchemaSnapshot mysqlSnap = snapshot(c);
+    for (SchemaSnapshot other : relationalSnapshots()) {
+      assertThat(other.tables()).isEqualTo(sqlite.tables());
+    }
+  }
+
+  @Test
+  void allDialectsHaveSameColumns() throws SQLException {
+    SchemaSnapshot sqlite = snapshot(sqliteDataSource);
+    for (SchemaSnapshot other : relationalSnapshots()) {
       for (String table : sqlite.tables()) {
-        assertThat(mysqlSnap.columns().get(table))
+        assertThat(other.columns().get(table))
             .as("columns for table %s", table)
             .isEqualTo(sqlite.columns().get(table));
       }
@@ -90,13 +108,11 @@ class SchemaParityTest {
   }
 
   @Test
-  void sqliteAndMySQLHaveSamePrimaryKeys() throws SQLException {
+  void allDialectsHaveSamePrimaryKeys() throws SQLException {
     SchemaSnapshot sqlite = snapshot(sqliteDataSource);
-    try (Connection c =
-        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      SchemaSnapshot mysqlSnap = snapshot(c);
+    for (SchemaSnapshot other : relationalSnapshots()) {
       for (String table : sqlite.tables()) {
-        assertThat(mysqlSnap.pks().get(table))
+        assertThat(other.pks().get(table))
             .as("PK for table %s", table)
             .isEqualTo(sqlite.pks().get(table));
       }
@@ -104,13 +120,11 @@ class SchemaParityTest {
   }
 
   @Test
-  void sqliteAndMySQLHaveSameForeignKeys() throws SQLException {
+  void allDialectsHaveSameForeignKeys() throws SQLException {
     SchemaSnapshot sqlite = snapshot(sqliteDataSource);
-    try (Connection c =
-        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      SchemaSnapshot mysqlSnap = snapshot(c);
+    for (SchemaSnapshot other : relationalSnapshots()) {
       for (String table : sqlite.tables()) {
-        assertThat(mysqlSnap.fks().get(table))
+        assertThat(other.fks().get(table))
             .as("FKs for table %s", table)
             .isEqualTo(sqlite.fks().get(table));
       }
@@ -118,17 +132,29 @@ class SchemaParityTest {
   }
 
   @Test
-  void sqliteAndMySQLHaveSameUniqueConstraints() throws SQLException {
+  void allDialectsHaveSameUniqueConstraints() throws SQLException {
     SchemaSnapshot sqlite = snapshot(sqliteDataSource);
-    try (Connection c =
-        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
-      SchemaSnapshot mysqlSnap = snapshot(c);
+    for (SchemaSnapshot other : relationalSnapshots()) {
       for (String table : sqlite.tables()) {
-        assertThat(mysqlSnap.uniqueIndexes().get(table))
+        assertThat(other.uniqueIndexes().get(table))
             .as("unique constraints for table %s", table)
             .isEqualTo(sqlite.uniqueIndexes().get(table));
       }
     }
+  }
+
+  private static List<SchemaSnapshot> relationalSnapshots() throws SQLException {
+    List<SchemaSnapshot> snapshots = new ArrayList<>();
+    try (Connection connection =
+        DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())) {
+      snapshots.add(snapshot(connection));
+    }
+    try (Connection connection =
+        DriverManager.getConnection(
+            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+      snapshots.add(snapshot(connection));
+    }
+    return snapshots;
   }
 
   // ---- introspection helpers ----

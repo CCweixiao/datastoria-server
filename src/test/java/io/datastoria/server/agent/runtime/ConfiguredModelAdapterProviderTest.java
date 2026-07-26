@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.agentscope.extensions.model.anthropic.AnthropicChatModel;
+import io.agentscope.extensions.model.gemini.GeminiChatModel;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.datastoria.server.domain.Model;
 import io.datastoria.server.domain.ModelProvider;
@@ -22,7 +24,7 @@ import io.datastoria.server.repository.ModelProviderRepository;
 import io.datastoria.server.service.OAuthCredentialService;
 import io.datastoria.server.service.SecretService;
 
-class OpenAiModelAdapterProviderTest {
+class ConfiguredModelAdapterProviderTest {
 
   @Test
   void decryptsServerSideSecretAndBuildsOfficialStreamingModel() {
@@ -33,7 +35,7 @@ class OpenAiModelAdapterProviderTest {
     when(secrets.decrypt("model-secret", "tenant-1")).thenReturn("sk-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(
+        new ConfiguredModelAdapterProvider(
                 providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
             .adapterFor(model("model-secret"));
 
@@ -52,7 +54,7 @@ class OpenAiModelAdapterProviderTest {
     when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(
+        new ConfiguredModelAdapterProvider(
                 providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
             .adapterFor(model(null));
 
@@ -61,15 +63,67 @@ class OpenAiModelAdapterProviderTest {
   }
 
   @Test
-  void rejectsUnsupportedProviderBeforeDecrypting() {
+  void supportsOriginalOpenAiCompatibleProviderDefaults() {
+    for (String providerKey : Set.of("openrouter", "groq", "cerebras", "nebius")) {
+      ModelProviderRepository providers = mock(ModelProviderRepository.class);
+      SecretService secrets = mock(SecretService.class);
+      when(providers.findById("provider-1", "tenant-1"))
+          .thenReturn(Optional.of(provider(providerKey, null, "provider-secret")));
+      when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
+
+      ModelAdapter adapter =
+          new ConfiguredModelAdapterProvider(
+                  providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+              .adapterFor(model(null));
+
+      assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
+    }
+  }
+
+  @Test
+  void buildsNativeAnthropicModelWithServerSideSecret() {
     ModelProviderRepository providers = mock(ModelProviderRepository.class);
     SecretService secrets = mock(SecretService.class);
     when(providers.findById("provider-1", "tenant-1"))
         .thenReturn(Optional.of(provider("anthropic", null, "provider-secret")));
+    when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
+
+    ModelAdapter adapter =
+        new ConfiguredModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+            .adapterFor(model(null));
+
+    assertThat(adapter.modelFor(null)).isInstanceOf(AnthropicChatModel.class);
+    verify(secrets).decrypt("provider-secret", "tenant-1");
+  }
+
+  @Test
+  void buildsNativeGeminiModelWithServerSideSecret() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(Optional.of(provider("google", null, "provider-secret")));
+    when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
+
+    ModelAdapter adapter =
+        new ConfiguredModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+            .adapterFor(model(null));
+
+    assertThat(adapter.modelFor(null)).isInstanceOf(GeminiChatModel.class);
+    verify(secrets).decrypt("provider-secret", "tenant-1");
+  }
+
+  @Test
+  void rejectsUnknownProviderBeforeDecrypting() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(Optional.of(provider("bedrock", null, "provider-secret")));
 
     assertThatThrownBy(
             () ->
-                new OpenAiModelAdapterProvider(
+                new ConfiguredModelAdapterProvider(
                         providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
                     .adapterFor(model(null)))
         .isInstanceOf(IllegalArgumentException.class)
@@ -87,7 +141,7 @@ class OpenAiModelAdapterProviderTest {
     when(oauth.accessToken("github", identity)).thenReturn("oauth-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
+        new ConfiguredModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
             .adapterFor(model(null), identity);
 
     assertThat(adapter.modelFor(null)).isInstanceOf(OpenAIChatModel.class);
@@ -106,7 +160,7 @@ class OpenAiModelAdapterProviderTest {
     when(oauth.accessToken("codex", identity)).thenReturn("oauth-server-only");
 
     ModelAdapter adapter =
-        new OpenAiModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
+        new ConfiguredModelAdapterProvider(providers, secrets, oauth, new ObjectMapper())
             .adapterFor(model(null), identity);
 
     assertThat(adapter.modelFor(null)).isInstanceOf(CodexResponsesChatModel.class);

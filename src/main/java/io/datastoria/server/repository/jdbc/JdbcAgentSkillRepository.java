@@ -317,7 +317,7 @@ public class JdbcAgentSkillRepository implements AgentSkillRepository {
                 """
                 UPDATE ds_agent_skill SET deleted_at = :deletedAt
                 WHERE tenant_id = :tenantId AND id = :id AND owner_user_id = :userId
-                  AND builtin = 0 AND deleted_at IS NULL
+                  AND builtin = FALSE AND deleted_at IS NULL
                 """)
             .param("deletedAt", SqlTimestamps.toParam(Instant.now()))
             .param("tenantId", tenantId)

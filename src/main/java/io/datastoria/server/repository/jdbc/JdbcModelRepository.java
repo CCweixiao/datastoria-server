@@ -26,8 +26,8 @@ public class JdbcModelRepository implements ModelRepository {
               rs.getString("display_name"),
               rs.getString("description"),
               rs.getString("source"),
-              rs.getInt("enabled") != 0,
-              rs.getInt("is_free") != 0,
+              rs.getBoolean("enabled"),
+              rs.getBoolean("is_free"),
               rs.getString("capabilities_json"),
               rs.getString("generation_defaults_json"),
               rs.getString("secret_id"),
@@ -59,8 +59,8 @@ public class JdbcModelRepository implements ModelRepository {
         .param("displayName", m.displayName())
         .param("description", m.description())
         .param("source", m.source())
-        .param("enabled", m.enabled() ? 1 : 0)
-        .param("isFree", m.isFree() ? 1 : 0)
+        .param("enabled", m.enabled())
+        .param("isFree", m.isFree())
         .param("capabilitiesJson", m.capabilitiesJson())
         .param("generationDefaultsJson", m.generationDefaultsJson())
         .param("secretId", m.secretId())
@@ -92,7 +92,7 @@ public class JdbcModelRepository implements ModelRepository {
   @Override
   public List<Model> findEnabled(String tenantId) {
     return jdbc.sql(
-            "SELECT * FROM ds_model WHERE tenant_id = :tenantId AND enabled = 1"
+            "SELECT * FROM ds_model WHERE tenant_id = :tenantId AND enabled = TRUE"
                 + " AND deleted_at IS NULL")
         .param("tenantId", tenantId)
         .query(MAPPER)
@@ -128,8 +128,8 @@ public class JdbcModelRepository implements ModelRepository {
             .param("displayName", m.displayName())
             .param("description", m.description())
             .param("source", m.source())
-            .param("enabled", m.enabled() ? 1 : 0)
-            .param("isFree", m.isFree() ? 1 : 0)
+            .param("enabled", m.enabled())
+            .param("isFree", m.isFree())
             .param("capabilitiesJson", m.capabilitiesJson())
             .param("generationDefaultsJson", m.generationDefaultsJson())
             .param("secretId", m.secretId())

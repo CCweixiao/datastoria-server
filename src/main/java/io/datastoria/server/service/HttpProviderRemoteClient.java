@@ -14,10 +14,7 @@ import io.datastoria.server.api.error.ProviderOperationException;
 import io.datastoria.server.domain.ModelProvider;
 import io.datastoria.server.dto.DiscoveredModelResponse;
 
-/**
- * Minimal provider model-discovery client. It supports OpenAI-compatible {@code /v1/models}
- * providers and Anthropic without introducing provider SDK dependencies.
- */
+/** Provider model-discovery client for OpenAI-compatible, Anthropic, and Gemini catalogs. */
 @Component
 public class HttpProviderRemoteClient implements ProviderRemoteClient {
 
@@ -42,10 +39,8 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
     }
     String providerKey = provider.providerKey().toLowerCase();
     String baseUrl = resolveBaseUrl(provider);
-    String modelsUrl =
-        baseUrl.endsWith("/v1") || baseUrl.endsWith("/v4")
-            ? baseUrl + "/models"
-            : baseUrl + "/v1/models";
+    boolean gemini = isGemini(providerKey);
+    String modelsUrl = modelsUrl(baseUrl, gemini);
     WebClient.RequestHeadersSpec<?> request =
         webClientBuilder
             .build()
@@ -54,13 +49,14 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
             .headers(headers -> applyCredential(headers, providerKey, credential));
     try {
       JsonNode body = request.retrieve().bodyToMono(JsonNode.class).block(TIMEOUT);
-      JsonNode data = body == null ? null : body.get("data");
+      JsonNode data = body == null ? null : body.get(gemini ? "models" : "data");
       if (data == null || !data.isArray()) {
         throw new ProviderOperationException(
             "PROVIDER_INVALID_RESPONSE", 502, "Provider returned an invalid model list");
       }
       return java.util.stream.StreamSupport.stream(data.spliterator(), false)
-          .filter(node -> !node.path("id").asText("").isBlank())
+          .filter(node -> !gemini || supportsGenerateContent(node))
+          .filter(node -> !ProviderModelMetadata.id(node).isBlank())
           .map(node -> ProviderModelMetadata.from(provider.providerKey(), node))
           .toList();
     } catch (ProviderOperationException ex) {
@@ -86,9 +82,43 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
     if ("anthropic".equals(providerKey)) {
       headers.set("x-api-key", credential);
       headers.set("anthropic-version", "2023-06-01");
+    } else if (isGemini(providerKey)) {
+      headers.set("x-goog-api-key", credential);
     } else {
       headers.setBearerAuth(credential);
     }
+  }
+
+  private static String modelsUrl(String baseUrl, boolean gemini) {
+    if (baseUrl.endsWith("/models")) {
+      return gemini ? baseUrl + "?pageSize=1000" : baseUrl;
+    }
+    if (gemini) {
+      return (baseUrl.endsWith("/v1beta") ? baseUrl + "/models" : baseUrl + "/v1beta/models")
+          + "?pageSize=1000";
+    }
+    return baseUrl.endsWith("/v1") || baseUrl.endsWith("/v4")
+        ? baseUrl + "/models"
+        : baseUrl + "/v1/models";
+  }
+
+  private static boolean supportsGenerateContent(JsonNode node) {
+    JsonNode methods = node.path("supportedGenerationMethods");
+    if (!methods.isArray()) {
+      return true;
+    }
+    for (JsonNode method : methods) {
+      if ("generateContent".equals(method.asText())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isGemini(String providerKey) {
+    return "google".equals(providerKey)
+        || "gemini".equals(providerKey)
+        || "google-generative-ai".equals(providerKey);
   }
 
   private static String resolveBaseUrl(ModelProvider provider) {
@@ -98,8 +128,22 @@ public class HttpProviderRemoteClient implements ProviderRemoteClient {
     return switch (provider.providerKey().toLowerCase()) {
       case "openai" -> "https://api.openai.com";
       case "anthropic" -> "https://api.anthropic.com";
+      case "google",
+          "gemini",
+          "google-generative-ai" -> "https://generativelanguage.googleapis.com/v1beta";
       case "openrouter" -> "https://openrouter.ai/api";
+      case "groq" -> "https://api.groq.com/openai";
+      case "cerebras" -> "https://api.cerebras.ai";
+      case "nebius" -> "https://api.tokenfactory.nebius.com";
       case "deepseek" -> "https://api.deepseek.com";
+      case "zhipu", "glm" -> "https://open.bigmodel.cn/api/coding/paas/v4";
+      case "kimi", "moonshot" -> "https://api.moonshot.cn";
+      case "minimax" -> "https://api.minimax.io";
+      case "dashscope",
+          "bailian",
+          "qwen",
+          "aliyun-bailian" -> "https://dashscope.aliyuncs.com/compatible-mode";
+      case "xai" -> "https://api.x.ai";
       default -> throw new ProviderOperationException(
           "PROVIDER_NOT_SUPPORTED", 501, "Provider requires an explicit baseUrl");
     };

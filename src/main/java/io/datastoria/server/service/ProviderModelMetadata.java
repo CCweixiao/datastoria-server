@@ -12,7 +12,7 @@ final class ProviderModelMetadata {
   private ProviderModelMetadata() {}
 
   static DiscoveredModelResponse from(String providerKey, JsonNode node) {
-    String id = node.path("id").asText("");
+    String id = id(node);
     String normalized = id.toLowerCase(Locale.ROOT);
     String tier = text(node, "tier", "model_tier");
     if (tier == null) {
@@ -27,8 +27,10 @@ final class ProviderModelMetadata {
             || arrayContains(node.path("architecture").path("input_modalities"), "image")
             || containsAny(normalized, "-vl", "vision", "omni");
     Integer context =
-        positiveInt(node, "context_length", "context_window", "context_window_tokens");
-    Integer output = positiveInt(node, "max_output_tokens", "max_completion_tokens");
+        positiveInt(
+            node, "context_length", "context_window", "context_window_tokens", "inputTokenLimit");
+    Integer output =
+        positiveInt(node, "max_output_tokens", "max_completion_tokens", "outputTokenLimit");
 
     String provider = providerKey.toLowerCase(Locale.ROOT);
     if (context == null && "deepseek".equals(provider)) {
@@ -40,8 +42,16 @@ final class ProviderModelMetadata {
         id, displayName(node, id), providerKey, tier, reasoning, image, context, output);
   }
 
+  static String id(JsonNode node) {
+    String id = text(node, "id", "baseModelId", "name");
+    if (id == null) {
+      return "";
+    }
+    return id.startsWith("models/") ? id.substring("models/".length()) : id;
+  }
+
   private static String displayName(JsonNode node, String fallback) {
-    String value = text(node, "display_name", "name");
+    String value = text(node, "display_name", "displayName");
     return value == null ? fallback : value;
   }
 

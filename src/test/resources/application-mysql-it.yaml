@@ -1,8 +1,8 @@
 # MySQL integration-test profile. Used by ./mvnw verify -Pmysql-it.
 #
 # The JDBC URL, username and password are injected programmatically by the
-# Testcontainers test base class (MysqlRepositoryTestBase) before the Spring
-# context initialises, so they appear as placeholders here.
+# Testcontainers repository contract before the Spring context initialises, so
+# they appear as placeholders here.
 
 spring:
   main:

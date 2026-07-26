@@ -4,6 +4,8 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.agentscope.extensions.model.anthropic.AnthropicChatModel;
+import io.agentscope.extensions.model.gemini.GeminiChatModel;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.datastoria.server.api.error.NotFoundException;
 import io.datastoria.server.domain.Model;
@@ -14,20 +16,20 @@ import io.datastoria.server.service.OAuthCredentialService;
 import io.datastoria.server.service.SecretService;
 
 /**
- * Production model adapter for OpenAI and OpenAI-compatible chat-completions endpoints.
+ * Production model adapter for OpenAI-compatible, Anthropic, Gemini, Codex, and Copilot endpoints.
  *
  * <p>The API key is decrypted only while constructing the provider model and is never accepted
  * from, or returned to, the browser. A model-level secret overrides the provider-level secret.
  */
 @Component
-public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
+public final class ConfiguredModelAdapterProvider implements ModelAdapterProvider {
 
   private final ModelProviderRepository providerRepository;
   private final SecretService secretService;
   private final OAuthCredentialService oauthCredentialService;
   private final ObjectMapper mapper;
 
-  public OpenAiModelAdapterProvider(
+  public ConfiguredModelAdapterProvider(
       ModelProviderRepository providerRepository,
       SecretService secretService,
       OAuthCredentialService oauthCredentialService,
@@ -52,7 +54,9 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
             .orElseThrow(() -> new NotFoundException("ModelProvider", modelConfig.providerId()));
     boolean githubCopilot = "github-copilot".equalsIgnoreCase(provider.providerKey());
     boolean openAiCodex = "openai-codex".equalsIgnoreCase(provider.providerKey());
-    if (!githubCopilot && !openAiCodex && !isOpenAiCompatible(provider)) {
+    boolean anthropic = isAnthropic(provider.providerKey());
+    boolean gemini = isGemini(provider.providerKey());
+    if (!githubCopilot && !openAiCodex && !anthropic && !gemini && !isOpenAiCompatible(provider)) {
       throw new IllegalArgumentException("Unsupported provider type");
     }
     if (openAiCodex) {
@@ -79,6 +83,30 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
       }
       apiKey = secretService.decrypt(secretId, modelConfig.tenantId());
     }
+    if (anthropic) {
+      AnthropicChatModel.Builder builder =
+          AnthropicChatModel.builder().apiKey(apiKey).modelName(modelConfig.modelKey()).stream(
+              true);
+      String baseUrl = resolvedBaseUrl(provider);
+      if (baseUrl != null) {
+        builder.baseUrl(baseUrl);
+      }
+      var providerModel = builder.build();
+      return ignored -> providerModel;
+    }
+    if (gemini) {
+      GeminiChatModel.Builder builder =
+          GeminiChatModel.builder()
+              .apiKey(apiKey)
+              .modelName(modelConfig.modelKey())
+              .streamEnabled(true);
+      String baseUrl = resolvedBaseUrl(provider);
+      if (baseUrl != null) {
+        builder.baseUrl(baseUrl);
+      }
+      var providerModel = builder.build();
+      return ignored -> providerModel;
+    }
     OpenAIChatModel.Builder builder =
         OpenAIChatModel.builder().apiKey(apiKey).modelName(modelConfig.modelKey()).stream(true);
     if (githubCopilot) {
@@ -87,11 +115,24 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
           .endpointPath("/chat/completions")
           .httpTransport(GitHubCopilotHttpTransport.create());
     }
-    if (provider.baseUrl() != null && !provider.baseUrl().isBlank()) {
-      builder.baseUrl(provider.baseUrl());
+    String baseUrl = resolvedBaseUrl(provider);
+    if (baseUrl != null) {
+      builder.baseUrl(baseUrl);
     }
     var providerModel = builder.build();
     return ignored -> providerModel;
+  }
+
+  private static boolean isAnthropic(String providerKey) {
+    return providerKey != null
+        && ("anthropic".equalsIgnoreCase(providerKey) || "claude".equalsIgnoreCase(providerKey));
+  }
+
+  private static boolean isGemini(String providerKey) {
+    return providerKey != null
+        && ("google".equalsIgnoreCase(providerKey)
+            || "gemini".equalsIgnoreCase(providerKey)
+            || "google-generative-ai".equalsIgnoreCase(providerKey));
   }
 
   private static boolean isOpenAiCompatible(ModelProvider provider) {
@@ -103,6 +144,9 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
     return normalized.equals("openai")
         || normalized.equals("openai-compatible")
         || normalized.equals("openrouter")
+        || normalized.equals("groq")
+        || normalized.equals("cerebras")
+        || normalized.equals("nebius")
         || normalized.equals("deepseek")
         || normalized.equals("kimi")
         || normalized.equals("moonshot")
@@ -118,5 +162,28 @@ public final class OpenAiModelAdapterProvider implements ModelAdapterProvider {
         || (!normalized.equals("anthropic")
             && provider.baseUrl() != null
             && !provider.baseUrl().isBlank());
+  }
+
+  private static String resolvedBaseUrl(ModelProvider provider) {
+    if (provider.baseUrl() != null && !provider.baseUrl().isBlank()) {
+      return provider.baseUrl();
+    }
+    return switch (provider.providerKey().toLowerCase(java.util.Locale.ROOT)) {
+      case "openai", "anthropic", "claude", "google", "gemini", "google-generative-ai" -> null;
+      case "openrouter" -> "https://openrouter.ai/api/v1";
+      case "groq" -> "https://api.groq.com/openai/v1";
+      case "cerebras" -> "https://api.cerebras.ai/v1";
+      case "nebius" -> "https://api.tokenfactory.nebius.com/v1";
+      case "deepseek" -> "https://api.deepseek.com";
+      case "zhipu", "glm" -> "https://open.bigmodel.cn/api/coding/paas/v4";
+      case "kimi", "moonshot" -> "https://api.moonshot.cn/v1";
+      case "minimax" -> "https://api.minimax.io/v1";
+      case "dashscope",
+          "bailian",
+          "qwen",
+          "aliyun-bailian" -> "https://dashscope.aliyuncs.com/compatible-mode/v1";
+      case "xai" -> "https://api.x.ai/v1";
+      default -> null;
+    };
   }
 }

@@ -8,8 +8,8 @@ import org.springframework.context.annotation.Profile;
 /**
  * Guards Flyway migration location selection.
  *
- * <p>The {@code prod} profile must only load MySQL migrations and must fail fast if the datasource
- * URL is not {@code jdbc:mysql:}. There is no automatic fallback to SQLite in production.
+ * <p>Production database profiles must load only their matching migrations and fail fast when the
+ * datasource URL uses another dialect. There is no automatic fallback to SQLite.
  */
 @Configuration
 public class FlywayConfig {
@@ -27,4 +27,18 @@ public class FlywayConfig {
   }
 
   record ProdDatasourceGuard(String url) {}
+
+  @Bean
+  @Profile("postgres")
+  PostgresDatasourceGuard postgresDatasourceGuard(DataSourceProperties properties) {
+    String url = properties.getUrl();
+    if (url == null || !url.startsWith("jdbc:postgresql:")) {
+      throw new IllegalStateException(
+          "PostgreSQL profile requires a datasource URL starting with"
+              + " 'jdbc:postgresql:'. Refusing to start with another dialect.");
+    }
+    return new PostgresDatasourceGuard(url);
+  }
+
+  record PostgresDatasourceGuard(String url) {}
 }

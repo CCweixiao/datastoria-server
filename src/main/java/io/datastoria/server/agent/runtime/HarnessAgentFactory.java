@@ -42,12 +42,11 @@ import reactor.core.publisher.Flux;
 /**
  * Builds a run-scoped {@link RunnableAgent} backed by a minimal-permission {@link HarnessAgent}.
  *
- * <p>P4 freezes the HarnessAgent configuration mandated by ADR-0004 §3.5 and
- * docs/design/harness-agent.md §4: every P5+ capability (filesystem, shell, memory, skills,
- * subagents, workspace context, tools config) is explicitly disabled, and the residual {@code
- * wait_async_results} helper that AgentScope 2.0.0 registers regardless is removed, so the
- * model-boundary tool schema stays empty. No workspace directory is required with every capability
- * off (verified against the 2.0.0 jar), so P4.2 performs no per-run filesystem I/O.
+ * <p>Only DataStoria-authorized run-scoped tools and immutable Skill revisions are exposed.
+ * AgentScope filesystem, shell, memory, subagent, workspace-context, default-workspace-Skill and
+ * tools-config capabilities remain disabled. The residual {@code wait_async_results} helper is
+ * removed; dynamic Skill loading is enabled only when the server supplied a pinned Skill repository
+ * for the run.
  *
  * <p>AgentScope's {@code AgentTraceMiddleware} is also disabled ({@code
  * enableAgentTracingLog(false)}): it logs model output and raw exception {@code toString()} at

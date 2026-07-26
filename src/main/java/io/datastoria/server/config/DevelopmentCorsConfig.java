@@ -11,7 +11,7 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
 /** CORS policy for a separately hosted Next.js UI. */
 @Configuration
-@Profile({"local", "test", "prod"})
+@Profile({"local", "test", "prod", "postgres"})
 public class DevelopmentCorsConfig {
 
   @Bean

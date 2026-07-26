@@ -16,7 +16,7 @@ import io.datastoria.server.repository.AuditLogRepository;
  *
  * <p>The {@code id} is a database-generated auto-increment sequence number (never an external
  * resource identifier), so a {@link KeyHolder} is used to remain cross-dialect (SQLite uses {@code
- * last_insert_rowid()}, MySQL uses {@code LAST_INSERT_ID()}).
+ * last_insert_rowid()}, MySQL uses {@code LAST_INSERT_ID()}, and PostgreSQL uses its sequence).
  */
 @Repository
 public class JdbcAuditLogRepository implements AuditLogRepository {
@@ -48,7 +48,8 @@ public class JdbcAuditLogRepository implements AuditLogRepository {
             + " VALUES (:tenantId, :actor, :action, :resourceType, :resourceId,"
             + " :requestId, :safeDiff, :result, :createdAt)",
         params,
-        keyHolder);
+        keyHolder,
+        new String[] {"id"});
     Number key = keyHolder.getKey();
     return new AuditLog(
         key == null ? null : key.longValue(),

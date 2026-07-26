@@ -1,17 +1,16 @@
-# SQLite / MySQL 双方言数据模型
+# SQLite / MySQL / PostgreSQL 三方言数据模型
 
 ## 1. 设计目标
 
-- 开发环境使用 SQLite 3，生产环境使用 MySQL 8.0+（MySQL 实现可在后续阶段补充，但
-  上线前必须完成）。
-- 两种数据库承载同一套模型、Agent、Skill、会话、运行状态和系统配置语义。
+- 开发环境使用 SQLite 3，生产环境支持 MySQL 8.0+ 或 PostgreSQL 16+。
+- 三种数据库承载同一套模型、Agent、Skill、会话、运行状态和系统配置语义。
 - 多租户字段显式存在，默认单租户也不能省略隔离边界。
 - 密钥不以明文写库；API 永不回传密钥。
 - 配置可版本化、可审计、可回滚。
 - 产品消息与 Agent checkpoint 分离。
-- 使用 Flyway 管理两套独立 DDL，表名统一 `ds_` 前缀，应用层时间统一 UTC。
+- 使用 Flyway 管理三套独立 DDL，表名统一 `ds_` 前缀，应用层时间统一 UTC。
 
-## 2. 双方言原则
+## 2. 三方言原则
 
 ### 2.1 脚本目录
 
@@ -21,17 +20,22 @@ src/main/resources/db/migration/
 │   ├── V1__identity_config_and_audit.sql
 │   ├── V2__model_provider_and_secret.sql
 │   └── ...
-└── mysql/
+├── mysql/
+    ├── V1__identity_config_and_audit.sql
+    ├── V2__model_provider_and_secret.sql
+    └── ...
+└── postgresql/
     ├── V1__identity_config_and_audit.sql
     ├── V2__model_provider_and_secret.sql
     └── ...
 ```
 
-- 两个目录必须拥有相同的版本号、描述和业务变更；只允许 SQL 方言不同。
+- 三个目录必须拥有相同的版本号、描述和业务变更；只允许 SQL 方言不同。
 - `local`/`dev` profile 只加载 `classpath:db/migration/sqlite`。
 - `prod` profile 只加载 `classpath:db/migration/mysql`。
-- 禁止同时加载两个目录，也禁止把 SQLite 脚本用于生产。
-- MySQL 脚本尚未补齐期间，`prod` profile 必须 fail fast，不能自动回落到 SQLite。
+- `postgres` profile 只加载 `classpath:db/migration/postgresql`。
+- 禁止同时加载多个目录，也禁止把 SQLite 脚本用于生产。生产 profile 必须校验 JDBC
+  URL 方言并 fail fast，不能自动回落到 SQLite。
 
 建议配置拆分：
 
@@ -40,6 +44,7 @@ application.yaml          通用配置，不提供生产数据库默认值
 application-local.yaml    SQLite 文件库，例如 ./data/datastoria.db
 application-test.yaml     SQLite 临时库
 application-prod.yaml     MySQL datasource，缺少必需环境变量即启动失败
+application-postgres.yaml PostgreSQL datasource，缺少必需环境变量即启动失败
 ```
 
 任何 ORM 的自动 DDL 功能必须关闭，Flyway 是 schema 的唯一来源。SQLite 数据文件和
@@ -47,15 +52,15 @@ application-prod.yaml     MySQL datasource，缺少必需环境变量即启动�
 
 ### 2.2 类型映射
 
-| 逻辑类型 | SQLite DDL | MySQL DDL | 应用约束 |
-|---|---|---|---|
-| ID/枚举/短文本 | `TEXT` | `varchar(n)` | 长度、枚举用 Bean Validation + CHECK |
-| 长文本 | `TEXT` | `longtext` | 设置业务大小上限 |
-| JSON | `TEXT` + `json_valid()` CHECK | `json` | Jackson 序列化；契约测试比较语义 |
-| boolean | `INTEGER` CHECK 0/1 | `boolean` | Java `boolean/Boolean` |
-| UTC 时间 | `TEXT` ISO-8601 | `datetime(6)` | repository 统一 `Instant` |
-| binary/密文 | `BLOB` | `mediumblob/varbinary` | 不做字符编码转换 |
-| 自增审计序号 | `INTEGER PRIMARY KEY` | `bigint auto_increment` | 不作为外部资源 ID |
+| 逻辑类型 | SQLite DDL | MySQL DDL | PostgreSQL DDL | 应用约束 |
+|---|---|---|---|---|
+| ID/枚举/短文本 | `TEXT` | `varchar(n)` | `TEXT` | 长度、枚举用 Bean Validation + CHECK |
+| 长文本 | `TEXT` | `longtext` | `TEXT` | 设置业务大小上限 |
+| JSON | `TEXT` + `json_valid()` CHECK | `json` | `TEXT` + `json_valid()` CHECK | Jackson 序列化；契约测试比较语义 |
+| boolean | `INTEGER` CHECK 0/1 | `boolean` | `boolean` | Java `boolean/Boolean` |
+| UTC 时间 | `TEXT` ISO-8601 | `datetime(6)` | `TEXT` ISO-8601 | repository 统一 `Instant` |
+| binary/密文 | `BLOB` | `mediumblob/varbinary` | `bytea` | 不做字符编码转换 |
+| 自增审计序号 | `INTEGER PRIMARY KEY` | `bigint auto_increment` | `bigserial` | 不作为外部资源 ID |
 
 SQLite 连接初始化必须执行 `PRAGMA foreign_keys=ON`、合理的 `busy_timeout`，开发并发需要时
 使用 WAL。不能依赖 SQLite 宽松类型：所有重要枚举、非空、唯一性和引用约束必须在 DDL
@@ -63,11 +68,12 @@ SQLite 连接初始化必须执行 `PRAGMA foreign_keys=ON`、合理的 `busy_ti
 
 ### 2.3 一致性门禁
 
-- 每次 schema 变更必须在同一提交中增加 SQLite 和 MySQL 两份 migration。
+- 每次 schema 变更必须在同一提交中增加 SQLite、MySQL 和 PostgreSQL 三份 migration。
 - 建立 dialect parity test：分别迁移空库，读取 metadata，比较表、列的逻辑类型、非空、
   主键、外键、唯一键和索引清单。
-- repository contract test 同一测试集运行两次：SQLite 临时数据库和 MySQL Testcontainers。
-- SQLite 用于快速本地开发，不是生产行为的替代证明；生产发布门必须包含 MySQL 测试。
+- repository contract test 使用同一测试集运行 SQLite、MySQL Testcontainers 和
+  PostgreSQL Testcontainers。
+- SQLite 用于快速本地开发，不是生产行为的替代证明；生产发布门必须包含所选生产方言测试。
 - 方言确实无法等价时必须写 ADR，并在 application service 中统一可观察行为。
 
 ## 3. 通用约定
@@ -319,7 +325,7 @@ SQLite 和 MySQL 目录各自包含：
 8. `V8__indexes_retention_and_constraints.sql`
 
 每个版本必须先通过 SQLite migration/repository test；MySQL 方言补充后还必须通过 MySQL
-Testcontainers、双方言 parity 和关键约束测试。每份 migration 都写 downgrade 说明；
+Testcontainers、三方言 parity 和关键约束测试。每份 migration 都写 downgrade 说明；
 回滚采用备份恢复/前向修复，不编写破坏性自动 down migration。
 
 ## 11. 旧数据导入

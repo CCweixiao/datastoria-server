@@ -8,8 +8,8 @@ import io.datastoria.server.domain.Model;
 
 /**
  * Test-only {@link ModelAdapterProvider} backed by a swappable AgentScope model. Register as a bean
- * (overrides {@code NoOpModelAdapterProvider}); set the model per scenario. Reads no credential —
- * test models are network-free.
+ * for the test application context; set the model per scenario. Reads no credential — test models
+ * are network-free.
  */
 public final class FakeModelAdapterProvider implements ModelAdapterProvider {
 

@@ -21,7 +21,7 @@ import reactor.util.context.Context;
 /** Places the authenticated OAuth2/OIDC principal in the application Reactor identity context. */
 @Component
 @Order(0)
-@Profile("prod")
+@Profile({"prod", "postgres"})
 public class AuthenticatedIdentityWebFilter implements WebFilter {
 
   private final String defaultTenant;

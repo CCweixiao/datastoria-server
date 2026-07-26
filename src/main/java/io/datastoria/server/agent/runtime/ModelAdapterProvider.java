@@ -11,9 +11,8 @@ import io.datastoria.server.identity.Identity;
  * <p>Lives in the runtime/adapter layer (the only place that may touch {@code io.agentscope.*}).
  * The controller and {@code ChatRunService} depend on this interface, not on any AgentScope type.
  *
- * <p>P4.6 ships a {@link NoOpModelAdapterProvider default} that fails fast because the real
- * provider adapter (reading the decrypted secret via {@code SecretService}) lands in P4.8; tests
- * inject a fake provider returning a deterministic, network-free model.
+ * <p>The production implementation resolves encrypted API keys and user-scoped OAuth credentials
+ * inside Java. Tests inject a fake provider returning a deterministic, network-free model.
  */
 public interface ModelAdapterProvider {
 

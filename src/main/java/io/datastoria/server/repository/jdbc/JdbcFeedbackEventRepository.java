@@ -23,11 +23,11 @@ public class JdbcFeedbackEventRepository implements FeedbackEventRepository {
               rs.getString("source"),
               rs.getString("session_id"),
               rs.getString("message_id"),
-              rs.getInt("solved") != 0,
+              rs.getBoolean("solved"),
               rs.getString("reason_code"),
               rs.getString("payload_json"),
               rs.getString("free_text"),
-              rs.getInt("recovery_action_taken") != 0,
+              rs.getBoolean("recovery_action_taken"),
               SqlTimestamps.fromParam(rs, "created_at"),
               SqlTimestamps.fromParam(rs, "updated_at"));
 

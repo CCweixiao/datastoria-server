@@ -39,6 +39,27 @@ SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
 
 基础配置不默认激活 `local`，防止未来生产环境因遗漏 profile 而误用 SQLite。
 
+生产数据库支持 MySQL 8 和 PostgreSQL 16。两个 profile 使用相同的必需环境变量，且会
+校验 JDBC URL 方言，不会回落到 SQLite：
+
+```bash
+# MySQL
+SPRING_PROFILES_ACTIVE=prod \
+DATASTORIA_DB_URL='jdbc:mysql://127.0.0.1:3306/datastoria' \
+DATASTORIA_DB_USERNAME=datastoria \
+DATASTORIA_DB_PASSWORD='...' \
+DATASTORIA_MASTER_KEY='...' \
+./mvnw spring-boot:run
+
+# PostgreSQL
+SPRING_PROFILES_ACTIVE=postgres \
+DATASTORIA_DB_URL='jdbc:postgresql://127.0.0.1:5432/datastoria' \
+DATASTORIA_DB_USERNAME=datastoria \
+DATASTORIA_DB_PASSWORD='...' \
+DATASTORIA_MASTER_KEY='...' \
+./mvnw spring-boot:run
+```
+
 验证服务：
 
 ```bash

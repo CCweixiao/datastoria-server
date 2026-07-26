@@ -84,6 +84,24 @@ describe("MessageToolSkill", () => {
     expect(container.textContent).toContain("input:");
   });
 
+  it("shows the AgentScope runtime skill path loader", () => {
+    act(() => {
+      root.render(
+        <MessageToolSkill
+          part={createToolPart({
+            skillId: "vizlayer@3",
+            path: "reference/flowchart.md",
+          })}
+          isRunning={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("Load skill:");
+    expect(container.textContent).toContain("vizlayer@3 | reference/flowchart.md");
+    expect(container.textContent).toContain("input:");
+  });
+
   it("ignores malformed skill resource entries without breaking rendering", () => {
     act(() => {
       root.render(
