@@ -1,7 +1,7 @@
 CREATE TABLE ds_agent_event (
     id          VARCHAR(26) NOT NULL PRIMARY KEY,
-    tenant_id   VARCHAR(26) NOT NULL,
-    run_id      VARCHAR(26) NOT NULL,
+    tenant_id   VARCHAR(64) NOT NULL,
+    run_id      VARCHAR(64) NOT NULL,
     sequence    BIGINT NOT NULL,
     frame_text  LONGTEXT NOT NULL,
     created_at  DATETIME(6) NOT NULL,

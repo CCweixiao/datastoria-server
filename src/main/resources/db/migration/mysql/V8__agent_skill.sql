@@ -1,6 +1,6 @@
 CREATE TABLE ds_agent_skill (
     id              VARCHAR(255) NOT NULL,
-    tenant_id       VARCHAR(128) NOT NULL,
+    tenant_id       VARCHAR(64) NOT NULL,
     owner_user_id   VARCHAR(128) NOT NULL,
     content         LONGTEXT NOT NULL,
     state           ENUM('draft','published') NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE ds_agent_skill (
 );
 
 CREATE TABLE ds_agent_skill_resource (
-    tenant_id       VARCHAR(128) NOT NULL,
+    tenant_id       VARCHAR(64) NOT NULL,
     skill_id        VARCHAR(255) NOT NULL,
     resource_path   VARCHAR(1024) NOT NULL,
     content         LONGTEXT NOT NULL,

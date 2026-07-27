@@ -3,7 +3,7 @@ ALTER TABLE ds_agent_skill
     ADD COLUMN draft_revision BIGINT;
 
 CREATE TABLE ds_skill_revision (
-    tenant_id           VARCHAR(128) NOT NULL,
+    tenant_id           VARCHAR(64) NOT NULL,
     skill_id            VARCHAR(255) NOT NULL,
     revision            BIGINT NOT NULL,
     version             VARCHAR(128),
@@ -24,7 +24,7 @@ CREATE TABLE ds_skill_revision (
 );
 
 CREATE TABLE ds_skill_resource (
-    tenant_id       VARCHAR(128) NOT NULL,
+    tenant_id       VARCHAR(64) NOT NULL,
     skill_id        VARCHAR(255) NOT NULL,
     skill_revision  BIGINT NOT NULL,
     resource_path   VARCHAR(512) NOT NULL,
@@ -39,8 +39,8 @@ CREATE TABLE ds_skill_resource (
 );
 
 CREATE TABLE ds_agent_run_skill (
-    tenant_id        VARCHAR(128) NOT NULL,
-    run_id           VARCHAR(26) NOT NULL,
+    tenant_id        VARCHAR(64) NOT NULL,
+    run_id           VARCHAR(64) NOT NULL,
     skill_id         VARCHAR(255) NOT NULL,
     skill_revision   BIGINT NOT NULL,
     content_checksum CHAR(64) NOT NULL,
