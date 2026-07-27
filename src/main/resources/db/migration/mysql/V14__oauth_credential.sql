@@ -18,4 +18,4 @@ CREATE TABLE ds_oauth_credential (
     UNIQUE KEY uk_oauth_owner_provider (tenant_id, user_id, provider_key),
     UNIQUE KEY uk_oauth_tenant_id (tenant_id, id),
     KEY idx_oauth_credential_owner (tenant_id, user_id, provider_key)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
