@@ -167,43 +167,66 @@ async function getConnectionMetadata(connection: Connection): Promise<void> {
       }
     });
 
-  const nodeNamesQuery = isCluster
-    ? connection
-        .query(
-          `SELECT DISTINCT hostName(), FQDN() FROM clusterAllReplicas('${SqlUtils.escapeSqlString(connection.cluster!)}', system.one)`,
-          { default_format: "JSONCompact" }
-        )
-        .response.then((response) => {
-          if (response.httpStatus === 200) {
-            const data = response.data.json<JSONCompactFormatResponse>();
-            const nodeNames = new Set<string>();
-            const fqdnValues = new Set<string>();
+  const nodeNamesQuery = connection
+    .query(
+      `SELECT cluster, host_name, host_address, port, shard_num, replica_num, is_local
+           FROM system.clusters
+           ${isCluster ? `WHERE cluster = '${SqlUtils.escapeSqlString(connection.cluster!)}'` : ""}
+           ORDER BY cluster, shard_num, replica_num`,
+      { default_format: "JSONCompact" }
+    )
+    .response.then((response) => {
+      if (response.httpStatus === 200) {
+        const data = response.data.json<JSONCompactFormatResponse>();
+        const clusterNames = new Set(
+          data.data
+            .map((row) => row[0])
+            .filter((value): value is string => typeof value === "string")
+        );
+        const detectedCluster =
+          connection.cluster || (clusterNames.size === 1 ? [...clusterNames][0] : undefined);
+        const selectedRows = detectedCluster
+          ? data.data.filter((row) => row[0] === detectedCluster)
+          : [];
+        const nodeNames = new Set<string>();
+        const fqdnValues = new Set<string>();
+        const clusterNodes = [];
 
-            for (const row of data.data) {
-              const hostName = row[0];
-              const fqdn = row[1];
-              if (typeof hostName === "string" && hostName.length > 0) {
-                nodeNames.add(hostName);
-              }
-              if (typeof fqdn === "string" && fqdn.length > 0) {
-                fqdnValues.add(fqdn);
-              }
-            }
-
-            if (fqdnValues.size > 0) {
-              hostNameManager.shortenHostnames([...fqdnValues]);
-            }
-
-            connection.metadata = {
-              ...connection.metadata,
-              hostNames: nodeNames,
-            };
+        for (const row of selectedRows) {
+          const hostName = row[1];
+          const fqdn = row[2];
+          if (typeof hostName === "string" && hostName.length > 0) {
+            nodeNames.add(hostName);
           }
-        })
-        .catch((e) => {
-          console.warn("Failed to load node names:", e);
-        })
-    : Promise.resolve();
+          if (typeof fqdn === "string" && fqdn.length > 0) {
+            fqdnValues.add(fqdn);
+          }
+          if (typeof hostName === "string" && typeof fqdn === "string") {
+            clusterNodes.push({
+              hostName,
+              hostAddress: `${fqdn}:${Number(row[3] ?? 9000)}`,
+              shardNumber: Number(row[4] ?? 0),
+              replicaNumber: Number(row[5] ?? 0),
+              isLocal: Boolean(row[6]),
+            });
+          }
+        }
+
+        if (fqdnValues.size > 0) {
+          hostNameManager.shortenHostnames([...fqdnValues]);
+        }
+
+        connection.metadata = {
+          ...connection.metadata,
+          detectedCluster,
+          hostNames: nodeNames.size > 0 ? nodeNames : connection.metadata.hostNames,
+          clusterNodes,
+        };
+      }
+    })
+    .catch((e) => {
+      console.warn("Failed to load cluster topology:", e);
+    });
 
   // Separate queries for column checks - each query is independent and failures are ignored
   const functionTableQuery = connection

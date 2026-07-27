@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.Toolkit;
+import io.datastoria.server.dto.ClickHouseConnectionResponse;
 import io.datastoria.server.identity.Identity;
 import io.datastoria.server.service.ClickHouseConnectionService;
 import io.datastoria.server.service.RcaTemplateCatalog;
@@ -125,6 +126,7 @@ class ClickHouseAgentToolsTest {
   @Test
   void executeSqlReturnsFrontendShapeAndEnforcesClickHouseLimits() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.findById(anyString(), any())).thenReturn(Mono.just(connection("analytics")));
     @SuppressWarnings("unchecked")
     org.mockito.ArgumentCaptor<Map<String, Object>> settings =
         org.mockito.ArgumentCaptor.forClass(Map.class);
@@ -154,6 +156,37 @@ class ClickHouseAgentToolsTest {
         .containsEntry("max_result_rows", 1_000)
         .containsEntry("max_result_bytes", 1_000_000)
         .containsEntry("max_execution_time", 30);
+  }
+
+  @Test
+  void executeSqlAllowsConfiguredClusterAllReplicas() {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.findById(anyString(), any())).thenReturn(Mono.just(connection("analytics")));
+    when(service.query(anyString(), anyString(), any(), any()))
+        .thenReturn(Mono.just("{\"meta\":[],\"data\":[],\"rows\":0}"));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    assertThat(
+            tools
+                .executeSql("SELECT hostName() FROM clusterAllReplicas('analytics', system.tables)")
+                .block())
+        .contains("\"rowCount\":0");
+  }
+
+  private static ClickHouseConnectionResponse connection(String cluster) {
+    return new ClickHouseConnectionResponse(
+        "connection",
+        "Analytics",
+        "http://clickhouse:8123",
+        "default",
+        cluster,
+        true,
+        "****",
+        true,
+        0,
+        null,
+        null);
   }
 
   @Test

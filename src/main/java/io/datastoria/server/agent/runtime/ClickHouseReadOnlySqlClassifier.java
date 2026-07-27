@@ -23,8 +23,10 @@ public final class ClickHouseReadOnlySqlClassifier {
       Pattern.compile(
           "\\b(url|file|s3|s3cluster|hdfs|hdfscluster|azureblobstorage|"
               + "azureblobstoragecluster|jdbc|mysql|postgresql|mongodb|redis|"
-              + "remote|remotesecure|cluster|clusterallreplicas|executable|"
+              + "remote|remotesecure|cluster|executable|"
               + "executablepool)\\s*\\(");
+  private static final Pattern CLUSTER_ALL_REPLICAS =
+      Pattern.compile("(?i)\\bclusterallreplicas\\s*\\(\\s*'((?:\\\\.|''|[^'])*)'\\s*,");
   private static final Pattern INTO_OUTFILE = Pattern.compile("\\binto\\s+outfile\\b");
   private static final Pattern FORMAT_CLAUSE = Pattern.compile("\\bformat\\s+[a-z0-9_]+\\s*$");
   private static final Pattern DANGEROUS_SETTINGS =
@@ -33,6 +35,10 @@ public final class ClickHouseReadOnlySqlClassifier {
               + "max_result_rows|max_result_bytes|result_overflow_mode|max_execution_time)\\b");
 
   public String requireReadOnly(String sql) {
+    return requireReadOnly(sql, null);
+  }
+
+  public String requireReadOnly(String sql, String allowedCluster) {
     if (sql == null || sql.isBlank()) {
       throw new IllegalArgumentException("SQL must not be blank");
     }
@@ -55,6 +61,7 @@ public final class ClickHouseReadOnlySqlClassifier {
     if (EXTERNAL_TABLE_FUNCTIONS.matcher(normalized).find()) {
       throw new IllegalArgumentException("External and filesystem table functions are not allowed");
     }
+    validateClusterAllReplicas(sql, masked, allowedCluster);
     if (INTO_OUTFILE.matcher(normalized).find()) {
       throw new IllegalArgumentException("INTO OUTFILE is not allowed");
     }
@@ -69,6 +76,32 @@ public final class ClickHouseReadOnlySqlClassifier {
       throw new IllegalArgumentException("WITH must resolve to a SELECT query");
     }
     return stripSingleTerminalSemicolon(sql).trim();
+  }
+
+  private static void validateClusterAllReplicas(
+      String sql, String maskedSql, String allowedCluster) {
+    var allCalls = Pattern.compile("(?i)\\bclusterallreplicas\\s*\\(").matcher(maskedSql);
+    var authorizedCalls = CLUSTER_ALL_REPLICAS.matcher(sql);
+    int callCount = 0;
+    while (allCalls.find()) {
+      callCount++;
+    }
+    int authorizedCount = 0;
+    while (authorizedCalls.find()) {
+      authorizedCount++;
+      String requestedCluster =
+          authorizedCalls.group(1).replace("''", "'").replace("\\'", "'").replace("\\\\", "\\");
+      if (allowedCluster == null
+          || allowedCluster.isBlank()
+          || !allowedCluster.equals(requestedCluster)) {
+        throw new IllegalArgumentException(
+            "clusterAllReplicas is only allowed for the configured ClickHouse cluster");
+      }
+    }
+    if (callCount != authorizedCount) {
+      throw new IllegalArgumentException(
+          "clusterAllReplicas requires a literal configured ClickHouse cluster name");
+    }
   }
 
   private static String firstKeyword(String sql) {

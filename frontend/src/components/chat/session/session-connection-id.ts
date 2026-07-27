@@ -15,3 +15,15 @@ export function getSessionRepositoryConnectionId(
 export function isNoConnectionSessionConnectionId(connectionId?: string | null): boolean {
   return connectionId === NO_CONNECTION_SESSION_CONNECTION_ID;
 }
+
+export function isConnectionResolutionPending({
+  isInitialized,
+  isConnectionAvailable,
+  hasPendingConfig,
+}: {
+  isInitialized: boolean;
+  isConnectionAvailable: boolean;
+  hasPendingConfig: boolean;
+}): boolean {
+  return !isInitialized || (hasPendingConfig && !isConnectionAvailable);
+}

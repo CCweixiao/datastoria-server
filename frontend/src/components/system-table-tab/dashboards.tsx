@@ -8,11 +8,14 @@ import type {
 import DashboardPage from "@/components/shared/dashboard/dashboard-page";
 import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
 import { Dialog } from "@/components/shared/use-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type JSONFormatResponse, type QueryResponse } from "@/lib/connection/connection";
-import { AlertTriangle, EllipsisVertical } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { hostNameManager } from "@/lib/host-name-manager";
+import { AlertTriangle, EllipsisVertical, Network, Server } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { scopeDashboardQueryToCluster } from "./dashboard-scope";
 
 interface DashboardRow {
   dashboard: string;
@@ -34,6 +37,11 @@ interface DashboardsProps {
 
 export const Dashboards = memo(({ database, table }: DashboardsProps) => {
   const { connection } = useConnection();
+  const clusterNodes = useMemo(
+    () => connection?.metadata.clusterNodes ?? [],
+    [connection?.metadata.clusterNodes]
+  );
+  const [monitorScope, setMonitorScope] = useState("cluster");
   const [dashboard, setDashboard] = useState<Dashboard>({
     version: 3,
     filter: {},
@@ -42,6 +50,35 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
   const [error, setError] = useState<string | null>(null);
   const [skippedDashboards, setSkippedDashboards] = useState<SkippedDashboard[]>([]);
   const previousConnectionRef = useRef<string | null>(null);
+  const selectedNode =
+    monitorScope === "cluster"
+      ? undefined
+      : clusterNodes.find((node) => node.hostName === monitorScope);
+
+  useEffect(() => {
+    if (clusterNodes.length <= 1) {
+      setMonitorScope(clusterNodes[0]?.hostName ?? "cluster");
+    } else if (
+      monitorScope !== "cluster" &&
+      !clusterNodes.some((node) => node.hostName === monitorScope)
+    ) {
+      setMonitorScope("cluster");
+    }
+  }, [clusterNodes, monitorScope]);
+
+  const scopeDashboardSql = useCallback(
+    (sql: string) => {
+      if (
+        monitorScope !== "cluster" ||
+        !(connection?.cluster || connection?.metadata.detectedCluster) ||
+        clusterNodes.length <= 1
+      ) {
+        return sql;
+      }
+      return scopeDashboardQueryToCluster(sql);
+    },
+    [clusterNodes.length, connection?.cluster, connection?.metadata.detectedCluster, monitorScope]
+  );
 
   const fetchDashboards = useCallback(
     (hasMetricLogTable: boolean, hasAsynchronousMetricLogTable: boolean) => {
@@ -174,7 +211,8 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
                   collapsed: false,
                   yAxis: [{}], // Default y-axis
                   datasource: {
-                    sql: row.query,
+                    sql: scopeDashboardSql(row.query),
+                    targetNode: selectedNode?.hostAddress,
                   },
                 });
               });
@@ -211,7 +249,7 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
           setError(null);
         });
     },
-    [connection]
+    [connection, scopeDashboardSql, selectedNode?.hostAddress]
   );
 
   useEffect(() => {
@@ -220,7 +258,7 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
     }
 
     // Skip if connection hasn't changed
-    const connectionId = connection.name;
+    const connectionId = `${connection.connectionId}:${monitorScope}`;
     if (previousConnectionRef.current === connectionId) {
       return;
     }
@@ -294,9 +332,48 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
         // Continue with fetching dashboards anyway
         fetchDashboards(false, false);
       });
-  }, [connection, fetchDashboards, database, table]);
+  }, [connection, fetchDashboards, database, table, monitorScope]);
 
-  const headerActions = null;
+  const headerActions =
+    clusterNodes.length > 1 ? (
+      <div className="flex items-center gap-2 rounded-lg border bg-background/80 px-2 py-1 shadow-sm">
+        {monitorScope === "cluster" ? (
+          <Network className="h-4 w-4 text-primary" />
+        ) : (
+          <Server className="h-4 w-4 text-primary" />
+        )}
+        <div className="hidden min-w-0 sm:block">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Monitoring scope
+          </div>
+          <div className="truncate text-xs font-medium">
+            {monitorScope === "cluster"
+              ? `${connection?.cluster || connection?.metadata.detectedCluster} · All replicas`
+              : hostNameManager.getShortHostname(selectedNode?.hostName ?? monitorScope)}
+          </div>
+        </div>
+        <select
+          aria-label="Dashboard monitoring scope"
+          value={monitorScope}
+          onChange={(event) => setMonitorScope(event.target.value)}
+          className="h-8 max-w-[240px] rounded-md border border-input bg-background px-2 text-xs shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="cluster">集群汇总 · 全部分片与副本</option>
+          {clusterNodes.map((node) => (
+            <option
+              key={`${node.shardNumber}-${node.replicaNumber}-${node.hostName}`}
+              value={node.hostName}
+            >
+              分片 {node.shardNumber} · 副本 {node.replicaNumber} ·{" "}
+              {hostNameManager.getShortHostname(node.hostName)}
+            </option>
+          ))}
+        </select>
+        <Badge variant="secondary" className="hidden whitespace-nowrap md:inline-flex">
+          {clusterNodes.length} 节点
+        </Badge>
+      </div>
+    ) : null;
 
   if (error) {
     return (

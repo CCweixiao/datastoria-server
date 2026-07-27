@@ -132,6 +132,10 @@ export function ConnectionProvider({
         metadataUpdates.hostNames = mergedNodeNames;
       }
 
+      if (metadataUpdates.clusterNodes) {
+        metadataUpdates.clusterNodes = [...metadataUpdates.clusterNodes];
+      }
+
       // Mutate the metadata in place
       Object.assign(connection.metadata, metadataUpdates);
     },

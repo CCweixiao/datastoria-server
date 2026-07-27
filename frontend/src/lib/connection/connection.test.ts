@@ -184,6 +184,50 @@ describe("Connection query context parameters", () => {
     expect(JSON.stringify(body)).not.toContain("must-not-leave-the-browser");
   });
 
+  it("can explicitly target a discovered dashboard node", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
+    const connection = Connection.create({
+      id: "connection-cluster",
+      name: "cluster",
+      url: "http://localhost:8123",
+      user: "external",
+      password: "browser-secret",
+      cluster: "prod",
+      editable: true,
+    });
+    connection.metadata.internalUser = "internal";
+
+    await connection.queryOnTargetNode("SELECT 1", "10.0.0.12:9000").response;
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.targetNode).toBe("10.0.0.12:9000");
+    expect(body.targetUser).toBe("internal");
+    expect(JSON.stringify(body)).not.toContain("browser-secret");
+  });
+
+  it("uses a uniquely auto-detected cluster for dashboard templates", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
+    const connection = Connection.create({
+      id: "connection-cluster",
+      name: "cluster",
+      url: "http://localhost:8123",
+      user: "default",
+      password: "",
+      cluster: "",
+      editable: true,
+    });
+    connection.metadata.detectedCluster = "auto_cluster";
+
+    await connection.queryOnNode("SELECT * FROM {clusterAllReplicas:system.metric_log}").response;
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toBe("SELECT * FROM clusterAllReplicas('auto_cluster', system.metric_log)");
+  });
+
   it("uses Spring ProblemDetail detail as the query error message", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

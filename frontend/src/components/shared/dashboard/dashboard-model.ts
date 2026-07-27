@@ -103,6 +103,7 @@ export interface DateTimeFilterSpec {
 // SQL Query interface
 export interface SQLQuery {
   sql: string;
+  targetNode?: string;
   headers?: Record<string, string>;
   params?: Record<string, unknown>;
 

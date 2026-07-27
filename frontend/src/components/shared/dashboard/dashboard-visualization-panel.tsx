@@ -4,6 +4,7 @@ import { useConnection } from "@/components/connection/connection-context";
 import { useCustomDashboardActions } from "@/components/dashboard-tab/custom-dashboard-context";
 import { AskAIButton } from "@/components/shared/ask-ai-button";
 import { Dialog } from "@/components/shared/use-dialog";
+import { normalizeDynamicColumnAggregates } from "@/components/system-table-tab/dashboard-scope";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorCode } from "@/lib/clickhouse/clickhouse-error-parser";
 import { QueryError } from "@/lib/connection/connection";
@@ -290,7 +291,7 @@ export const DashboardVisualizationPanel = forwardRef<
         // Build SQL query with all replacements
         // Cluster template replacement is now handled by connection.query()
         const timezone = connection.metadata?.timezone || "UTC";
-        let finalSql = new SQLQueryBuilder(query.sql)
+        let finalSql = new SQLQueryBuilder(normalizeDynamicColumnAggregates(query.sql))
           .timeSpan(param.timeSpan, timezone)
           .filterExpression(param.filterExpression)
           .build();
@@ -305,7 +306,7 @@ export const DashboardVisualizationPanel = forwardRef<
         setExecutedSql(finalSql);
 
         // Choose the right query method based on type
-        const { response, abortController } = connection.queryOnNode(
+        const queryArgs = [
           finalSql,
           {
             default_format: "JSON",
@@ -315,8 +316,11 @@ export const DashboardVisualizationPanel = forwardRef<
           {
             "Content-Type": "text/plain",
             ...query.headers,
-          }
-        );
+          },
+        ] as const;
+        const { response, abortController } = query.targetNode
+          ? connection.queryOnTargetNode(queryArgs[0], query.targetNode, queryArgs[1], queryArgs[2])
+          : connection.queryOnNode(...queryArgs);
         apiCancellerRef.current = abortController;
 
         const apiResponse = await response;
@@ -387,24 +391,31 @@ export const DashboardVisualizationPanel = forwardRef<
               };
 
               // Prepare offset SQL with all replacements
-              const offsetSql = new SQLQueryBuilder(query.sql)
+              const offsetSql = new SQLQueryBuilder(normalizeDynamicColumnAggregates(query.sql))
                 .timeSpan(offsetTimeSpan, timezone)
                 .filterExpression(param.filterExpression)
                 .build();
 
-              const { response: offsetResponse, abortController: offsetAbort } =
-                connection.queryOnNode(
-                  offsetSql,
-                  {
-                    default_format: "JSON",
-                    output_format_json_quote_64bit_integers: 0,
-                    ...query.params,
-                  },
-                  {
-                    "Content-Type": "text/plain",
-                    ...query.headers,
-                  }
-                );
+              const offsetArgs = [
+                offsetSql,
+                {
+                  default_format: "JSON",
+                  output_format_json_quote_64bit_integers: 0,
+                  ...query.params,
+                },
+                {
+                  "Content-Type": "text/plain",
+                  ...query.headers,
+                },
+              ] as const;
+              const { response: offsetResponse, abortController: offsetAbort } = query.targetNode
+                ? connection.queryOnTargetNode(
+                    offsetArgs[0],
+                    query.targetNode,
+                    offsetArgs[1],
+                    offsetArgs[2]
+                  )
+                : connection.queryOnNode(...offsetArgs);
 
               secondaryApiCancellerRef.current = offsetAbort;
 

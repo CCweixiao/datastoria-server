@@ -652,17 +652,22 @@ export function ModelsEdit() {
       </div>
 
       <Dialog open={providerDialog} onOpenChange={setProviderDialog}>
-        <DialogContent className="!z-[10020] max-w-xl" overlayClassName="!z-[10010]">
+        <DialogContent
+          className="!z-[10020] max-h-[calc(100dvh-2rem)] max-w-xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+          overlayClassName="!z-[10010]"
+        >
           <DialogHeader>
             <DialogTitle>{editingProvider ? "编辑供应商" : "添加模型供应商"}</DialogTitle>
             <DialogDescription>
               配置 OpenAI 兼容端点。API Key 只会提交到 Java 后端并加密保存。
             </DialogDescription>
           </DialogHeader>
-          {!editingProvider && (
-            <div className="grid grid-cols-2 gap-2">
-              {PROVIDER_PRESETS.filter((preset) => preset.providerKey !== "openai-compatible").map(
-                (preset) => (
+          <div className="-mx-2 min-h-0 overflow-y-auto overscroll-contain px-2">
+            {!editingProvider && (
+              <div className="grid grid-cols-2 gap-2">
+                {PROVIDER_PRESETS.filter(
+                  (preset) => preset.providerKey !== "openai-compatible"
+                ).map((preset) => (
                   <button
                     type="button"
                     key={preset.providerKey}
@@ -672,107 +677,107 @@ export function ModelsEdit() {
                     <div className="font-medium">{preset.displayName}</div>
                     <div className="mt-0.5 truncate text-muted-foreground">{preset.baseUrl}</div>
                   </button>
-                )
-              )}
-            </div>
-          )}
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
+                ))}
+              </div>
+            )}
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="provider-name">显示名称</Label>
+                  <Input
+                    id="provider-name"
+                    autoComplete="off"
+                    value={providerDraft.displayName}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        displayName: event.target.value,
+                      }))
+                    }
+                    placeholder="例如：智谱 GLM"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider-key">供应商标识</Label>
+                  <Input
+                    id="provider-key"
+                    autoComplete="off"
+                    value={providerDraft.providerKey}
+                    disabled={!!editingProvider}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        providerKey: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+                      }))
+                    }
+                    placeholder="zhipu"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="provider-name">显示名称</Label>
+                <Label htmlFor="provider-base-url">Base URL</Label>
                 <Input
-                  id="provider-name"
+                  id="provider-base-url"
                   autoComplete="off"
-                  value={providerDraft.displayName}
+                  value={providerDraft.baseUrl}
                   onChange={(event) =>
                     setProviderDraft((current) => ({
                       ...current,
-                      displayName: event.target.value,
+                      baseUrl: event.target.value,
                     }))
                   }
-                  placeholder="例如：智谱 GLM"
+                  placeholder="https://example.com/v1"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="provider-key">供应商标识</Label>
-                <Input
-                  id="provider-key"
-                  autoComplete="off"
-                  value={providerDraft.providerKey}
-                  disabled={!!editingProvider}
-                  onChange={(event) =>
-                    setProviderDraft((current) => ({
-                      ...current,
-                      providerKey: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-                    }))
-                  }
-                  placeholder="zhipu"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-base-url">Base URL</Label>
-              <Input
-                id="provider-base-url"
-                autoComplete="off"
-                value={providerDraft.baseUrl}
-                onChange={(event) =>
-                  setProviderDraft((current) => ({
-                    ...current,
-                    baseUrl: event.target.value,
-                  }))
-                }
-                placeholder="https://example.com/v1"
-              />
-              <p className="text-xs text-muted-foreground">
-                填写兼容端点根地址，不要追加 /chat/completions。
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="provider-api-key">
-                API Key
-                {editingProvider?.credentialConfigured && (
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    已保存 {editingProvider.maskedHint}
-                  </span>
-                )}
-              </Label>
-              <div className="relative">
-                <Input
-                  id="provider-api-key"
-                  autoComplete="new-password"
-                  type={showCredential ? "text" : "password"}
-                  value={credential}
-                  onChange={(event) => setCredential(event.target.value)}
-                  placeholder={
-                    editingProvider?.credentialConfigured
-                      ? "留空保留现有密钥，输入新值可轮换"
-                      : "输入 API Key"
-                  }
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCredential((value) => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                >
-                  {showCredential ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <Label>启用供应商</Label>
                 <p className="text-xs text-muted-foreground">
-                  停用后其模型不会出现在模型选择器中。
+                  填写兼容端点根地址，不要追加 /chat/completions。
                 </p>
               </div>
-              <Switch
-                checked={providerDraft.enabled}
-                onCheckedChange={(enabled) =>
-                  setProviderDraft((current) => ({ ...current, enabled }))
-                }
-              />
+              <div className="space-y-2">
+                <Label htmlFor="provider-api-key">
+                  API Key
+                  {editingProvider?.credentialConfigured && (
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      已保存 {editingProvider.maskedHint}
+                    </span>
+                  )}
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="provider-api-key"
+                    autoComplete="new-password"
+                    type={showCredential ? "text" : "password"}
+                    value={credential}
+                    onChange={(event) => setCredential(event.target.value)}
+                    placeholder={
+                      editingProvider?.credentialConfigured
+                        ? "留空保留现有密钥，输入新值可轮换"
+                        : "输入 API Key"
+                    }
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCredential((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showCredential ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label>启用供应商</Label>
+                  <p className="text-xs text-muted-foreground">
+                    停用后其模型不会出现在模型选择器中。
+                  </p>
+                </div>
+                <Switch
+                  checked={providerDraft.enabled}
+                  onCheckedChange={(enabled) =>
+                    setProviderDraft((current) => ({ ...current, enabled }))
+                  }
+                />
+              </div>
             </div>
           </div>
           <DialogFooter className="items-center sm:justify-between">
@@ -803,14 +808,17 @@ export function ModelsEdit() {
       </Dialog>
 
       <Dialog open={modelDialog} onOpenChange={setModelDialog}>
-        <DialogContent className="!z-[10020] max-w-lg" overlayClassName="!z-[10010]">
+        <DialogContent
+          className="!z-[10020] max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+          overlayClassName="!z-[10010]"
+        >
           <DialogHeader>
             <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
             <DialogDescription>
               模型 ID 必须与供应商 API 接受的 model 参数完全一致。
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className="-mx-2 grid min-h-0 gap-4 overflow-y-auto overscroll-contain px-2 py-2">
             <div className="space-y-2">
               <Label htmlFor="model-key">模型 ID</Label>
               <Input

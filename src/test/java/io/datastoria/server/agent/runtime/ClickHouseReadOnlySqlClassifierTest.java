@@ -54,11 +54,31 @@ class ClickHouseReadOnlySqlClassifierTest {
             "SELECT * FROM url('https://example.com', CSV)",
             "SELECT * FROM s3('https://bucket/object')",
             "SELECT * FROM remote('host', system, tables)",
+            "SELECT * FROM clusterAllReplicas('analytics', system.tables)",
             "SELECT 1 INTO OUTFILE '/tmp/result'",
             "SELECT 1 FORMAT CSV",
             "SELECT number FROM numbers(10) SETTINGS max_result_rows=0",
             "SELECT 1 SETTINGS readonly=0")) {
       assertThatThrownBy(() -> classifier.requireReadOnly(sql))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+  }
+
+  @Test
+  void allowsClusterAllReplicasOnlyForConfiguredLiteralCluster() {
+    assertThat(
+            classifier.requireReadOnly(
+                "SELECT hostName() FROM clusterAllReplicas('analytics', system.tables)",
+                "analytics"))
+        .isEqualTo("SELECT hostName() FROM clusterAllReplicas('analytics', system.tables)");
+
+    for (String sql :
+        List.of(
+            "SELECT * FROM clusterAllReplicas('other', system.tables)",
+            "SELECT * FROM clusterAllReplicas(cluster_name, system.tables)",
+            "SELECT * FROM clusterAllReplicas('analytics', system.tables)"
+                + " JOIN clusterAllReplicas('other', system.one) USING tuple()")) {
+      assertThatThrownBy(() -> classifier.requireReadOnly(sql, "analytics"))
           .isInstanceOf(IllegalArgumentException.class);
     }
   }

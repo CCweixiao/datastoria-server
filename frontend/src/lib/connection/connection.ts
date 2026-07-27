@@ -157,6 +157,8 @@ export interface ConnectionMetadata {
 
   // hostName() from all nodes
   hostNames?: Set<string>;
+  detectedCluster?: string;
+  clusterNodes?: ClusterNode[];
 
   // Cached dependency data - loaded on demand and cached here
   dependencyData?: {
@@ -170,6 +172,14 @@ export interface ConnectionMetadata {
 
   // Cached ClickHouse settings metadata used by chat suggestions and markdown hovers
   clickhouseSettings: Map<string, ClickHouseSetting>;
+}
+
+export interface ClusterNode {
+  hostName: string;
+  hostAddress: string;
+  shardNumber: number;
+  replicaNumber: number;
+  isLocal: boolean;
 }
 
 const USER_CANCELLED_ERROR_MESSAGE = "User cancelled";
@@ -494,6 +504,25 @@ export class Connection {
     return this.queryWithTarget(processedSql, params, headers, node, this.metadata.internalUser);
   }
 
+  public queryOnTargetNode(
+    sql: string,
+    targetNode: string,
+    params?: Record<string, unknown>,
+    headers?: Record<string, string>
+  ): { response: Promise<QueryResponse>; abortController: AbortController } {
+    const [processedSql, hasClusterFunctions] = this.resolveClusterTemplates(sql);
+    if (hasClusterFunctions) {
+      return this.query(processedSql, params, headers);
+    }
+    return this.queryWithTarget(
+      processedSql,
+      params,
+      headers,
+      targetNode,
+      this.metadata.internalUser
+    );
+  }
+
   private queryWithTarget(
     sql: string,
     params: Record<string, unknown> | undefined,
@@ -559,7 +588,8 @@ export class Connection {
    * @returns [processedSql, hasClusterFunctions] - The processed SQL and whether cluster functions were added
    */
   private resolveClusterTemplates(sql: string): [string, boolean] {
-    const hasCluster = this.cluster && this.cluster.length > 0;
+    const effectiveCluster = this.cluster || this.metadata.detectedCluster;
+    const hasCluster = Boolean(effectiveCluster);
     let usedClusterFunctions = false;
 
     // Replace {clusterAllReplicas:table_name} patterns
@@ -587,7 +617,7 @@ export class Connection {
 
     // Replace {cluster} with actual cluster name (simple variable without colon)
     if (hasCluster) {
-      sql = sql.replace(/\{cluster\}/g, this.cluster);
+      sql = sql.replace(/\{cluster\}/g, effectiveCluster!);
     }
 
     return [sql, usedClusterFunctions];

@@ -5,6 +5,7 @@ import { ChatFactory } from "@/components/chat/chat-factory";
 import { ChatUIContext } from "@/components/chat/chat-ui-context";
 import {
   getSessionRepositoryConnectionId,
+  isConnectionResolutionPending,
   isNoConnectionSessionConnectionId,
 } from "@/components/chat/session/session-connection-id";
 import { SessionManager } from "@/components/chat/session/session-manager";
@@ -295,7 +296,12 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
   const processedNewChatRequestRef = useRef(newChatRequestNonce);
   const trackedRunningChatRef = useRef<{ chatId: string; connectionId: string } | null>(null);
   const isInitializedRef = useRef(false);
-  const { connection, isInitialized: isConnectionInitialized } = useConnection();
+  const {
+    connection,
+    pendingConfig,
+    isInitialized: isConnectionInitialized,
+    isConnectionAvailable,
+  } = useConnection();
   const chatConnectionId = getSessionRepositoryConnectionId(connection);
   const [loadedChatConnectionId, setLoadedChatConnectionId] = useState(chatConnectionId);
   const [loadedChatIsDraft, setLoadedChatIsDraft] = useState(false);
@@ -362,7 +368,17 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
   // Initial chat loading - only run once when chat is null
   useEffect(() => {
     // Skip if already initialized or chat already exists
-    if (!isConnectionInitialized || isInitializedRef.current || chat) return;
+    if (
+      isConnectionResolutionPending({
+        isInitialized: isConnectionInitialized,
+        isConnectionAvailable,
+        hasPendingConfig: pendingConfig !== null,
+      }) ||
+      isInitializedRef.current ||
+      chat
+    ) {
+      return;
+    }
 
     const initializeChat = async () => {
       // Capture pendingCommand at initialization time to avoid re-running when it changes
@@ -434,6 +450,8 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
   }, [
     connection?.connectionId,
     isConnectionInitialized,
+    isConnectionAvailable,
+    pendingConfig,
     chatConnectionId,
     createDraftSession,
     initialInput?.chatId,

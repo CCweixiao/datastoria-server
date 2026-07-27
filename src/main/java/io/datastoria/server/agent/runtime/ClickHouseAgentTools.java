@@ -103,16 +103,15 @@ public final class ClickHouseAgentTools {
   public Mono<String> executeSql(
       @ToolParam(name = "sql", required = true, description = "ClickHouse SQL to execute")
           String sql) {
-    String safeSql;
-    try {
-      safeSql = sqlClassifier.requireReadOnly(sql);
-    } catch (IllegalArgumentException error) {
-      return Mono.error(error);
-    }
     return executionPolicy.guard(
         "execute_sql",
         service
-            .query(connectionId, safeSql, EXECUTE_SQL_SETTINGS, identity)
+            .findById(connectionId, identity)
+            .flatMap(
+                connection -> {
+                  String safeSql = sqlClassifier.requireReadOnly(sql, connection.cluster());
+                  return service.query(connectionId, safeSql, EXECUTE_SQL_SETTINGS, identity);
+                })
             .map(this::executeSqlJson)
             .onErrorResume(this::executeSqlFailure));
   }
