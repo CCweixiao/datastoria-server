@@ -18,7 +18,7 @@ CREATE TABLE ds_agent_skill (
 CREATE TABLE ds_agent_skill_resource (
     tenant_id       VARCHAR(64) NOT NULL,
     skill_id        VARCHAR(255) NOT NULL,
-    resource_path   VARCHAR(1024) NOT NULL,
+    resource_path   VARCHAR(440) NOT NULL,
     content         LONGTEXT NOT NULL,
     created_at      TIMESTAMP(6) NOT NULL,
     updated_at      TIMESTAMP(6) NOT NULL,

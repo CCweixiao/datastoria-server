@@ -27,7 +27,7 @@ CREATE TABLE ds_skill_resource (
     tenant_id       VARCHAR(64) NOT NULL,
     skill_id        VARCHAR(255) NOT NULL,
     skill_revision  BIGINT NOT NULL,
-    resource_path   VARCHAR(512) NOT NULL,
+    resource_path   VARCHAR(440) NOT NULL,
     media_type      VARCHAR(255) NOT NULL,
     content         LONGBLOB NOT NULL,
     size_bytes      BIGINT NOT NULL,

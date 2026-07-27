@@ -12,6 +12,6 @@ public record UpsertSkillRequest(
     @Pattern(regexp = "global|self") String scope,
     @Size(max = 128) String version,
     @Valid List<SkillResourceRequest> resources,
-    List<@Size(max = 1024) String> deletedResourcePaths,
+    List<@Size(max = 440) String> deletedResourcePaths,
     @Pattern(regexp = "draft|published") String state,
     @Pattern(regexp = "publish") String action) {}
