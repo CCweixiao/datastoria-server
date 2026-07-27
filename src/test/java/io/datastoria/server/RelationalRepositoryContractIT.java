@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.datastoria.server.agent.domain.AgentCheckpoint;
 import io.datastoria.server.agent.domain.AgentRun;
 import io.datastoria.server.agent.domain.AgentRunStatus;
@@ -43,6 +45,7 @@ abstract class RelationalRepositoryContractIT {
   @Autowired FeedbackEventRepository feedbackRepo;
   @Autowired ModelRepository modelRepo;
   @Autowired JdbcClient jdbc;
+  @Autowired ObjectMapper objectMapper;
 
   protected abstract String tenantId();
 
@@ -158,7 +161,7 @@ abstract class RelationalRepositoryContractIT {
   }
 
   @Test
-  void agentCheckpointUpsert() {
+  void agentCheckpointUpsert() throws Exception {
     String tenant = tenantId();
     insertSession("sess_cp", tenant);
     Instant now = Instant.now();
@@ -192,8 +195,8 @@ abstract class RelationalRepositoryContractIT {
 
     var all = checkpointRepo.findAllByRun(tenant, runId);
     assertThat(all).hasSize(2);
-    assertThat(checkpointRepo.findLatest(tenant, runId).orElseThrow().stateJson())
-        .contains("\"v\":3");
+    String latestState = checkpointRepo.findLatest(tenant, runId).orElseThrow().stateJson();
+    assertThat(objectMapper.readTree(latestState).path("v").asInt()).isEqualTo(3);
   }
 
   @Test
