@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build unified installation package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend package manager and dependencies
+        working-directory: frontend
+        run: |
+          npm install --global pnpm
+          npm ci --force
+
+      - name: Build and test unified package
+        env:
+          DATASTORIA_PACKAGE_VERSION: ${{ github.ref_name }}
+        run: |
+          DATASTORIA_PACKAGE_VERSION="${DATASTORIA_PACKAGE_VERSION#v}" bin/build-package.sh
+
+      - name: Create checksum
+        run: |
+          cd target/dist
+          sha256sum datastoria-*.tar.gz > SHA256SUMS
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: datastoria-${{ github.ref_name }}
+          path: |
+            target/dist/datastoria-*.tar.gz
+            target/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "DataStoria ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --prerelease \
+            target/dist/datastoria-*.tar.gz \
+            target/dist/SHA256SUMS
