@@ -126,7 +126,7 @@ interface ToolContributor {
 启动时验证 tool name 唯一、Schema 可序列化、Skill requiredTools 均可解析。运行时按
 agent revision、用户权限、connection 能力计算 allowlist。
 
-## 7. ClickHouse 工具迁移
+## 7. ClickHouse 工具
 
 顺序：
 
@@ -232,4 +232,4 @@ trace 关联 requestId、runId、sessionId、toolCallId；禁止把 prompt、密
 5. ask/approve 的暂停、服务重启、恢复。
 6. AgentScope 事件到 AI SDK fixture 的兼容测试。
 
-任何一项无法实现时先写 ADR 和 spike 结论，不继续批量迁移工具。
+任何一项无法实现时先写 ADR 和验证结论，不继续批量接入工具。

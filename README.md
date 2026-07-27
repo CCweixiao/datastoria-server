@@ -1,91 +1,85 @@
-# DataStoria Server
+# DataStoria
 
-DataStoria 的 Spring Boot 后端。该项目将分阶段接管现有 DataStoria Node.js
-后端的 REST API、会话持久化、工具执行、Skill 加载和 Agent 运行时。
+DataStoria 是面向 ClickHouse 的开源智能数据工作台。它把连接管理、SQL 工作流、集群可观测、
+AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与数据库管理员可以从“发现问题”连续
+走到“验证结论”。
 
-当前状态：P0–P3 已落地。仓库从 P3 起采用单仓库结构：
+项目采用单仓库：
 
-- Spring Boot 后端位于仓库根目录。
-- Next.js 前端位于 `frontend/`。
-- 前端第三方 Git submodule 位于 `frontend/external/`，由根目录 `.gitmodules` 管理。
+- `frontend/`：Next.js 管理平台；
+- `src/main/java/`：Spring Boot WebFlux API 与 Agent 运行时；
+- `src/main/resources/db/migration/`：SQLite/MySQL Flyway 迁移；
+- `bin/`、`deploy/`：统一安装包、初始化和进程管理；
+- `docs/`：产品、架构、开发、部署和操作文档。
 
-## 技术基线
+## 核心能力
 
-- JDK 17
-- Spring Boot 3.5.16
-- Maven Wrapper
-- Spring WebFlux
-- Spring Boot Actuator
+- 管理单节点或集群 ClickHouse 连接，自动发现分片与副本；
+- SQL 编辑、执行、历史、Explain、错误诊断和可视化；
+- 节点/集群 Dashboard 与系统表观测；
+- 配置 OpenAI 兼容模型供应商，发现和管理多个模型；
+- 基于 AgentScope Java 的流式 AI 会话、只读 SQL 工具、审批/提问和断点恢复；
+- Skill、Agent、会话、反馈和用户偏好的服务端持久化；
+- 开发环境 SQLite、生产环境 MySQL，使用同一套 MyBatis-Plus Mapper。
 
-AgentScope Java 将在 Agent 运行时阶段引入，避免项目初始化阶段提前耦合尚未验证的
-运行时配置。
+## 5 分钟本地启动
 
-## 本地运行
-
-确保 `JAVA_HOME` 指向 JDK 17：
-
-```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-./mvnw spring-boot:run
-```
-
-P2 引入 SQLite 后，本地运行需要先复制 local profile 示例并显式激活：
-
-```bash
-cp src/main/resources/application-local.yaml.example \
-  src/main/resources/application-local.yaml
-SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
-```
-
-基础配置不默认激活 `local`，防止未来生产环境因遗漏 profile 而误用 SQLite。
-
-生产数据库支持 MySQL 8。`prod` profile 会校验 JDBC URL 方言，不会回落到 SQLite：
-
-```bash
-SPRING_PROFILES_ACTIVE=prod \
-DATASTORIA_DB_URL='jdbc:mysql://127.0.0.1:3306/datastoria' \
-DATASTORIA_DB_USERNAME=datastoria \
-DATASTORIA_DB_PASSWORD='...' \
-DATASTORIA_MASTER_KEY='...' \
-./mvnw spring-boot:run
-```
-
-验证服务：
-
-```bash
-curl http://localhost:8080/actuator/health
-```
-
-运行测试：
-
-```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-./mvnw test
-```
-
-前端开发与验证：
+前置要求：JDK 17、Node.js 22、npm，以及已初始化的 Git submodule。
 
 ```bash
 git submodule update --init --recursive
-cd frontend
-npm install
-npm run dev
+
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
 ```
 
-前端的格式化、类型检查、测试和生产构建仍从 `frontend/` 执行：
+另开终端：
 
 ```bash
 cd frontend
-npm run format
+npm install
+NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
+NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
+npm run dev
+```
+
+打开 `http://localhost:3000`，健康检查为 `http://127.0.0.1:8080/actuator/health`。
+本地配置只能用于开发；API Key、数据库密码和生产主密钥必须通过环境变量或密钥管理系统提供。
+
+## 构建与验证
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+./mvnw spotless:check test
+
+cd frontend
+npm run format:check
 npm run typecheck
 npm run lint
-npm run test
+npm test -- --run
 npm run build
 ```
 
+生成包含前后端和启动脚本的安装包：
+
+```bash
+DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
+```
+
+产物位于 `target/dist/datastoria-<version>.tar.gz`。
+
 ## 文档
 
-- [文档索引](docs/README.md)
-- [整体迁移计划](docs/migration-plan.md)
-- [目标架构](docs/target-architecture.md)
-- [前后端统一发布包](docs/deployment/unified-package.md)
+- [文档中心](docs/README.md)
+- [产品愿景](docs/product/vision.md)
+- [系统架构](docs/architecture/overview.md)
+- [功能模块](docs/product/modules.md)
+- [开发与调试](docs/development/getting-started.md)
+- [生产部署](docs/deployment/production.md)
+- [管理平台操作手册](docs/manual/admin-console.md)
+- [安全与敏感信息](docs/security/secrets.md)
+
+## 开源协作
+
+提交改动前请运行与改动范围匹配的 Java、前端测试和格式检查。架构决策记录在
+`docs/adr/`；HTTP/流式契约及自动化 fixture 位于 `docs/api/` 和 `docs/fixtures/`。

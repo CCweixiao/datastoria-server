@@ -99,7 +99,7 @@ For errors that require more context (permissions, cluster setup, function usage
 
 ## Limitations
 
-- **Heuristic-based**: Error location highlighting is based on pattern analysis. In some cases it may point to the wrong spot. If that happens, please submit an [issue](https://github.com/FrankChen021/datastoria/issues) (ideally with the SQL and the raw ClickHouse error text), or open a PR with a fix.
+- **Heuristic-based**: Error location highlighting is based on pattern analysis. In some cases it may point to the wrong spot. If that happens, submit a [sanitized issue](https://github.com/CCweixiao/datastoria-server/issues) without credentials or production row data.
 
 
 ## Next Steps

@@ -326,14 +326,13 @@ SQLite 和 MySQL 目录各自包含：
 Testcontainers、双方言 parity 和关键约束测试。每份 migration 都写 downgrade 说明；
 回滚采用备份恢复/前向修复，不编写破坏性自动 down migration。
 
-## 11. 旧数据导入
+## 11. 数据导入
 
 采用“导出 JSONL -> 校验 -> 导入 staging -> 事务 merge -> 对账”的方式：
 
 - 会话对账：行数、每 session 消息数、sequence、parts checksum。
 - Skill 对账：bundle 数、resource 数、published/draft 指针、checksum。
-- 模型/Agent 的浏览器 localStorage 不能由服务端自动读取；首次登录由前端显式迁移向导提交
-  非敏感配置，密钥要求用户重新确认，成功后清除本地密钥。
+- 模型与 Agent 配置以服务端数据为准；浏览器 localStorage 不作为配置数据源。
 - 导入工具支持 dry-run、重复执行和按 tenant 回滚标记。
 - 导出格式必须与数据库方言无关，同一 JSONL fixture 可分别导入 SQLite 和 MySQL 并产生
   相同业务 checksum。

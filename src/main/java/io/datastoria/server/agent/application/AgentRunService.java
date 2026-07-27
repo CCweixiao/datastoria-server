@@ -25,9 +25,8 @@ import reactor.core.publisher.SignalType;
  *
  * <p><b>Threading:</b> the returned {@link Flux} is fully reactive. The only blocking AgentScope
  * call is {@code RunnableAgent.close()} at termination, which is dispatched to a dedicated bounded
- * executor (default: a single-thread daemon) so it never blocks the Netty event loop
- * (docs/delivery/ai-implementation-playbook.md §2). Tests inject a synchronous executor for
- * deterministic cleanup.
+ * executor (default: a single-thread daemon) so it never blocks the Netty event loop. Tests inject
+ * a synchronous executor for deterministic cleanup.
  */
 public final class AgentRunService {
 

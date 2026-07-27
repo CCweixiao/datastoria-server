@@ -33,7 +33,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>Compat-family controller (plain-text errors via {@link PlainTextException}); the one exception
  * is {@link ClientSecretNotAllowedException}, which yields a {@code 400 CLIENT_SECRET_NOT_ALLOWED}
- * ProblemDetail per docs/design/api-contracts.md §6.
+ * ProblemDetail per {@code docs/api/http-api.md}.
  *
  * <p>Controller, encoder, and tests reference no {@code io.agentscope.*} type. The SSE body is the
  * single-use event stream; WebFlux subscribes to it once when writing the response (no manual

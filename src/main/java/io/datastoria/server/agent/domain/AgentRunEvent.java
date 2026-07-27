@@ -4,17 +4,17 @@ import java.time.Instant;
 
 /**
  * Internal, runtime-agnostic event emitted by an agent run. This is DataStoria's unified event
- * contract (docs/design/api-contracts.md §7): it deliberately references NO AgentScope type so the
- * Agent runtime can be swapped without touching the event model, the (future) stream encoder, or
- * persistence. Only the {@code io.datastoria.server.agent.runtime} adapter layer ever touches
+ * contract ({@code docs/api/stream-protocol.md}): it deliberately references NO AgentScope type so
+ * the Agent runtime can be swapped without touching the event model, the (future) stream encoder,
+ * or persistence. Only the {@code io.datastoria.server.agent.runtime} adapter layer ever touches
  * AgentScope {@code AgentEvent}; everything downstream consumes {@code AgentRunEvent}.
  *
  * <p>Every event is scoped to a single run ({@link #runId()}), carries a per-run monotonically
  * increasing {@link #sequence()}, and an {@link #occurredAt()} timestamp. P4 produces only the
  * text/reasoning/usage/lifecycle variants below; tool-related variants are deferred to P5, when
- * real tools arrive (P4 keeps the model-boundary tool schema empty — ADR-0004 §3.5).
+ * real tools arrive.
  *
- * <p>The mapping from AgentScope events is fixed in ADR-0004 §3.2 (RunStarted ← AGENT_START,
+ * <p>The mapping from AgentScope events is fixed by the stream protocol (RunStarted ← AGENT_START,
  * ReasoningDelta ← THINKING_BLOCK_DELTA, TextDelta ← TEXT_BLOCK_DELTA, UsageReported ←
  * MODEL_CALL_END, RunCompleted ← AGENT_RESULT; onError ← RunFailed; dispose ← RunCancelled).
  */
@@ -156,7 +156,7 @@ public sealed interface AgentRunEvent
   /**
    * Terminal failure. {@code message} is a fixed, sanitized string keyed off {@code code}; it NEVER
    * carries the raw provider/tool error text, prompt, or credential (docs/design/harness-agent.md
-   * §11, ADR-0004 §3.4).
+   * §11).
    */
   record RunFailed(String runId, long sequence, Instant occurredAt, String code, String message)
       implements AgentRunEvent {}

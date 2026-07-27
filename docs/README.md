@@ -1,62 +1,41 @@
-# DataStoria Server 迁移文档
+# DataStoria 文档中心
 
-本目录是将 DataStoria 的 Node.js 后端完整迁移到 JDK 17、Spring Boot 和
-AgentScope Java 的实施依据。文档以现有代码为基线，目标读者是后续直接承担开发的 AI
-或工程师。
+这里是 DataStoria 当前产品与工程文档。一次性阶段报告和历史比对材料不再作为正式文档；
+内容以仓库现状和可执行命令为准。
 
-## 阅读顺序
+## 按角色阅读
 
-1. [整体迁移计划](migration-plan.md)：范围、阶段、依赖关系、完成定义。
-2. [现状与迁移矩阵](inventory/current-state.md)：现有 API、存储、Agent、Skill、Tool
-   的权威盘点。
-3. [目标架构](target-architecture.md)：系统边界、模块和关键数据流。
-4. [SQLite / MySQL 双方言数据模型](design/database-data-model.md)：模型、Agent、Skill、
-   会话、运行状态及两套 DDL。
-5. [HTTP 与流式契约](design/api-contracts.md)：前端所需 Java API 和兼容规则。
-6. [Harness Agent 设计](design/harness-agent.md)：AgentScope Java、Skill、Toolkit、
-   HITL 和状态恢复。
-7. [分阶段 PRD/PDC](delivery/phase-prds.md)：每阶段可直接领取的开发任务、测试与验收。
-8. [AI 实施手册](delivery/ai-implementation-playbook.md)：代码约束、执行顺序、交付模板。
-9. [需求追踪与完成审计](delivery/acceptance-traceability.md)：逐项证明迁移完成的证据。
-10. [本地 ClickHouse（无 Docker）](development/local-clickhouse.md)：固定版本、隔离数据目录、
-    seed 与真实 Java 工具测试。
+| 角色 | 建议入口 |
+|---|---|
+| 初次了解项目 | [产品愿景](product/vision.md) → [功能模块](product/modules.md) |
+| 架构师/后端开发 | [系统架构](architecture/overview.md) → [数据模型](design/database-data-model.md) → [HTTP API](api/http-api.md) |
+| 前端开发 | [开发与调试](development/getting-started.md) → [流式协议](api/stream-protocol.md) |
+| 运维/SRE | [生产部署](deployment/production.md) → [统一安装包](deployment/unified-package.md) → [故障排查](operations/troubleshooting.md) |
+| 管理员/使用者 | [管理平台操作手册](manual/admin-console.md) |
+| 安全审计 | [密钥与敏感信息](security/secrets.md) → [ADR](adr/) |
 
-## P1 契约冻结产出
+## 文档地图
 
-阶段 1 冻结的契约与测试脚手架（位于 `api/` 与 `fixtures/`）：
+```text
+docs/
+├── product/       产品愿景、能力边界和功能模块
+├── architecture/  当前系统结构、数据流和部署边界
+├── development/   本地开发、调试、ClickHouse 联调
+├── deployment/    生产部署和统一安装包
+├── manual/        管理平台操作手册
+├── operations/    运行维护与故障排查
+├── security/      密钥、隐私和发布安全
+├── reference/     导入格式等稳定参考
+├── design/        数据、API、Agent 的详细设计
+├── api/           OpenAPI 与流式协议
+├── adr/           已接受的架构决策
+└── fixtures/      自动化契约测试样例，不是用户文档
+```
 
-- [OpenAPI baseline](api/openapi-baseline.yaml)：A01-A29 的 HTTP 契约快照。
-- [流式协议契约](api/stream-protocol.md)：AI SDK UI Message Stream 事件冻结。
-- [API 迁移处置矩阵](api/migration-disposition.md)：每项 API 的 disposition 与目标阶段。
-- [前端调用点与 Playwright 场景](api/frontend-call-sites.md)：调用点清单与等价性场景。
-- [流式 fixture](fixtures/stream/)：8 个场景的 chunk 样本 + JSON Schema。
-- [业务 fixture](fixtures/business/)：方言无关的会话/消息/Skill/ClickHouse 测试数据。
-- 契约 runner：`tools/contract-runner/`，负责 fixture 校验、响应捕获与 semantic diff。
+## 权威性约定
 
-
-## 文档状态
-
-| 文档 | 状态 | 用途 |
-|---|---|---|
-| 整体迁移计划 | Baseline | 控制范围和阶段门禁 |
-| 现状与迁移矩阵 | Baseline | 防止漏迁 Node 能力 |
-| 目标架构 | Baseline | 固定最终职责边界 |
-| SQLite / MySQL 数据模型 | Design Ready | 可据此分别编写两套 Flyway migration |
-| HTTP 与流式契约 | Design Ready | 可据此编写 Controller/OpenAPI |
-| Harness Agent 设计 | Design Ready | 可据此接入 AgentScope Java |
-| 分阶段 PRD/PDC | Ready for Delivery | 可逐阶段交给另一个 AI |
-| AI 实施手册 | Ready for Delivery | 统一实现和验收方式 |
-| 需求追踪与完成审计 | Baseline | 防止以局部完成代替整体完成 |
-
-`Baseline` 表示迁移期间若发现现有行为与文档不一致，应先用测试或代码证据修正文档，再
-继续实现。`Design Ready` 不表示功能已经完成。
-
-## 文档维护规则
-
-1. 每阶段开始前冻结该阶段 API、表结构和验收样例。
-2. 每阶段结束时填写实际验证证据、已知差异和回滚结果。
-3. API 迁移先更新 OpenAPI/事件 Schema，再修改实现。
-4. 数据库变更只能通过 Flyway；SQLite/MySQL 两套 migration 必须同版本同步，已执行的
-   migration 不可修改。
-5. 架构选择变化时新增 ADR，并同步需求追踪表。
-6. 不把“Java 接口存在”视为迁移完成；必须有前端调用和行为等价证据。
+1. 启动和构建命令必须能从仓库根目录直接执行。
+2. 运行配置以 `application-*.yaml`、`deploy/conf/` 和 `bin/` 脚本为准。
+3. API 清单以 Controller 与 OpenAPI 为准；文档不复制密钥或真实凭据。
+4. 数据库结构只能由 Flyway migration 演进。
+5. 截图使用演示账号和虚构凭据；任何 Token、API Key、Cookie、数据库密码都不得进入仓库。

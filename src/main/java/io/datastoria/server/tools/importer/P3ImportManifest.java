@@ -12,7 +12,7 @@ import java.util.Map;
  * so the manifest is a checksum, not a primary source of truth.
  *
  * <p>Version is currently {@code 1}. Future schema changes must bump the version and document a
- * migration path in {@code docs/migration/p3-jsonl-format.md}.
+ * import path in {@code docs/reference/import-bundle-format.md}.
  */
 public record P3ImportManifest(
     int version,

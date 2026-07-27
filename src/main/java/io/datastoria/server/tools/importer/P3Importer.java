@@ -23,7 +23,7 @@ import io.datastoria.server.tools.importer.Jsonl.TriConsumer;
 /**
  * Imports P3 chat product data from a directory of JSONL files into the live database.
  *
- * <p>The directory layout (see {@code docs/migration/p3-jsonl-format.md}) is:
+ * <p>The directory layout (see {@code docs/reference/import-bundle-format.md}) is:
  *
  * <pre>{@code
  * data/

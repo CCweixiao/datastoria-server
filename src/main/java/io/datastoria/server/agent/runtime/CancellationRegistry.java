@@ -9,8 +9,8 @@ import org.reactivestreams.Subscription;
 import io.datastoria.server.agent.domain.RunContext;
 
 /**
- * Tracks active runs so a server-initiated cancel (or the {@code POST /runs/{id}:cancel} endpoint
- * in P4.6) can stop a run by id. Per ADR-0004 §3.3, cancelling a run performs BOTH:
+ * Tracks active runs so a server-initiated cancel (or the {@code POST /runs/{id}:cancel} endpoint)
+ * can stop a run by id. Cancelling a run performs both:
  *
  * <ol>
  *   <li>dispose the {@code streamEvents} subscription — the reliable primitive that cancels the
@@ -21,8 +21,7 @@ import io.datastoria.server.agent.domain.RunContext;
  * <p><b>Tenant isolation:</b> {@link #cancel} succeeds only when the requester matches the run
  * owner recorded at registration. A tenant/user can never cancel another tenant's run; a mismatched
  * request is a no-op that returns {@code false} and touches nothing. This is the defense-in-depth
- * invariant the design requires (docs/design/api-contracts.md §9, §10) independent of any
- * controller-layer authorization added in P4.6.
+ * invariant the design requires independent of controller-layer authorization.
  */
 public final class CancellationRegistry {
 

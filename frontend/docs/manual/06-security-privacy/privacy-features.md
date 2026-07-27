@@ -1,46 +1,33 @@
 ---
-title: Privacy Features & Policy
-description: DataStoria privacy-first architecture - local query execution, no data storage, secure credential handling. Learn how we protect your database credentials and sensitive information.
-head:
-  - - meta
-    - name: keywords
-      content: privacy policy, data privacy, secure database, local execution, no data storage, credential security, privacy-first, database security, data protection
+title: Security & Privacy
+description: DataStoria credential, query and AI data boundaries.
 ---
 
-# Privacy Policy
+# Security & Privacy
 
-Last Updated: December 27, 2025
+## Stored data
 
-## 1. Information We Collect
+Spring Boot stores application configuration, users, ClickHouse connections, model providers,
+sessions, messages, feedback and Agent Run state in SQLite (development) or MySQL (production).
+ClickHouse passwords and model API keys are encrypted with AES-256-GCM and are never returned to
+the browser after saving.
 
-- **Account Information:** When you sign in via OAuth (Google, GitHub, Microsoft), we receive basic profile information such as your name, email address, and profile picture.
-- **Usage Data:** We may collect information about how you interact with the service to improve performance and user experience.
-- **Database Credentials:** We **DO NOT** store your database credentials on our servers.
-- **LLM Provider API Keys:** We **DO NOT** store your LLM provider API keys on our servers.
-- **Database Metadata/Row Data:** These information may be sent to the server for AI-powered suggestions, but we **DO NOT** store your actual row data on our servers.
+## Query and AI data
 
-## 2. How We Use Information
+SQL is sent to Java, which executes it against the selected ClickHouse connection. AI workflows may
+send prompts, schema, errors, SQL or tool evidence to the configured model provider. Administrators
+must choose providers and retention policies appropriate for their data classification.
 
-- To provide and maintain our service.
-- To notify you about changes to our service.
-- To provide customer support.
-- To gather analysis or valuable information so that we can improve our service.
+DataStoria does not make a blanket “no data leaves the machine” promise: behavior depends on the
+ClickHouse endpoint, model provider and deployment topology configured by the operator.
 
-## 3. Data Storage
+## Operator responsibilities
 
-- Application state, chat sessions, model configuration, and connection configuration are stored by
-  Spring Boot.
-- ClickHouse passwords and LLM provider credentials are encrypted in backend secret columns and are
-  never returned to the browser.
+- Provide HTTPS for the user-facing endpoint and TLS to databases/providers.
+- Keep `DATASTORIA_MASTER_KEY`, database passwords and OAuth secrets in a secret manager.
+- Use least-privilege ClickHouse accounts and restrict Java network access.
+- Configure backups, log retention and provider data policies.
+- Never include credentials or production rows in screenshots and issue reports.
 
-## 4. Third-Party Services
-
-Configured identity providers have their own privacy policies.
-
-## 5. Security
-
-The security of your data is important to us, but remember that no method of transmission over the Internet or method of electronic storage is 100% secure.
-
-## 6. Contact Us
-
-If you have any questions about this Privacy Policy, please contact us.
+See the repository
+[security guide](https://github.com/CCweixiao/datastoria-server/blob/master/docs/security/secrets.md).

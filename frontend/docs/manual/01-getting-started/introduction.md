@@ -69,7 +69,9 @@ Ready to get started? Follow these steps:
 1. **[Installation & Setup](./installation.md)** — Learn how to install and configure DataStoria
 2. **[First Connection](./first-connection.md)** — Connect to your ClickHouse instance and start exploring
 
-Or, if you prefer to try it online first, visit [dataStoria.app](https://datastoria.app) to experience all features without installation.
+Download a preview package from the
+[project releases](https://github.com/CCweixiao/datastoria-server/releases), or run the source
+checkout locally.
 
 ---
 

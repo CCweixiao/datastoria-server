@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'DataStoria Documentation',
   description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management. Modern web interface for ClickHouse database administration.',
   base: '/', // or '/docs/' if deploying to a subpath
-  ignoreDeadLinks: true, // Allow links to planned sections that don't exist yet
+  ignoreDeadLinks: false,
   lang: 'en-US', // SEO: Language declaration
 
   // SEO: Clean URLs without .html extension
@@ -33,7 +33,7 @@ export default defineConfig({
     ['meta', { property: 'og:site_name', content: 'DataStoria Documentation' }],
     ['meta', { property: 'og:title', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
     ['meta', { property: 'og:description', content: 'Modern ClickHouse management console with AI-powered natural language queries, intelligent optimization, and advanced cluster management capabilities.' }],
-    ['meta', { property: 'og:image', content: 'https://docs.datastoria.app/og-image.png' }],
+    ['meta', { property: 'og:image', content: '/logo.png' }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
     ['meta', { property: 'og:image:alt', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
@@ -44,7 +44,7 @@ export default defineConfig({
     ['meta', { name: 'twitter:site', content: '@datastoria' }],
     ['meta', { name: 'twitter:title', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
     ['meta', { name: 'twitter:description', content: 'Modern ClickHouse management console with AI-powered natural language queries, intelligent optimization, and advanced cluster management.' }],
-    ['meta', { name: 'twitter:image', content: 'https://docs.datastoria.app/og-image.png' }],
+    ['meta', { name: 'twitter:image', content: '/logo.png' }],
     ['meta', { name: 'twitter:image:alt', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
 
     // Additional SEO enhancements
@@ -63,12 +63,12 @@ export default defineConfig({
       applicationCategory: 'DatabaseApplication',
       operatingSystem: 'Web Browser',
       description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management capabilities.',
-      url: 'https://datastoria.app',
-      image: 'https://docs.datastoria.app/og-image.png',
+      url: 'https://github.com/CCweixiao/datastoria-server',
+      image: '/logo.png',
       author: {
         '@type': 'Organization',
         name: 'DataStoria',
-        url: 'https://datastoria.app'
+        url: 'https://github.com/CCweixiao/datastoria-server'
       },
       offers: {
         '@type': 'Offer',
@@ -81,8 +81,8 @@ export default defineConfig({
         ratingCount: '1'
       },
       softwareVersion: '1.0',
-      releaseNotes: 'https://docs.datastoria.app/manual/',
-      screenshot: 'https://s3.datastoria.app/dashboard.webp',
+      releaseNotes: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/manual/',
+      screenshot: '/logo.png',
       featureList: [
         'Natural Language to SQL conversion',
         'AI-powered query optimization',
@@ -105,13 +105,13 @@ export default defineConfig({
           '@type': 'ListItem',
           position: 1,
           name: 'Home',
-          item: 'https://docs.datastoria.app/'
+          item: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/'
         },
         {
           '@type': 'ListItem',
           position: 2,
           name: 'Documentation',
-          item: 'https://docs.datastoria.app/manual/'
+          item: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/manual/'
         }
       ]
     })],
@@ -121,15 +121,15 @@ export default defineConfig({
       '@context': 'https://schema.org',
       '@type': 'Organization',
       name: 'DataStoria',
-      url: 'https://datastoria.app',
-      logo: 'https://docs.datastoria.app/logo.png',
+      url: 'https://github.com/CCweixiao/datastoria-server',
+      logo: '/logo.png',
       sameAs: [
-        'https://github.com/FrankChen021/datastoria'
+        'https://github.com/CCweixiao/datastoria-server'
       ],
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'Customer Support',
-        url: 'https://github.com/FrankChen021/datastoria/issues'
+        url: 'https://github.com/CCweixiao/datastoria-server/issues'
       }
     })],
 
@@ -138,7 +138,7 @@ export default defineConfig({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'DataStoria Documentation',
-      url: 'https://docs.datastoria.app'
+      url: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs'
     })],
 
     // Preconnect to CDN for faster resource loading
@@ -283,7 +283,7 @@ export default defineConfig({
 
   // SEO: Automatic sitemap generation
   sitemap: {
-    hostname: 'https://docs.datastoria.app',
+    hostname: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs',
     lastmodDateOnly: false, // Include time in lastmod
     transformItems: (items) => {
       // Add priority and changefreq to sitemap items
@@ -307,7 +307,7 @@ export default defineConfig({
 
   // SEO: Generate meta tags for each page
   transformPageData(pageData) {
-    const canonicalUrl = `https://docs.datastoria.app/${pageData.relativePath}`
+    const canonicalUrl = `https://github.com/CCweixiao/datastoria-server/tree/master/docs/${pageData.relativePath}`
       .replace(/\/index\.md$/, '/')
       .replace(/\.md$/, '')
 
@@ -478,7 +478,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/FrankChen021/datastoria' }
+      { icon: 'github', link: 'https://github.com/CCweixiao/datastoria-server' }
     ],
 
     search: {

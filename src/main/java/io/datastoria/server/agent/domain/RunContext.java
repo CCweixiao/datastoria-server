@@ -11,7 +11,7 @@ import java.util.Objects;
  *
  * <p>Holds NO secrets. Provider credentials are resolved inside the {@code ModelAdapter} and
  * injected into AgentScope {@code GenerateOptions} server-side; they are never carried in this
- * object, the request body, or the response (ADR-0004 §4, docs/design/api-contracts.md §6).
+ * object, the request body, or the response ({@code docs/security/secrets.md}).
  */
 public record RunContext(
     String runId,

@@ -15,10 +15,10 @@ import reactor.core.publisher.Flux;
  * {@link AgentEventMapper}, explicitly consumes errors into {@link AgentRunEvent.RunFailed}, and
  * invokes {@code interrupt()} on cancellation for cooperative step-boundary cleanup.
  *
- * <p>Cancel contract (ADR-0004 §3.3): disposing the returned {@link Flux} subscription propagates
- * upstream and cancels the provider model flux (stops token emission); {@code doOnCancel}
- * additionally calls {@code agent.interrupt()}. For single-step text runs {@code interrupt()} is
- * effectively a no-op at the step boundary; the reliable stop is the dispose itself.
+ * <p>Cancel contract: disposing the returned {@link Flux} subscription propagates upstream and
+ * cancels the provider model flux (stops token emission); {@code doOnCancel} additionally calls
+ * {@code agent.interrupt()}. For single-step text runs {@code interrupt()} is effectively a no-op
+ * at the step boundary; the reliable stop is the dispose itself.
  */
 final class HarnessRunnableAgent implements RunnableAgent {
 

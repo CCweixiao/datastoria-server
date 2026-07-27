@@ -34,11 +34,11 @@ import io.datastoria.server.agent.domain.TokenUsage;
 
 /**
  * Maps AgentScope {@link AgentEvent}s into DataStoria {@link AgentRunEvent}s per the fixed mapping
- * in ADR-0004 §3.2. Run-scoped and non-thread-safe by construction (Reactor invokes {@code map}
- * sequentially per subscriber), so an {@link AtomicLong} is used only to keep the sequence
- * monotonic under any upstream re-emit. Sequence numbers are assigned only to <em>emitted</em>
- * events; ignored AgentScope events (MODEL_CALL_START, AGENT_END, anything unknown) consume no
- * sequence number.
+ * in {@code docs/api/stream-protocol.md}. Run-scoped and non-thread-safe by construction (Reactor
+ * invokes {@code map} sequentially per subscriber), so an {@link AtomicLong} is used only to keep
+ * the sequence monotonic under any upstream re-emit. Sequence numbers are assigned only to
+ * <em>emitted</em> events; ignored AgentScope events (MODEL_CALL_START, AGENT_END, anything
+ * unknown) consume no sequence number.
  */
 public final class AgentEventMapper {
 

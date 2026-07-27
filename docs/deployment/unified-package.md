@@ -1,12 +1,14 @@
 # 前后端统一发布包
 
+> 生产环境的 MySQL、TLS、备份、升级和密钥要求见[生产部署](production.md)。
+
 统一发布模式把 Spring Boot 可执行 JAR 与 Next.js standalone 服务放入同一个 `tar.gz`，
 不依赖 Nginx，也不要求单独安装或发布前端。发布包仍然保留两个独立进程，未来可把 JAR 和
 standalone 目录拆到不同主机。
 
 ## 构建
 
-构建机需要 JDK 17、Node.js、npm 和 tar：
+构建机需要 JDK 17、Node.js 22、npm、Git 和 tar。构建会执行 Java 测试与前端生产构建：
 
 ```bash
 bin/build-package.sh
@@ -50,11 +52,14 @@ bin/datastoria logs 200
 
 ## Profile 与数据源
 
-编辑 `conf/datastoria.env` 中的 `DATASTORIA_PROFILE`：
+编辑权限为 `0600` 的 `conf/datastoria.env` 中的 `DATASTORIA_PROFILE`：
 
 - `local`：SQLite，数据文件为发布目录下的 `data/datastoria.db`。
 - `prod`：MySQL，必须配置 `DATASTORIA_DB_URL`、`DATASTORIA_DB_USERNAME`、
   `DATASTORIA_DB_PASSWORD` 和 `DATASTORIA_MASTER_KEY`。
+
+配置文件中的密码和主密钥只是变量说明，真实值应由部署平台或密钥管理系统注入，不能提交到
+Git 或放入工单。`DATASTORIA_MASTER_KEY` 丢失后无法解密已保存的连接/模型凭据。
 
 非敏感覆盖项放到 `conf/application-<profile>.yaml`。启动脚本同时传入激活 profile 和
 外部 `conf/`，Flyway 根据 profile 分别加载 SQLite 或 MySQL migration。生产 profile
@@ -75,4 +80,22 @@ datastoria-<version>/
 ├── data/
 ├── logs/
 └── run/
+```
+
+## 验证发布包
+
+```bash
+sha256sum -c SHA256SUMS
+tar -tzf datastoria-<version>.tar.gz | head
+```
+
+安装后至少验证：
+
+```bash
+bin/datastoria init
+bin/datastoria start
+bin/datastoria status
+curl -fsS http://127.0.0.1:8080/actuator/health
+curl -fsS http://127.0.0.1:3000/
+bin/datastoria stop
 ```

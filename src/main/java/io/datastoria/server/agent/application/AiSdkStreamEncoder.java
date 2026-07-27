@@ -54,8 +54,8 @@ import reactor.core.publisher.Flux;
  * token-usage-utils.ts}): {@code {inputTokens, inputTokenDetails: {noCacheTokens, cacheReadTokens,
  * cacheWriteTokens}, outputTokens, outputTokenDetails: {textTokens, reasoningTokens},
  * totalTokens}}. The hand-built fixtures in {@code docs/fixtures/stream} use the deprecated {@code
- * promptTokens}/{@code completionTokens} naming; the encoder follows the live frontend behavior
- * (see P4.5 report).
+ * promptTokens}/{@code completionTokens} naming; the encoder follows the live frontend behavior as
+ * defined by the current frontend contract.
  *
  * <p><b>Stateful / per-run.</b> Holds part-id counters and accumulated usage; not thread-safe.
  * {@link #encode(Flux)} creates a fresh encoder per subscription.

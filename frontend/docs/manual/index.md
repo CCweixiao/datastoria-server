@@ -113,7 +113,7 @@ New to DataStoria? Start here:
 
 ## Need Help?
 
-- Visit [dataStoria.app](https://datastoria.app) for the online version
+- Download a package from the [project releases](https://github.com/CCweixiao/datastoria-server/releases)
 
 ---
 

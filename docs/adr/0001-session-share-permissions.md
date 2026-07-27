@@ -5,7 +5,7 @@
 - **Phase**: P3
 - **Inventory scope**: A05, A06, A07, A08, A09, A09b
 - **Supersedes**: none
-- **Related**: `docs/api/p3-openapi-extensions.yaml`, `docs/api/migration-disposition.md`
+- **Related**: `docs/api/p3-openapi-extensions.yaml`, `docs/api/http-api.md`
   (A06/A07 share-writer behaviour row)
 
 ## Context

@@ -4,8 +4,7 @@
 - **Date**: 2026-07-25
 - **Phase**: P3
 - **Inventory scope**: A04 (`POST /api/ai/chat/sessions`)
-- **Related**: `docs/api/p3-openapi-extensions.yaml`, `docs/design/api-contracts.md`
-  §5 ("POST create 在一个事务中创建 session 和 messages")
+- **Related**: `docs/api/p3-openapi-extensions.yaml`, `docs/api/http-api.md`
 
 ## Context
 
@@ -27,8 +26,7 @@ Failure modes that the Node implementation exposes:
    post-loop `getSession` lookup returns null; a half-written session is
    returned as a 200 success.
 
-The design doc `docs/design/api-contracts.md` §5 explicitly prescribes
-"POST create 在一个事务中创建 session 和 messages".
+The API contract requires session and initial messages to be created atomically.
 
 ## Decision
 

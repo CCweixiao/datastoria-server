@@ -3,9 +3,8 @@ package io.datastoria.server.tools.importer;
 import java.time.Instant;
 
 /**
- * Row DTOs matching the JSONL wire format. Field names are camelCase so the importer accepts
- * exports from either Java or Node.js without translation. See {@code
- * docs/migration/p3-jsonl-format.md} for the schema.
+ * Row DTOs matching the JSONL wire format. Field names are camelCase so supported exports do not
+ * need translation. See {@code docs/reference/import-bundle-format.md} for the schema.
  *
  * <p>Timestamps accept ISO-8601 strings (e.g. {@code "2026-07-25T10:15:30Z"}); Jackson's
  * JavaTimeModule (configured globally on the application {@link
