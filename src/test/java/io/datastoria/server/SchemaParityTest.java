@@ -190,11 +190,14 @@ class SchemaParityTest {
       fks.put(table, fkSet);
 
       Map<String, List<String>> uniqueColumns = new TreeMap<>();
-      try (ResultSet rs = md.getIndexInfo(catalog, schema, table, true, false)) {
+      // SQLite JDBC does not consistently honor the unique-only argument. Read every index and
+      // filter the portable NON_UNIQUE metadata explicitly so ordinary indexes are not compared as
+      // uniqueness constraints.
+      try (ResultSet rs = md.getIndexInfo(catalog, schema, table, false, false)) {
         while (rs.next()) {
           String indexName = rs.getString("INDEX_NAME");
           String columnName = rs.getString("COLUMN_NAME");
-          if (indexName != null && columnName != null) {
+          if (!rs.getBoolean("NON_UNIQUE") && indexName != null && columnName != null) {
             uniqueColumns.computeIfAbsent(indexName, ignored -> new ArrayList<>()).add(columnName);
           }
         }
