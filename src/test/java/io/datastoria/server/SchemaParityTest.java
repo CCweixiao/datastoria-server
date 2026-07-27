@@ -205,6 +205,9 @@ class SchemaParityTest {
       uniqueIndexes.put(
           table,
           uniqueColumns.values().stream()
+              // Primary keys are asserted separately. Some drivers also expose the primary key as
+              // a unique index while SQLite INTEGER PRIMARY KEY does not expose one.
+              .filter(columnsInIndex -> !columnsInIndex.equals(pkCols))
               .map(columnsInIndex -> String.join(",", columnsInIndex))
               .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
     }
