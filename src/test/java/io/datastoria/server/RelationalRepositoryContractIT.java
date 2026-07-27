@@ -2,6 +2,7 @@ package io.datastoria.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -315,7 +316,7 @@ abstract class RelationalRepositoryContractIT {
         .param("id", id)
         .param("t", tenant)
         .param("u", "admin")
-        .param("now", now.toString())
+        .param("now", Timestamp.from(now))
         .update();
   }
 }
