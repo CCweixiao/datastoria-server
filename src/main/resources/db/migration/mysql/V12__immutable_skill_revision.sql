@@ -21,7 +21,7 @@ CREATE TABLE ds_skill_revision (
     CONSTRAINT fk_skill_revision_skill
         FOREIGN KEY (tenant_id, skill_id) REFERENCES ds_agent_skill(tenant_id, id)
         ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE ds_skill_resource (
     tenant_id       VARCHAR(64) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE ds_skill_resource (
     CONSTRAINT fk_skill_resource_revision
         FOREIGN KEY (tenant_id, skill_id, skill_revision)
         REFERENCES ds_skill_revision(tenant_id, skill_id, revision) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE ds_agent_run_skill (
     tenant_id        VARCHAR(64) NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE ds_agent_run_skill (
     CONSTRAINT fk_agent_run_skill_revision
         FOREIGN KEY (tenant_id, skill_id, skill_revision)
         REFERENCES ds_skill_revision(tenant_id, skill_id, revision)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO ds_skill_revision
     (tenant_id, skill_id, revision, version, name, description, summary, skill_md,

@@ -9,7 +9,7 @@ CREATE TABLE ds_agent_event (
         REFERENCES ds_agent_run(tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT uq_agent_event_sequence UNIQUE (tenant_id, run_id, sequence),
     CONSTRAINT chk_agent_event_sequence CHECK (sequence > 0)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_agent_event_replay
     ON ds_agent_event (tenant_id, run_id, sequence);

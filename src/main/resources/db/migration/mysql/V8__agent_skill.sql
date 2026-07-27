@@ -13,7 +13,7 @@ CREATE TABLE ds_agent_skill (
     PRIMARY KEY (tenant_id, id),
     KEY idx_agent_skill_visibility
         (tenant_id, owner_user_id, state, scope, deleted_at)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE ds_agent_skill_resource (
     tenant_id       VARCHAR(64) NOT NULL,
@@ -26,4 +26,4 @@ CREATE TABLE ds_agent_skill_resource (
     CONSTRAINT fk_agent_skill_resource_skill
         FOREIGN KEY (tenant_id, skill_id) REFERENCES ds_agent_skill(tenant_id, id)
         ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
