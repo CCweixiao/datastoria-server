@@ -1,0 +1,67 @@
+package io.github.ccweixiao.datastoria.agent.application;
+
+import java.time.Instant;
+import java.util.Optional;
+
+import org.springframework.stereotype.Component;
+
+import io.github.ccweixiao.datastoria.common.agent.AgentCheckpoint;
+import io.github.ccweixiao.datastoria.common.agent.CheckpointContent;
+import io.github.ccweixiao.datastoria.common.agent.CheckpointType;
+import io.github.ccweixiao.datastoria.common.domain.Ulid;
+import io.github.ccweixiao.datastoria.dao.repository.AgentCheckpointRepository;
+
+/**
+ * Wires {@link CheckpointContent} (produced by the runtime {@code CheckpointStateAdapter}) into
+ * {@code ds_agent_checkpoint} and back. AgentScope-free: it only knows the domain {@code content}
+ * triple and the repository; the AgentScope {@code State} ↔ {@code CheckpointContent} conversion
+ * stays in the runtime adapter.
+ *
+ * <p>Tenant isolation and the P4.3 atomic upsert are inherited from {@link
+ * AgentCheckpointRepository}: every read filters by {@code tenant_id}, and {@code save} overwrites
+ * at {@code (tenant, run, sequence)} or appends at a new sequence.
+ */
+@Component
+public final class CheckpointStore {
+
+  private final AgentCheckpointRepository repository;
+
+  public CheckpointStore(AgentCheckpointRepository repository) {
+    this.repository = repository;
+  }
+
+  /** Persists a checkpoint content row at {@code (tenantId, runId, sequence)}. */
+  public void save(
+      String tenantId,
+      String runId,
+      long sequence,
+      CheckpointType type,
+      CheckpointContent content) {
+    Instant now = Instant.now();
+    AgentCheckpoint row =
+        new AgentCheckpoint(
+            Ulid.next(),
+            tenantId,
+            runId,
+            sequence,
+            type,
+            content.stateJson(),
+            content.codecVersion(),
+            content.checksum(),
+            now,
+            now);
+    repository.save(row);
+  }
+
+  /** Loads the latest checkpoint content for a run under {@code tenantId}, or empty. */
+  public Optional<CheckpointContent> loadLatest(String tenantId, String runId) {
+    return repository
+        .findLatest(tenantId, runId)
+        .map(row -> new CheckpointContent(row.codecVersion(), row.stateJson(), row.checksum()));
+  }
+
+  /** Loads the latest row when callers also need its sequence and checkpoint type. */
+  public Optional<AgentCheckpoint> loadLatestRow(String tenantId, String runId) {
+    return repository.findLatest(tenantId, runId);
+  }
+}

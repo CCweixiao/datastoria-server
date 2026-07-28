@@ -8,7 +8,11 @@ const checkOnly = process.argv.includes("--check");
 const dialects = ["sqlite", "mysql"];
 
 for (const dialect of dialects) {
-  const migrationDir = resolve(root, "src/main/resources/db/migration", dialect);
+  const migrationDir = resolve(
+    root,
+    "datastoria-dao/src/main/resources/db/migration",
+    dialect,
+  );
   const files = (await readdir(migrationDir))
     .filter((name) => /^V\d+__.+\.sql$/.test(name))
     .sort((left, right) => version(left) - version(right));
@@ -35,7 +39,12 @@ for (const dialect of dialects) {
     `-- Application startup continues to use db/migration/${dialect}; this file is not auto-run.\n\n` +
     ddl.join("\n\n") +
     "\n";
-  const outputPath = resolve(root, "src/main/resources/db/schema", dialect, "schema.sql");
+  const outputPath = resolve(
+    root,
+    "datastoria-dao/src/main/resources/db/schema",
+    dialect,
+    "schema.sql",
+  );
 
   if (checkOnly) {
     const current = await readFile(outputPath, "utf8");

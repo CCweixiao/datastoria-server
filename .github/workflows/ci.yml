@@ -78,7 +78,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: datastoria-server-jar
-          path: target/*.jar
+          path: datastoria-boot/target/datastoria-boot-*.jar
           if-no-files-found: error
           retention-days: 7
 

@@ -1,0 +1,7 @@
+package io.github.ccweixiao.datastoria.common.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record SkillResourceRequest(
+    @NotBlank @Size(max = 440) String path, @NotBlank @Size(max = 2_000_000) String content) {}

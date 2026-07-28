@@ -5,7 +5,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 PROJECT_VERSION="$(
   awk '
-    /<artifactId>datastoria-server<\/artifactId>/ { project = 1; next }
+    /<artifactId>datastoria-parent<\/artifactId>/ { project = 1; next }
     project && /<version>/ {
       value = $0
       sub(/^.*<version>/, "", value)
@@ -56,7 +56,10 @@ fi
     npm run build
 )
 
-BACKEND_JAR="$(find "$PROJECT_DIR/target" -maxdepth 1 -type f -name 'datastoria-server-*.jar' ! -name '*.original' | head -1)"
+BACKEND_JAR="$(
+  find "$PROJECT_DIR/datastoria-boot/target" -maxdepth 1 -type f \
+    -name 'datastoria-boot-*.jar' ! -name '*.original' | head -1
+)"
 [[ -n "$BACKEND_JAR" ]] || {
   echo "Backend executable JAR was not produced." >&2
   exit 1

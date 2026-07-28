@@ -25,7 +25,9 @@ git submodule update --init --recursive
 
 ```bash
 export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
-SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+./mvnw -pl datastoria-boot -am package -DskipTests
+SPRING_PROFILES_ACTIVE=local \
+  java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
 默认地址：

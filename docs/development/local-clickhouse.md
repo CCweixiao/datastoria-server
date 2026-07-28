@@ -192,7 +192,8 @@ java -version
 
 ```bash
 cd ~/OpenProjects/datastoria-server
-SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=local \
+  java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
 或者在 IntelliJ 的 Run Configuration 中设置：

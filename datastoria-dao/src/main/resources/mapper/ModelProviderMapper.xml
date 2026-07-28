@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ModelProviderMapper">
+
+  <insert id="insertProvider" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ModelProviderEntity">
+    INSERT INTO ds_model_provider (id, tenant_id, provider_key, display_name,
+        base_url, auth_type, enabled, config_json, secret_id, revision,
+        created_by, updated_by, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{providerKey}, #{displayName}, #{baseUrl},
+        #{authType}, #{enabled}, #{configJson}, #{secretId}, #{revision},
+        #{createdBy}, #{updatedBy}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateProviderCas">
+    UPDATE ds_model_provider
+    SET display_name = #{entity.displayName},
+        base_url = #{entity.baseUrl},
+        auth_type = #{entity.authType},
+        enabled = #{entity.enabled},
+        config_json = #{entity.configJson},
+        updated_by = #{entity.updatedBy},
+        updated_at = #{entity.updatedAt},
+        revision = revision + 1
+    WHERE id = #{entity.id}
+      AND tenant_id = #{entity.tenantId}
+      AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="softDeleteProvider">
+    UPDATE ds_model_provider
+    SET deleted_at = #{now}
+    WHERE id = #{id}
+      AND tenant_id = #{tenantId}
+      AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+
+  <!-- Privileged credential rotation: no revision bump, no optimistic-lock guard (mirrors JDBC). -->
+  <update id="updateSecretId">
+    UPDATE ds_model_provider
+    SET secret_id = #{secretId}, updated_at = #{now}
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND deleted_at IS NULL
+  </update>
+</mapper>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ChatMessageMapper">
+
+  <insert id="insertMessage" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ChatMessageEntity">
+    INSERT INTO ds_chat_message (id, tenant_id, session_id, user_id, role, parts_json,
+        metadata_json, sequence, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{sessionId}, #{userId}, #{role}, #{partsJson},
+        #{metadataJson}, #{sequence}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateMessage" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ChatMessageEntity">
+    UPDATE ds_chat_message
+    SET role = #{role},
+        parts_json = #{partsJson},
+        metadata_json = #{metadataJson},
+        sequence = #{sequence},
+        updated_at = #{updatedAt}
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND id = #{id}
+  </update>
+</mapper>

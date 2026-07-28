@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: datastoria-server
+  sql:
+    init:
+      # Flyway is the only runtime schema owner. db/schema/** files are manual deployment
+      # snapshots and must never be auto-executed alongside migrations.
+      mode: never
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: DataStoria Server
+    description: Spring Boot backend for DataStoria
+
+# A Spring profile must always be active to wire the datasource:
+#   local  -> SQLite file (./data/datastoria.db)
+#   test   -> SQLite in-memory
+#   prod   -> MySQL (fail-fast on missing env vars)
+# Running without a profile intentionally has no datasource.
+
+# MyBatis-Plus configuration shared by every datasource profile. SQLite and MySQL load the
+# SAME mapper XML, type handlers and camelCase mapping; only the datasource (Flyway location +
+# JDBC driver) changes per profile. No global TenantLine/LogicDelete/OptimisticLocker plugins
+# are enabled here: tenant_id, deleted_at and revision semantics are implemented explicitly
+# by the repository adapters and custom mapper XML.
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-handlers-package: io.github.ccweixiao.datastoria.dao.persistence.typehandler
+  configuration:
+    map-underscore-to-camel-case: true

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.AgentRunMapper">
+
+  <resultMap id="RunMap" type="io.github.ccweixiao.datastoria.dao.persistence.entity.AgentRunEntity" autoMapping="true"/>
+
+  <insert id="insertRun" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.AgentRunEntity">
+    INSERT INTO ds_agent_run (id, tenant_id, user_id, session_id, message_id, agent_revision_id,
+        model_id, status, idempotency_key, request_id, connection_id, input_snapshot_json,
+        usage_json, error_code, safe_message, revision, started_at, finished_at,
+        created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{agentRevisionId},
+        #{modelId}, #{status}, #{idempotencyKey}, #{requestId}, #{connectionId}, #{inputSnapshotJson},
+        #{usageJson}, #{errorCode}, #{safeMessage}, #{revision}, #{startedAt}, #{finishedAt},
+        #{createdAt}, #{updatedAt})
+  </insert>
+
+  <select id="findByTenantAndId" resultMap="RunMap">
+    SELECT * FROM ds_agent_run WHERE id = #{id} AND tenant_id = #{tenantId}
+  </select>
+
+  <select id="findByIdempotencyKey" resultMap="RunMap">
+    SELECT * FROM ds_agent_run
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND idempotency_key = #{idempotencyKey}
+  </select>
+
+  <select id="findBySession" resultMap="RunMap">
+    SELECT * FROM ds_agent_run
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId}
+    ORDER BY created_at ASC, id ASC
+  </select>
+
+  <!-- Internal observer path: resolves the tenant by globally-unique ULID (applyCancellation). -->
+  <select id="findByIdInternal" resultMap="RunMap">
+    SELECT * FROM ds_agent_run WHERE id = #{id}
+  </select>
+
+  <update id="transition">
+    UPDATE ds_agent_run
+    <set>
+      status = #{to},
+      revision = revision + 1,
+      updated_at = #{now},
+      <if test="payload.startedAt != null">started_at = #{payload.startedAt},</if>
+      <if test="payload.finishedAt != null">finished_at = #{payload.finishedAt},</if>
+      <if test="payload.errorCode != null">error_code = #{payload.errorCode},</if>
+      <if test="payload.safeMessage != null">safe_message = #{payload.safeMessage},</if>
+      <if test="payload.usageJson != null">usage_json = #{payload.usageJson},</if>
+    </set>
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND revision = #{expectedRevision}
+  </update>
+</mapper>

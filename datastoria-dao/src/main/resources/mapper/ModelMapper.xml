@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ModelMapper">
+
+  <!-- active_key is a GENERATED ALWAYS AS column: never appear in INSERT/UPDATE column lists. -->
+  <insert id="insertModel" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ModelEntity">
+    INSERT INTO ds_model (id, tenant_id, provider_id, model_key, display_name,
+        description, source, enabled, is_free, capabilities_json,
+        generation_defaults_json, secret_id, revision, created_at, updated_at)
+    VALUES (#{id}, #{tenantId}, #{providerId}, #{modelKey}, #{displayName},
+        #{description}, #{source}, #{enabled}, #{isFree}, #{capabilitiesJson},
+        #{generationDefaultsJson}, #{secretId}, #{revision}, #{createdAt}, #{updatedAt})
+  </insert>
+
+  <update id="updateModelCas">
+    UPDATE ds_model
+    SET display_name = #{entity.displayName},
+        description = #{entity.description},
+        source = #{entity.source},
+        enabled = #{entity.enabled},
+        is_free = #{entity.isFree},
+        capabilities_json = #{entity.capabilitiesJson},
+        generation_defaults_json = #{entity.generationDefaultsJson},
+        secret_id = #{entity.secretId},
+        updated_at = #{entity.updatedAt},
+        revision = revision + 1
+    WHERE id = #{entity.id}
+      AND tenant_id = #{entity.tenantId}
+      AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="softDeleteModel">
+    UPDATE ds_model
+    SET deleted_at = #{now}
+    WHERE id = #{id}
+      AND tenant_id = #{tenantId}
+      AND revision = #{expectedRevision}
+      AND deleted_at IS NULL
+  </update>
+</mapper>

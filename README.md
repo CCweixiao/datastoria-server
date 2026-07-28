@@ -4,11 +4,15 @@ DataStoria 是面向 ClickHouse 的开源智能数据工作台。它把连接管
 AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与数据库管理员可以从“发现问题”连续
 走到“验证结论”。
 
-项目采用单仓库：
+项目采用单仓库和 Maven 多模块结构：
 
+- `datastoria-common/`：共享领域对象、DTO、身份、错误和通用配置；
+- `datastoria-dao/`：Repository 契约、MyBatis-Plus Mapper/Entity 与数据库迁移；
+- `datastoria-service/`：业务服务和外部服务访问；
+- `datastoria-agent/`：AgentScope、Agent 用例、Tool 与 Skill；
+- `datastoria-controller/`：Spring WebFlux HTTP/SSE Controller；
+- `datastoria-boot/`：Spring Boot 入口、环境配置与测试；
 - `frontend/`：Next.js 管理平台；
-- `src/main/java/`：Spring Boot WebFlux API 与 Agent 运行时；
-- `src/main/resources/db/migration/`：SQLite/MySQL Flyway 迁移；
 - `bin/`、`deploy/`：统一安装包、初始化和进程管理；
 - `docs/`：产品、架构、开发、部署和操作文档。
 
@@ -30,7 +34,9 @@ AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与�
 git submodule update --init --recursive
 
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+./mvnw -pl datastoria-boot -am package -DskipTests
+SPRING_PROFILES_ACTIVE=local \
+  java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
 另开终端：

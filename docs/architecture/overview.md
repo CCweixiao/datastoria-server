@@ -23,14 +23,19 @@ Route Handler 转发到内部 Java 地址；前后端分离部署时，构建阶
 
 ## 后端分层
 
-| 层 | 主要包 | 职责 |
+| Maven 模块 | 根包 | 职责 |
 |---|---|---|
-| API | `api`, `api.admin`, `api.compat`, `api.user` | HTTP/SSE、DTO 校验、身份边界与错误映射 |
-| 应用服务 | `service`, `agent.application` | 用例编排、事务/状态机、Agent Run 生命周期 |
-| 领域 | `domain`, `agent.domain` | 会话、连接、模型、Run、Checkpoint 等业务状态 |
-| Agent 运行时 | `agent.runtime`, `skill` | AgentScope、Tool、Skill、模型适配、事件与恢复 |
-| 持久化 | `persistence.*`, `repository` | MyBatis-Plus Mapper、Repository、类型处理 |
-| 基础设施 | `config`, `crypto`, `identity` | Profile、认证授权、加密、线程与外部客户端 |
+| `datastoria-common` | `io.github.ccweixiao.datastoria.common` | 共享领域对象、DTO、身份、错误、加密与通用配置 |
+| `datastoria-dao` | `io.github.ccweixiao.datastoria.dao` | Repository 契约、MyBatis-Plus Mapper/Entity、Migration |
+| `datastoria-service` | `io.github.ccweixiao.datastoria.service` | 业务用例、事务边界和外部服务访问 |
+| `datastoria-agent` | `io.github.ccweixiao.datastoria.agent` | AgentScope、Run 生命周期、Tool、Skill 与恢复 |
+| `datastoria-controller` | `io.github.ccweixiao.datastoria.controller` | HTTP/SSE、请求校验、身份边界与错误映射 |
+| `datastoria-boot` | `io.github.ccweixiao.datastoria.boot` | Spring Boot 入口、Profile 和基础设施装配 |
+
+模块层级由低到高为 `common → dao → service → agent → controller → boot`，实际依赖箭头
+始终从右向左。上层可以组合多个下层模块，但下层模块不能引用 Controller 或 Boot。只有
+`datastoria-boot` 生成可执行
+Spring Boot JAR，其余模块生成普通依赖 JAR。
 
 Controller 不直接拼装 SQL 持久化语句；Repository 通过同一套 Mapper XML 访问 SQLite 或 MySQL。
 双方言的结构变化保持相同 Flyway 版本号。

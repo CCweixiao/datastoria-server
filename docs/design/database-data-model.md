@@ -15,7 +15,7 @@
 ### 2.1 脚本目录
 
 ```text
-src/main/resources/db/migration/
+datastoria-dao/src/main/resources/db/migration/
 ├── sqlite/
 │   ├── V1__identity_config_and_audit.sql
 │   ├── V2__model_provider_and_secret.sql

@@ -27,7 +27,7 @@ AgentController (HTTP/SSE)
 包建议：
 
 ```text
-io.datastoria.server.agent
+io.github.ccweixiao.datastoria.agent
 ├── api
 ├── application
 ├── domain
