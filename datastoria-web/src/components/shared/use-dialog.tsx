@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface DialogButton {
   text?: string;
@@ -63,6 +63,8 @@ interface InternalDialogProps extends DialogProps {
 const AlertDialogComponent = (dialogProps: InternalDialogProps) => {
   const [open, setOpen] = useState(true);
   const closeFnRef = useRef<(() => void) | null>(null);
+  const accessibleTitle = dialogProps.title?.trim() || "Dialog";
+  const hideTitle = dialogProps.visuallyHiddenTitle || !dialogProps.title?.trim();
 
   // Register the close function with the parent
   useEffect(() => {
@@ -134,15 +136,22 @@ const AlertDialogComponent = (dialogProps: InternalDialogProps) => {
       >
         {(dialogProps.title || dialogProps.description) && (
           <DialogHeader>
-            {dialogProps.visuallyHiddenTitle ? (
+            {hideTitle ? (
               <VisuallyHidden asChild>
-                <DialogTitle>{dialogProps.title}</DialogTitle>
+                <DialogTitle>{accessibleTitle}</DialogTitle>
               </VisuallyHidden>
             ) : (
-              <DialogTitle>{dialogProps.title}</DialogTitle>
+              <DialogTitle>{accessibleTitle}</DialogTitle>
             )}
-            <DialogDescription>{dialogProps.description}</DialogDescription>
+            {dialogProps.description && (
+              <DialogDescription>{dialogProps.description}</DialogDescription>
+            )}
           </DialogHeader>
+        )}
+        {!dialogProps.title && !dialogProps.description && (
+          <VisuallyHidden asChild>
+            <DialogTitle>{accessibleTitle}</DialogTitle>
+          </VisuallyHidden>
         )}
         <div
           className={cn(
@@ -204,8 +213,13 @@ const AlertDialogComponent = (dialogProps: InternalDialogProps) => {
   );
 };
 
-// Module-level handler for the static method
-let showDialogFn: ((props: DialogProps) => void) | undefined;
+type ShowDialogFn = (props: DialogProps) => void;
+
+// A Set supports the feedback page and AppShell owning independent providers without one
+// provider's cleanup unregistering another. Calls made during hydration/HMR before a provider's
+// layout effect runs are queued instead of being dropped.
+const showDialogFns = new Set<ShowDialogFn>();
+const pendingDialogs: DialogProps[] = [];
 
 /**
  * A provider that renders dialogs within the main React component tree.
@@ -221,16 +235,28 @@ let showDialogFn: ((props: DialogProps) => void) | undefined;
 export function DialogProvider() {
   const [dialogs, setDialogs] = useState<Array<DialogProps & { id: string }>>([]);
 
-  useEffect(() => {
-    showDialogFn = (props: DialogProps) => {
-      const id = Math.random().toString(36).substring(7);
-      setDialogs((prev) => [...prev, { ...props, id }]);
-    };
+  const showDialog = useCallback((props: DialogProps) => {
+    setDialogs((prev) => [
+      ...prev,
+      {
+        ...props,
+        id: Math.random().toString(36).substring(7),
+      },
+    ]);
+  }, []);
+
+  useLayoutEffect(() => {
+    showDialogFns.add(showDialog);
+
+    if (pendingDialogs.length > 0) {
+      const queued = pendingDialogs.splice(0);
+      queued.forEach(showDialog);
+    }
 
     return () => {
-      showDialogFn = undefined;
+      showDialogFns.delete(showDialog);
     };
-  }, []);
+  }, [showDialog]);
 
   const handleDispose = (id: string) => {
     setDialogs((prev) => prev.filter((d) => d.id !== id));
@@ -315,10 +341,13 @@ export class Dialog {
   }
 
   public static showDialog(dialogProps: DialogProps) {
-    if (showDialogFn) {
-      showDialogFn(dialogProps);
-    } else {
-      console.error("DialogProvider is not mounted. Cannot show dialog.");
+    const providers = Array.from(showDialogFns);
+    const showDialog = providers.at(-1);
+    if (showDialog) {
+      showDialog(dialogProps);
+      return;
     }
+
+    pendingDialogs.push(dialogProps);
   }
 }

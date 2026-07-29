@@ -64,7 +64,7 @@ SELECT
     database,
     name,
     engine,
-    ${connection.metadata.has_format_query_function ? "formatQuery(create_table_query)" : "create_table_query"} AS tableQuery,
+    create_table_query AS tableQuery,
     dependencies_database AS dependenciesDatabase,
     dependencies_table AS dependenciesTable,
     metadata_modification_time AS metadataModificationTime
@@ -89,10 +89,11 @@ FROM system.tables
 
           if (tables && tables.length > 0) {
             for (const t of tables) {
-              // Format query if formatQuery function is not available
-              const formattedQuery = connection.metadata.has_format_query_function
-                ? t.tableQuery
-                : SqlUtils.prettyFormatQuery(t.tableQuery);
+              // Do not call ClickHouse formatQuery() here. system.tables can contain generated
+              // DDL larger than max_query_size (notably for some system tables), causing the
+              // entire dependency query to fail. Client-side formatting is best-effort and
+              // preserves the original DDL when the formatter cannot parse it.
+              const formattedQuery = SqlUtils.prettyFormatQuery(t.tableQuery);
               const tableInfo: DependencyTableInfo = {
                 id: t.id,
                 uuid: t.uuid,

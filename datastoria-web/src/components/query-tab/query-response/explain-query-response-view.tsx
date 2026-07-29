@@ -734,7 +734,7 @@ SELECT
   database,
   name,
   engine,
-  ${connection.metadata.has_format_query_function ? "formatQuery(create_table_query)" : "create_table_query"} AS tableQuery,
+  create_table_query AS tableQuery,
   metadata_modification_time AS metadataModificationTime
 FROM system.tables
 WHERE database = '${escapedDatabase}' AND name = '${escapedTable}'
@@ -762,7 +762,10 @@ LIMIT 1
           setFetchError("Table metadata was not found in system.tables.");
           return;
         }
-        setFetchedTableNode(nextTableNode);
+        setFetchedTableNode({
+          ...nextTableNode,
+          tableQuery: SqlUtils.prettyFormatQuery(nextTableNode.tableQuery),
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {

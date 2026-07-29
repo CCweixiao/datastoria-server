@@ -87,6 +87,7 @@ DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
 - [文档中心](docs/README.md)
 - [产品愿景](docs/product/vision.md)
 - [系统架构](docs/architecture/overview.md)
+- [AgentScope Java AI Agent 架构](docs/architecture/agent-runtime.md)
 - [功能模块](docs/product/modules.md)
 - [开发与调试](docs/development/getting-started.md)
 - [datastoria-web 开发与调试](docs/development/datastoria-web.md)

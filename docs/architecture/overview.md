@@ -1,5 +1,8 @@
 # 系统架构
 
+本文描述整个 DataStoria 系统的顶层结构。Java AI Agent 的运行、Tool、Skill、Checkpoint、
+HITL 和 SSE 实现详见 [AgentScope Java AI Agent 架构](agent-runtime.md)。
+
 ## 总览
 
 ```mermaid
@@ -23,14 +26,14 @@ Route Handler 转发到内部 Java 地址；前后端分离部署时，构建阶
 
 ## 后端分层
 
-| Maven 模块 | 根包 | 职责 |
-|---|---|---|
-| `datastoria-common` | `io.github.ccweixiao.datastoria.common` | 共享领域对象、DTO、身份、错误、加密与通用配置 |
-| `datastoria-dao` | `io.github.ccweixiao.datastoria.dao` | Repository 契约、MyBatis-Plus Mapper/Entity、Migration |
-| `datastoria-service` | `io.github.ccweixiao.datastoria.service` | 业务用例、事务边界和外部服务访问 |
-| `datastoria-agent` | `io.github.ccweixiao.datastoria.agent` | AgentScope、Run 生命周期、Tool、Skill 与恢复 |
-| `datastoria-controller` | `io.github.ccweixiao.datastoria.controller` | HTTP/SSE、请求校验、身份边界与错误映射 |
-| `datastoria-boot` | `io.github.ccweixiao.datastoria.boot` | Spring Boot 入口、Profile 和基础设施装配 |
+| Maven 模块              | 根包                                        | 职责                                                   |
+| ----------------------- | ------------------------------------------- | ------------------------------------------------------ |
+| `datastoria-common`     | `io.github.ccweixiao.datastoria.common`     | 共享领域对象、DTO、身份、错误、加密与通用配置          |
+| `datastoria-dao`        | `io.github.ccweixiao.datastoria.dao`        | Repository 契约、MyBatis-Plus Mapper/Entity、Migration |
+| `datastoria-service`    | `io.github.ccweixiao.datastoria.service`    | 业务用例、事务边界和外部服务访问                       |
+| `datastoria-agent`      | `io.github.ccweixiao.datastoria.agent`      | AgentScope、Run 生命周期、Tool、Skill 与恢复           |
+| `datastoria-controller` | `io.github.ccweixiao.datastoria.controller` | HTTP/SSE、请求校验、身份边界与错误映射                 |
+| `datastoria-boot`       | `io.github.ccweixiao.datastoria.boot`       | Spring Boot 入口、Profile 和基础设施装配               |
 
 模块层级由低到高为 `common → dao → service → agent → controller → boot`，实际依赖箭头
 始终从右向左。上层可以组合多个下层模块，但下层模块不能引用 Controller 或 Boot。只有
