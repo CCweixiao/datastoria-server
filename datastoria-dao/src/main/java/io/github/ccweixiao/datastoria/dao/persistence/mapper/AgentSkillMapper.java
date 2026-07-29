@@ -5,8 +5,6 @@ import java.util.List;
 
 import org.apache.ibatis.annotations.Param;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-
 import io.github.ccweixiao.datastoria.dao.persistence.entity.AgentSkillEntity;
 import io.github.ccweixiao.datastoria.dao.persistence.entity.AgentSkillResourceEntity;
 import io.github.ccweixiao.datastoria.dao.persistence.entity.SkillResourceEntity;
@@ -17,7 +15,7 @@ import io.github.ccweixiao.datastoria.dao.persistence.entity.SkillRevisionEntity
  * ds_skill_resource}, {@code ds_agent_skill_resource}). The visibility reads JOIN {@code
  * ds_skill_revision}; the save-bundle orchestration and checksum computation live in the adapter.
  */
-public interface AgentSkillMapper extends BaseMapper<AgentSkillEntity> {
+public interface AgentSkillMapper {
 
   List<AgentSkillEntity> findVisible(
       @Param("tenantId") String tenantId,

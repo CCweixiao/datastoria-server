@@ -32,7 +32,7 @@ public interface ChatSessionMapper extends BaseMapper<ChatSessionEntity> {
       @Param("title") String title,
       @Param("now") Instant now);
 
-  int delete(
+  int deleteOwned(
       @Param("id") String id, @Param("tenantId") String tenantId, @Param("userId") String userId);
 
   List<ChatSessionEntity> findAllByConnection(

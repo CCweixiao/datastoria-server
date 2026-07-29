@@ -5,12 +5,10 @@ import java.util.List;
 
 import org.apache.ibatis.annotations.Param;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-
 import io.github.ccweixiao.datastoria.dao.persistence.entity.UserStateEntity;
 
 /** Mapper for {@code ds_user_state}; the CAS/race-retry upsert lives in the adapter. */
-public interface UserStateMapper extends BaseMapper<UserStateEntity> {
+public interface UserStateMapper {
 
   List<UserStateEntity> findAll(
       @Param("tenantId") String tenantId,

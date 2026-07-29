@@ -77,7 +77,7 @@ public class MyBatisChatSessionRepository implements ChatSessionRepository {
 
   @Override
   public void delete(String id, String tenantId, String userId) {
-    int affected = mapper.delete(id, tenantId, userId);
+    int affected = mapper.deleteOwned(id, tenantId, userId);
     if (affected == 0) {
       throw new NotFoundException("ChatSession", id);
     }

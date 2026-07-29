@@ -38,7 +38,7 @@
     WHERE id = #{id} AND tenant_id = #{tenantId} AND user_id = #{userId}
   </update>
 
-  <delete id="delete">
+  <delete id="deleteOwned">
     DELETE FROM ds_chat_session
     WHERE id = #{id} AND tenant_id = #{tenantId} AND user_id = #{userId}
   </delete>
