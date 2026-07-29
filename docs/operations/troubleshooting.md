@@ -7,7 +7,7 @@
 前端依赖未完整安装：
 
 ```bash
-cd frontend
+cd datastoria-web
 npm install
 npm run dev
 ```
@@ -18,8 +18,8 @@ npm run dev
 
 ```bash
 git submodule update --init --recursive
-rm -rf frontend/.next
-cd frontend && npm run typecheck
+rm -rf datastoria-web/.next
+cd datastoria-web && npm run typecheck
 ```
 
 ### macOS Netty DNS native library警告

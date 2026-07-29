@@ -9,7 +9,7 @@ From the repository root, start Java with the `local` profile. Then:
 
 ```bash
 git submodule update --init --recursive
-cd frontend
+cd datastoria-web
 npm install
 NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \

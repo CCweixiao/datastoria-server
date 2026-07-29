@@ -1,5 +1,5 @@
 # Browser-to-Spring operations used by the migrated frontend.
-# Keep this list in sync with frontend/src whenever a backend call is added or removed.
+# Keep this list in sync with datastoria-web/src whenever a backend call is added or removed.
 operations:
   - { method: GET, path: /api/code/files, callSite: app/code-viewer/page.tsx }
   - { method: GET, path: /api/code/file, callSite: app/code-viewer/page.tsx }

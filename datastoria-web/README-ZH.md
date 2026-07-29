@@ -1,7 +1,8 @@
 # DataStoria 前端开发
 
-`frontend/` 是 DataStoria 的 Next.js 16 + React 19 管理平台。连接、凭据、模型、会话和 Agent
-Run 均由 Spring Boot 服务端管理，前端不能作为独立后端运行。
+`datastoria-web/` 是 DataStoria 的 Next.js 16 + React 19 管理平台，也是 Maven reactor 中独立的
+前端构建模块。连接、凭据、模型、会话和 Agent Run 均由 Spring Boot 服务端管理，前端不能作为
+独立后端运行。
 
 ## 启动
 
@@ -9,7 +10,7 @@ Run 均由 Spring Boot 服务端管理，前端不能作为独立后端运行。
 
 ```bash
 git submodule update --init --recursive
-cd frontend
+cd datastoria-web
 npm install
 NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
@@ -18,6 +19,12 @@ npm run dev
 ```
 
 访问 `http://localhost:3000`。
+
+也可以在仓库根目录通过 Maven 启动前端开发服务器：
+
+```bash
+./mvnw -pl datastoria-web -Pweb-dev generate-resources
+```
 
 ## 验证
 

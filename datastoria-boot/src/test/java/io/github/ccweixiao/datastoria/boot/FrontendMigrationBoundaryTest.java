@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 class FrontendMigrationBoundaryTest {
 
-  private static final Path FRONTEND = Path.of("frontend");
+  private static final Path FRONTEND = Path.of("datastoria-web");
   private static final Set<String> FORBIDDEN_NODE_BACKEND_DEPENDENCIES =
       Set.of(
           "@ai-sdk/anthropic",

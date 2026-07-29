@@ -30,7 +30,7 @@
 ```bash
 rg -n --hidden \
   '(sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+[A-Za-z0-9._-]+|api[_-]?key[[:space:]]*[:=][[:space:]]*[^<${[:space:]]+)' \
-  --glob '!data/**' --glob '!target/**' --glob '!frontend/.next/**' .
+  --glob '!data/**' --glob '!target/**' --glob '!datastoria-web/.next/**' .
 ```
 
 命中示例、fixture 或正则本身需要人工判断；任何真实值都必须先撤销/轮换，再清理 Git 历史。

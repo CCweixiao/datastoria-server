@@ -1,7 +1,7 @@
 # 本地 ClickHouse 安装与 DataStoria 联调（无容器）
 
 本文用于在开发机上以原生进程运行 ClickHouse，并接入本地
-`datastoria-server` 与 `frontend`。不使用 Docker，不修改 DataStoria 的数据库结构。
+`datastoria-server` 与 `datastoria-web`。不使用 Docker，不修改 DataStoria 的数据库结构。
 
 推荐优先使用仓库自带的 macOS 隔离脚本。它把 ClickHouse 二进制、配置、数据、日志和 PID
 全部放在 gitignored 的 `.local/clickhouse/`，不会写 `/etc`、`/var/lib` 等系统目录。
@@ -220,7 +220,7 @@ AES-256-GCM 加密后保存；连接列表接口不会把密码返回浏览器�
 首次运行先安装依赖：
 
 ```bash
-cd ~/OpenProjects/datastoria-server/frontend
+cd ~/OpenProjects/datastoria-server/datastoria-web
 npm install
 ```
 

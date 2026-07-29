@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * Parsed body of {@code POST /api/ai/agent} (Node A01 compatible, {@code validateRemoteChatRequest}
- * in {@code frontend/src/lib/ai/session/remote-chat-request.ts}). Sub-objects with open shape
+ * in {@code datastoria-web/src/lib/ai/session/remote-chat-request.ts}). Sub-objects with open shape
  * ({@code message}, {@code model}, {@code agentContext}) are kept as {@link JsonNode} so unknown
  * parts are preserved without a closed schema.
  *

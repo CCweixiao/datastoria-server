@@ -69,7 +69,7 @@ class RestApiInventoryParityTest {
             .map(Operation::path)
             .map(path -> path.split("\\{", 2)[0])
             .collect(java.util.stream.Collectors.toSet());
-    try (Stream<Path> files = Files.walk(Path.of("frontend/src"))) {
+    try (Stream<Path> files = Files.walk(Path.of("datastoria-web/src"))) {
       for (Path file :
           files
               .filter(Files::isRegularFile)
@@ -137,7 +137,7 @@ class RestApiInventoryParityTest {
     Set<Operation> operations = new HashSet<>();
     for (Map<String, Object> item : (Iterable<Map<String, Object>>) document.get("operations")) {
       String path = String.valueOf(item.get("path"));
-      Path callSite = Path.of("frontend/src").resolve(String.valueOf(item.get("callSite")));
+      Path callSite = Path.of("datastoria-web/src").resolve(String.valueOf(item.get("callSite")));
       assertThat(callSite).isRegularFile();
       String staticPathPrefix = path.split("\\{", 2)[0];
       assertThat(Files.readString(callSite))

@@ -22,7 +22,7 @@ STAGE_DIR="$DIST_DIR/$PACKAGE_NAME"
 ARCHIVE="$DIST_DIR/$PACKAGE_NAME.tar.gz"
 PUBLIC_API_BASE="${NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL:-/backend}"
 
-for command in java node npm tar; do
+for command in java node npm pnpm tar; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "Required command not found: $command" >&2
     exit 1
@@ -35,26 +35,17 @@ if [[ "$JAVA_MAJOR" != "17" ]]; then
   exit 1
 fi
 
-echo "Building Java backend..."
-"$PROJECT_DIR/mvnw" -B -ntp -f "$PROJECT_DIR/pom.xml" clean package
-
-echo "Building Next.js standalone frontend (API base: $PUBLIC_API_BASE)..."
-if [[ ! -f "$PROJECT_DIR/frontend/external/number-flow/package.json" ]]; then
+if [[ ! -f "$PROJECT_DIR/datastoria-web/external/number-flow/package.json" ]]; then
   command -v git >/dev/null 2>&1 || {
     echo "Frontend submodules are missing and git is unavailable." >&2
     exit 1
   }
   git -C "$PROJECT_DIR" submodule update --init --recursive
 fi
-(
-  cd "$PROJECT_DIR/frontend"
-  if [[ ! -d node_modules ]]; then
-    npm ci
-  fi
-  NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
-    NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL="$PUBLIC_API_BASE" \
-    npm run build
-)
+
+echo "Building backend and datastoria-web (API base: $PUBLIC_API_BASE)..."
+"$PROJECT_DIR/mvnw" -B -ntp -f "$PROJECT_DIR/pom.xml" clean package \
+  -Ddatastoria.web.api-base-url="$PUBLIC_API_BASE"
 
 BACKEND_JAR="$(
   find "$PROJECT_DIR/datastoria-boot/target" -maxdepth 1 -type f \
@@ -64,18 +55,21 @@ BACKEND_JAR="$(
   echo "Backend executable JAR was not produced." >&2
   exit 1
 }
+WEB_ARCHIVE="$(
+  find "$PROJECT_DIR/datastoria-web/target" -maxdepth 1 -type f \
+    -name 'datastoria-web-*-standalone.tar.gz' | head -1
+)"
+[[ -n "$WEB_ARCHIVE" ]] || {
+  echo "Frontend standalone archive was not produced." >&2
+  exit 1
+}
 
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/app/backend" "$STAGE_DIR/app/frontend" "$STAGE_DIR/bin" \
   "$STAGE_DIR/conf" "$STAGE_DIR/data" "$STAGE_DIR/logs" "$STAGE_DIR/run"
 
 cp "$BACKEND_JAR" "$STAGE_DIR/app/backend/datastoria-server.jar"
-cp -R "$PROJECT_DIR/frontend/.next/standalone/." "$STAGE_DIR/app/frontend/"
-mkdir -p "$STAGE_DIR/app/frontend/.next"
-cp -R "$PROJECT_DIR/frontend/.next/static" "$STAGE_DIR/app/frontend/.next/static"
-if [[ -d "$PROJECT_DIR/frontend/public" ]]; then
-  cp -R "$PROJECT_DIR/frontend/public" "$STAGE_DIR/app/frontend/public"
-fi
+tar -C "$STAGE_DIR/app/frontend" -xzf "$WEB_ARCHIVE"
 cp "$PROJECT_DIR/bin/datastoria.sh" "$STAGE_DIR/bin/datastoria"
 cp "$PROJECT_DIR/deploy/conf/datastoria.env.example" "$STAGE_DIR/conf/datastoria.env.example"
 cp "$PROJECT_DIR/deploy/conf/application-local.yaml" "$STAGE_DIR/conf/application-local.yaml"

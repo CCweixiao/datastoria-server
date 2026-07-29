@@ -6,7 +6,7 @@
 |---|---|
 | JDK | 17 |
 | Node.js | 22（最低 20） |
-| npm | 与 `frontend/package-lock.json` 兼容 |
+| npm | 与 `datastoria-web/package-lock.json` 兼容 |
 | Git | 支持 submodule |
 | ClickHouse | 可选；真实查询联调需要 |
 
@@ -52,7 +52,7 @@ IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `local`，环境�
 ## 前端
 
 ```bash
-cd frontend
+cd datastoria-web
 npm install
 NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
@@ -84,7 +84,7 @@ curl -fsS http://127.0.0.1:18123/ping
 
 - Network 中确认 `/api/**` 最终到 `8080` 或 `/backend/**`；
 - SSE 请求查看 `Last-Event-ID`、响应头和事件序号；
-- `.next` 缓存异常时先停止进程，再删除 `frontend/.next` 后重启；
+- `.next` 缓存异常时先停止进程，再删除 `datastoria-web/.next` 后重启；
 - `concurrently: command not found` 表示依赖未完整安装，执行 `npm install`。
 
 ### 后端
@@ -100,7 +100,7 @@ curl -fsS http://127.0.0.1:18123/ping
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw spotless:check test
 
-cd frontend
+cd datastoria-web
 npm run format:check
 npm run typecheck
 npm run lint

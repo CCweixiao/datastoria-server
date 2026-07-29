@@ -12,7 +12,7 @@ AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与�
 - `datastoria-agent/`：AgentScope、Agent 用例、Tool 与 Skill；
 - `datastoria-controller/`：Spring WebFlux HTTP/SSE Controller；
 - `datastoria-boot/`：Spring Boot 入口、环境配置与测试；
-- `frontend/`：Next.js 管理平台；
+- `datastoria-web/`：Next.js 管理平台及其 Maven 构建模块；
 - `bin/`、`deploy/`：统一安装包、初始化和进程管理；
 - `docs/`：产品、架构、开发、部署和操作文档。
 
@@ -42,7 +42,7 @@ SPRING_PROFILES_ACTIVE=local \
 另开终端：
 
 ```bash
-cd frontend
+cd datastoria-web
 npm install
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
 NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
@@ -58,12 +58,19 @@ npm run dev
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw spotless:check test
 
-cd frontend
+cd datastoria-web
 npm run format:check
 npm run typecheck
 npm run lint
 npm test -- --run
 npm run build
+```
+
+也可以在仓库根目录通过 Maven 构建或调试前端：
+
+```bash
+./mvnw -pl datastoria-web package
+./mvnw -pl datastoria-web -Pweb-dev generate-resources
 ```
 
 生成包含前后端和启动脚本的安装包：
