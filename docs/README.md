@@ -9,7 +9,7 @@
 |---|---|
 | 初次了解项目 | [产品愿景](product/vision.md) → [功能模块](product/modules.md) |
 | 架构师/后端开发 | [系统架构](architecture/overview.md) → [数据模型](design/database-data-model.md) → [HTTP API](api/http-api.md) |
-| 前端开发 | [开发与调试](development/getting-started.md) → [流式协议](api/stream-protocol.md) |
+| 前端开发 | [datastoria-web 开发与调试](development/datastoria-web.md) → [流式协议](api/stream-protocol.md) |
 | 运维/SRE | [生产部署](deployment/production.md) → [统一安装包](deployment/unified-package.md) → [故障排查](operations/troubleshooting.md) |
 | 管理员/使用者 | [管理平台操作手册](manual/admin-console.md) |
 | 安全审计 | [密钥与敏感信息](security/secrets.md) → [ADR](adr/) |

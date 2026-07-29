@@ -26,6 +26,9 @@ npm run dev
 ./mvnw -pl datastoria-web -Pweb-dev generate-resources
 ```
 
+环境变量、端口覆盖、浏览器/IDE 断点、定向测试和常见故障见
+[datastoria-web 开发与调试](../docs/development/datastoria-web.md)。
+
 ## 验证
 
 ```bash

@@ -51,9 +51,12 @@ IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `local`，环境�
 
 ## 前端
 
+完整的前端开发方式、Maven Profile、浏览器断点和故障处理见
+[datastoria-web 开发与调试](datastoria-web.md)。
+
 ```bash
 cd datastoria-web
-npm install
+npm ci --force
 NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
 NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
@@ -85,7 +88,7 @@ curl -fsS http://127.0.0.1:18123/ping
 - Network 中确认 `/api/**` 最终到 `8080` 或 `/backend/**`；
 - SSE 请求查看 `Last-Event-ID`、响应头和事件序号；
 - `.next` 缓存异常时先停止进程，再删除 `datastoria-web/.next` 后重启；
-- `concurrently: command not found` 表示依赖未完整安装，执行 `npm install`。
+- `concurrently: command not found` 表示依赖未完整安装，执行 `npm ci --force`。
 
 ### 后端
 

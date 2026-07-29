@@ -43,7 +43,8 @@ SPRING_PROFILES_ACTIVE=local \
 
 ```bash
 cd datastoria-web
-npm install
+npm ci --force
+NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
 NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
 npm run dev
@@ -88,6 +89,7 @@ DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
 - [系统架构](docs/architecture/overview.md)
 - [功能模块](docs/product/modules.md)
 - [开发与调试](docs/development/getting-started.md)
+- [datastoria-web 开发与调试](docs/development/datastoria-web.md)
 - [生产部署](docs/deployment/production.md)
 - [管理平台操作手册](docs/manual/admin-console.md)
 - [安全与敏感信息](docs/security/secrets.md)
