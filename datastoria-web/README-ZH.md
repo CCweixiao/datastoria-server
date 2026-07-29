@@ -11,7 +11,7 @@
 ```bash
 git submodule update --init --recursive
 cd datastoria-web
-npm install
+npm ci --force
 NEXT_PUBLIC_DATASTORIA_SESSION_BACKEND=java \
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=http://127.0.0.1:8080 \
 NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
@@ -19,6 +19,11 @@ npm run dev
 ```
 
 访问 `http://localhost:3000`。
+
+`external/number-flow`、`external/vizlayer` 和 `external/cmdk` 是前端直接引用的 Git
+Submodule，不是可删除的构建目录。首次 clone、新建 worktree 或切换 Submodule 版本后必须执行
+上述初始化命令；日常启动无需重复执行。各包用途、状态检查和开发模式选择见
+[datastoria-web 开发与调试](../docs/development/datastoria-web.md)。
 
 也可以在仓库根目录通过 Maven 启动前端开发服务器：
 
