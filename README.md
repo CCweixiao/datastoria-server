@@ -91,6 +91,7 @@ DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
 - [功能模块](docs/product/modules.md)
 - [开发与调试](docs/development/getting-started.md)
 - [datastoria-web 开发与调试](docs/development/datastoria-web.md)
+- [HTTP API 文档](datastoria-web/docs/reference/api/index.md)
 - [生产部署](docs/deployment/production.md)
 - [管理平台操作手册](docs/manual/admin-console.md)
 - [安全与敏感信息](docs/security/secrets.md)

@@ -40,5 +40,6 @@ next-env.d.ts
 
 docs/.vitepress/cache/*
 docs/public/manual/*
+docs/public/api/*
 resources/skills/clickhouse/
 resources/skills/vizlayer/

@@ -396,11 +396,20 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Manual', link: '/manual/' },
+      { text: 'API', link: '/reference/api/' },
     ],
 
     // Left sidebar navigation (document tree)
     // Only '/manual/' is included - docs/dev/ and docs/plan/ are excluded
     sidebar: {
+      '/reference/api/': [
+        {
+          text: 'API Reference',
+          items: [
+            { text: 'HTTP API', link: '/reference/api/' },
+          ],
+        },
+      ],
       '/manual/': [
         {
           text: 'Getting Started',

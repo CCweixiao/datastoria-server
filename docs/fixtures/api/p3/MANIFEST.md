@@ -4,20 +4,14 @@ This directory freezes the wire-level HTTP contract for inventory items
 A03–A10 (chat sessions, messages, feedback, share). Each `.json` file is one
 self-contained scenario with a canonical request and expected response.
 
-These fixtures are the **source of truth** for both:
+These fixtures are the **source of truth** for the Java HTTP implementation. A
+Java `WebTestClient` test for each scenario must produce the documented status,
+headers, and response body after applying the scenario's explicitly documented
+opaque-field rules. The OpenAPI contract and frontend call inventory provide
+the corresponding route- and schema-level checks.
 
-1. **Node baseline capture** — running `tools/contract-runner/src/capture.js`
-   against the running Node server produces an actual capture JSON; the
-   fixture's `response.body` is compared to the actual capture body using
-   `tools/contract-runner/src/semantic-diff.js` plus the per-fixture
-   `semanticDiffIgnores` list.
-2. **Java implementation** — the Java `WebTestClient` test for the same
-   scenario must produce a response body that, after applying the same
-   semantic-diff ignore rules, matches the fixture.
-
-A scenario passes when **both** comparisons report `SEMANTIC MATCH`. Drift
-between Node and Java, or between either implementation and the fixture, is a
-release blocker for P3 sign-off.
+Drift between the Java implementation, OpenAPI document, frontend inventory,
+or fixture is a release blocker.
 
 ## Layout
 
@@ -55,12 +49,10 @@ docs/fixtures/api/p3/
 }
 ```
 
-The existing `semantic-diff.js` already ignores `createdAt`, `updatedAt`,
-`occurredAt` field values everywhere, and treats `id`, `messageId`,
-`toolCallId`, `sourceId`, `approvalId` as presence-only. The
-`semanticDiffIgnores` array is for **additional** scenario-specific opaque
-paths (e.g. `$.response.body.code` for the JWT share code, or
-`$.response.body.nextCursor` for the cursor string).
+The Java fixture assertions ignore volatile `createdAt`, `updatedAt`, and
+`occurredAt` values, and treat generated identifiers as presence-only where
+the scenario requires it. The `semanticDiffIgnores` array documents additional
+scenario-specific opaque paths, such as a signed share code or cursor.
 
 ## Coverage
 

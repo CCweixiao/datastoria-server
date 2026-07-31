@@ -7,7 +7,7 @@ JSON 对象，对应 SSE 帧 `data: {json}` 的 payload 部分（不含 `data: `
 
 这些 fixture 用于：
 1. 校验 Java `AiSdkDataStreamEncoder` 产出的事件序列结构正确。
-2. contract runner 的 semantic diff 基线。
+2. 通过 JSON Schema 校验每个事件样例的字段和类型。
 3. 文档化每个场景必须覆盖的事件类型。
 
 ## 文件清单
@@ -24,18 +24,14 @@ JSON 对象，对应 SSE 帧 `data: {json}` 的 payload 部分（不含 `data: `
 | `cancel.jsonl` | 取消/断线 | start → start-step → text-start → text-delta → abort |
 | `continuation.jsonl` | 续跑（continuation） | start → tool-output-available → text → finish |
 
-## 来源与捕获状态
+## 来源与维护方式
 
 - **当前状态**：基于 AI SDK v6 `uiMessageChunkSchema`（`ai@6.0.103`）手工构造的规范
   样本，用于冻结协议结构。
-- **真实捕获**：待具备受控 provider/mock 路由环境后，由 `tools/contract-runner`（见下）
-  对运行中的 Node 服务抓取原始 SSE 字节，脱敏后覆盖本目录。捕获时必须记录：
-  - AI SDK 版本（`node_modules/ai/package.json` version）
-  - 模型 provider 与 modelId
-  - 触发 prompt / 工具
-  - 捕获时间与脚本版本
+- **Java 实现**：Controller 和 Encoder 测试读取这些样例，校验事件类型、顺序和终止符。
+- **变更要求**：协议变更必须同步修改 Schema、fixture、Java 测试和公开文档。
 
-## semantic diff 规则（摘要）
+## 兼容性校验规则（摘要）
 
 完整规则见 `docs/api/stream-protocol.md` 第 6 节。要点：
 
@@ -48,9 +44,9 @@ JSON 对象，对应 SSE 帧 `data: {json}` 的 payload 部分（不含 `data: `
 ## 验证 fixture 自身有效性
 
 ```bash
-cd tools/contract-runner
-npm ci
-npm run validate-fixtures   # 用 ajv 校验每个 .jsonl 行符合 schema.json
+cd datastoria-web
+npm run docs:validate-fixtures
 ```
 
-CI 执行 `npm test`，同时校验 fixture 和 contract runner 的 parser/diff 行为。
+GitHub Pages 流水线执行 `npm run docs:check`，在发布前校验 fixture、OpenAPI 和 VitePress
+文档构建。

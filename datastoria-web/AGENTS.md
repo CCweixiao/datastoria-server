@@ -41,6 +41,7 @@ Use the existing root scripts unless there is a documented reason not to:
 - `npm run lint`: ESLint
 - `npm run test`: Vitest
 - `npm run docs:build`: documentation build
+- `npm run docs:check`: validate OpenAPI and fixtures, then build documentation
 
 Prefer targeted checks when possible, but do not invent alternate toolchains if the repository already provides a script.
 

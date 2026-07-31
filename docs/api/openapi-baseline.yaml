@@ -1,35 +1,31 @@
 openapi: 3.1.0
 info:
-  title: DataStoria Node API Baseline
+  title: DataStoria HTTP API
   version: 0.1.0
   description: |
-    Frozen snapshot of the existing DataStoria Next.js Node.js API surface,
-    captured from `/Users/jielongping/OpenProjects/datastoria` during phase P1
-    (contract freeze). This is the source of truth that the Java
-    `datastoria-server` must reproduce, one API at a time.
+    HTTP and streaming API exposed by the DataStoria Spring Boot backend.
+    This contract is validated against the Java controllers and the frontend
+    call inventory, and is published with the user documentation.
 
     Each operation carries these extensions:
       x-datastoria-id       Inventory ID (A01..A29).
       x-datastoria-status   active | alias | deprecated | frontend-only | stub
-      x-datastoria-target   Java migration target phase (P2..P11).
-      x-datastoria-auth     Auth model currently observed.
+      x-datastoria-target   Historical migration phase retained for traceability.
+      x-datastoria-auth     Authentication model for the operation.
 
-    Auth model (all routes): a proxy middleware (`src/proxy.ts`) resolves the
-    NextAuth session and injects `x-datastoria-user-email` on every proxied API
-    request. Server routes read it via `getAuthenticatedUserEmail(request)`.
-    When `ALLOW_ANONYMOUS_USER=false` the proxy rejects unauthenticated
-    requests before they reach the route handler.
-
-    Streaming routes (A01/A02) use AI SDK v6 UI Message Stream protocol emitted
+    Streaming routes use the AI SDK UI Message Stream protocol emitted
     over `text/event-stream`. See `docs/api/stream-protocol.md` and the fixture
     set under `docs/fixtures/stream/`.
 
   contact:
-    name: DataStoria Server migration
-    url: https://github.com/anthropics/datastoria-server
+    name: DataStoria
+    url: https://github.com/CCweixiao/datastoria-server
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
 servers:
   - url: /
-    description: Same-origin (Next.js default). Reverse proxy maps /api to Java later.
+    description: Spring Boot API base URL
 tags:
   - name: agent
     description: Streaming chat and agent run endpoints

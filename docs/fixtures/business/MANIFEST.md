@@ -4,7 +4,7 @@
 
 1. P3 起的 repository contract test（同一测试集分别跑在 SQLite 和 MySQL 上）。
 2. 旧数据导入校验：同一 JSONL 导入 SQLite 与 MySQL 后产生相同业务 checksum。
-3. P5 起 Skill catalog 的 Node/Java semantic diff。
+3. Skill catalog 的历史兼容性和导入测试。
 4. P6 起 ClickHouse 工具的 Golden Test。
 
 ## 设计原则
@@ -12,8 +12,8 @@
 - **方言无关**：fixture 只用 JSON/JSONL，不含任何 SQLite 或 MySQL 方言语法。
 - **可脱敏**：所有邮箱、token、ClickHouse 主机均为合成值（`example.test`、
   `placeholder`、`ds_test`），不含任何真实凭据。
-- **可对账**：导入后用 `tools/contract-runner` 计算业务 checksum（行数、
-  sequence、parts checksum），SQLite 与 MySQL 结果必须一致。
+- **可对账**：导入 SQLite 与 MySQL 后比较行数、sequence 和 parts checksum，结果必须
+  一致。
 
 ## 文件清单
 
@@ -32,8 +32,8 @@
 流程消费。HTTP wire-format 的请求/响应契约由 `docs/fixtures/api/p3/` 冻结，二者
 互补：
 
-- 本目录回答 "Java/Node 数据库最终存的内容是否一致"。
-- `docs/fixtures/api/p3/` 回答 "Java/Node 对同一 HTTP 请求返回的响应是否一致"。
+- 本目录回答“不同数据库方言最终存储的逻辑内容是否一致”。
+- `docs/fixtures/api/p3/` 回答“Java HTTP 实现是否符合冻结的请求与响应契约”。
 
 修改任一目录时，必须同步审视另一目录，并按 `docs/api/p3-openapi-extensions.yaml`
 的 OpenAPI 定义保持契约一致。

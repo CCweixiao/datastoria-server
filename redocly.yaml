@@ -2,12 +2,8 @@ extends:
   - recommended
 
 rules:
-  # The P1 baseline records the current non-standard, route-specific auth
-  # behavior in x-datastoria-auth. P2 introduces standard Spring Security
-  # schemes and operation-level security declarations.
+  # Authentication is currently documented by the route-specific
+  # x-datastoria-auth extension rather than OpenAPI security schemes.
   security-defined: off
-  # A baseline must reflect routes that currently have no documented 4xx
-  # response instead of inventing behavior.
+  # Some compatibility routes intentionally retain their legacy response set.
   operation-4xx-response: off
-  # Internal migration contract, not a public API product document.
-  info-license: off

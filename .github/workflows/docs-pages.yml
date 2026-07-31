@@ -5,9 +5,12 @@ on:
         branches: [master]
         paths:
             - "datastoria-web/docs/**"
-            - "datastoria-web/scripts/copy-docs-manual-img.mjs"
+            - "datastoria-web/scripts/**"
             - "datastoria-web/package.json"
             - "datastoria-web/package-lock.json"
+            - "docs/api/**"
+            - "docs/fixtures/stream/**"
+            - "redocly.yaml"
             - ".github/workflows/docs-pages.yml"
     workflow_dispatch:
 
@@ -43,12 +46,12 @@ jobs:
               working-directory: datastoria-web
               run: npm ci --force
 
-            - name: Build documentation
+            - name: Validate and build documentation
               working-directory: datastoria-web
               env:
                   DOCS_BASE: /datastoria-server/
                   DOCS_ORIGIN: https://ccweixiao.github.io
-              run: npm run docs:build
+              run: npm run docs:check
 
             - name: Configure GitHub Pages
               uses: actions/configure-pages@v5
