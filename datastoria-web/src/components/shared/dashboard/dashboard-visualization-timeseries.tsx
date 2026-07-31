@@ -17,7 +17,14 @@ import * as echarts from "echarts";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  buildChartAxis,
+  detectChartColumns,
+  normalizeChartAxisValue,
+  type ChartAxisValue,
+} from "./chart-axis-utils";
+import {
   isTimestampColumn as isTimestampColumnUtil,
+  sampleIsNumeric,
   transformRowsToChartData,
 } from "./dashboard-data-utils";
 import { DRILLDOWN_DIALOG_CLASS_NAME } from "./dashboard-dialog-utils";
@@ -342,6 +349,8 @@ export const TimeseriesVisualization = React.forwardRef<
 
   // Detect columns
   const detectedColumns = useMemo(() => {
+    const detectionData = data?.length ? transformRowsToChartData(data, meta) : [];
+
     // Restore behavior: Prefer fieldOptions if available to identify columns
     if (descriptor.fieldOptions) {
       const fieldOptionsArray =
@@ -396,9 +405,8 @@ export const TimeseriesVisualization = React.forwardRef<
             labelColumns.push(col.name);
           } else {
             // Fallback inference - only possible if data exists
-            if (data && data.length > 0) {
-              const firstVal = data[0][col.name];
-              if (typeof firstVal === "number") {
+            if (detectionData.length > 0) {
+              if (sampleIsNumeric(detectionData, col.name)) {
                 valueColumns.push(col.name);
               } else {
                 labelColumns.push(col.name);
@@ -407,38 +415,23 @@ export const TimeseriesVisualization = React.forwardRef<
           }
         });
 
-        if (timestampColumn && valueColumns.length > 0) {
-          return { timestampColumn, valueColumns, labelColumns };
+        const categoryColumn = timestampColumn ? "" : labelColumns.shift() || "";
+        const axisColumn = timestampColumn || categoryColumn;
+        if (axisColumn && valueColumns.length > 0) {
+          return {
+            axisColumn,
+            isTimeAxis: Boolean(timestampColumn),
+            valueColumns,
+            labelColumns,
+          };
         }
       }
     }
 
     if (!data || data.length === 0)
-      return { timestampColumn: "", valueColumns: [], labelColumns: [] };
+      return { axisColumn: "", isTimeAxis: false, valueColumns: [], labelColumns: [] };
 
-    const firstRow = data[0];
-    const allColumns = meta.length > 0 ? meta.map((m) => m.name) : Object.keys(firstRow);
-
-    let timestampColumn = "";
-    const valueColumns: string[] = [];
-    const labelColumns: string[] = [];
-
-    for (const col of allColumns) {
-      // Find the type for this column from meta
-      const colMeta = meta.find((m) => m.name === col);
-      const colType = colMeta?.type;
-
-      if (isTimestampColumnUtil(col, colType)) {
-        timestampColumn = col;
-      } else if (typeof firstRow[col] === "number") {
-        valueColumns.push(col);
-      } else {
-        // Non-numeric, non-timestamp columns are label columns
-        labelColumns.push(col);
-      }
-    }
-
-    return { timestampColumn, valueColumns, labelColumns };
+    return detectChartColumns(data, meta);
   }, [data, meta, descriptor.fieldOptions]);
 
   // Infer format from metric name (copied from dashboard-panel-timeseries.tsx)
@@ -714,14 +707,14 @@ export const TimeseriesVisualization = React.forwardRef<
     }
 
     try {
-      const { timestampColumn, valueColumns, labelColumns } = detectedColumns;
+      const { axisColumn, isTimeAxis, valueColumns, labelColumns } = detectedColumns;
 
-      if (!timestampColumn || valueColumns.length === 0) {
-        console.error("No valid timeseries data:", { timestampColumn, valueColumns });
+      if (!axisColumn || valueColumns.length === 0) {
+        console.warn("No valid chart dimensions or metrics:", { axisColumn, valueColumns });
         chartInstanceRef.current.setOption({
           title: {
             show: true,
-            text: "No valid time series data",
+            text: "No valid chart data",
             left: "center",
             top: "center",
           },
@@ -733,34 +726,17 @@ export const TimeseriesVisualization = React.forwardRef<
       // Transform data to normalize format (array format to object format)
       const transformedData = transformRowsToChartData(data, meta);
 
-      // Get unique timestamps and sort them
-      const timestamps = Array.from(
-        new Set(
-          transformedData.map((row) => {
-            const ts = row[timestampColumn] as number;
-            return typeof ts === "number" && ts > 1e10 ? ts : ts * 1000;
-          })
-        )
-      ).sort((a, b) => a - b);
+      const {
+        values: axisValues,
+        labels: xAxisData,
+        rowByValue,
+      } = buildChartAxis(transformedData, axisColumn, isTimeAxis);
 
       // Store timestamps in ref for click handler
+      const timestamps = isTimeAxis ? axisValues.map(Number) : [];
       timestampsRef.current = timestamps;
       // Store label columns in ref for click handler
       labelColumnsRef.current = labelColumns;
-
-      // Build x-axis data with formatted time strings
-      const xAxisData: string[] = timestamps.map((ts) => {
-        const date = new Date(ts);
-        return DateTimeExtension.formatDateTime(date, "HH:mm:ss") || "";
-      });
-
-      // Create a map for quick timestamp lookup
-      const timestampMap = new Map<number, Record<string, unknown>>();
-      transformedData.forEach((row) => {
-        const ts = row[timestampColumn] as number;
-        const timestamp = typeof ts === "number" && ts > 1e10 ? ts : ts * 1000;
-        timestampMap.set(timestamp, row);
-      });
 
       // Build series from value columns
       const series: echarts.SeriesOption[] = [];
@@ -770,11 +746,10 @@ export const TimeseriesVisualization = React.forwardRef<
       if (labelColumns.length > 0) {
         // Group data by label combinations for each metric (same as old implementation)
         valueColumns.forEach((metricCol) => {
-          const labelGroups = new Map<string, Array<{ timestamp: number; value: number }>>();
+          const labelGroups = new Map<string, Map<ChartAxisValue, number>>();
 
           transformedData.forEach((row) => {
-            const ts = row[timestampColumn] as number;
-            const timestamp = typeof ts === "number" && ts > 1e10 ? ts : ts * 1000;
+            const axisValue = normalizeChartAxisValue(row[axisColumn], isTimeAxis);
             const value = row[metricCol];
 
             // Convert value to number
@@ -790,7 +765,6 @@ export const TimeseriesVisualization = React.forwardRef<
 
             // Build label key from all label columns
             const labelKeyParts = labelColumns
-              .filter((labelCol) => labelCol !== timestampColumn)
               .map((labelCol) => {
                 const labelValue = row[labelCol];
                 // Skip if value looks like a timestamp (large number)
@@ -813,22 +787,18 @@ export const TimeseriesVisualization = React.forwardRef<
             const labelKey = labelKeyParts.length > 0 ? labelKeyParts.join(" - ") : metricCol;
 
             if (!labelGroups.has(labelKey)) {
-              labelGroups.set(labelKey, []);
+              labelGroups.set(labelKey, new Map());
             }
 
-            labelGroups.get(labelKey)!.push({ timestamp, value: numValue });
+            labelGroups.get(labelKey)!.set(axisValue, numValue);
           });
 
           // Create series for each label group
           labelGroups.forEach((points, labelKey) => {
-            // Sort points by timestamp
-            points.sort((a, b) => a.timestamp - b.timestamp);
-
             // Create data array aligned with xAxisData
-            const seriesData: (number | null)[] = timestamps.map((tsMs) => {
-              const point = points.find((p) => Math.abs(p.timestamp - tsMs) < 1000);
-              return point ? point.value : null;
-            });
+            const seriesData: (number | null)[] = axisValues.map(
+              (axisValue) => points.get(axisValue) ?? null
+            );
 
             // Get format and formatter
             const fieldOption =
@@ -895,8 +865,8 @@ export const TimeseriesVisualization = React.forwardRef<
           const formatter = FormatterInstance.getFormatter(format);
 
           // Create data array aligned with xAxisData
-          const seriesData: (number | null)[] = timestamps.map((tsMs) => {
-            const row = timestampMap.get(tsMs);
+          const seriesData: (number | null)[] = axisValues.map((axisValue) => {
+            const row = rowByValue.get(axisValue);
             if (!row) return null;
 
             const value = row[col];
@@ -990,13 +960,14 @@ export const TimeseriesVisualization = React.forwardRef<
         backgroundColor: "transparent",
         title: { show: false },
         toolbox: { show: false },
-        brush: hasDrilldown()
-          ? {
-              xAxisIndex: "all",
-              brushLink: "all",
-              outOfBrush: { colorAlpha: 0.1 },
-            }
-          : undefined,
+        brush:
+          hasDrilldown() && isTimeAxis
+            ? {
+                xAxisIndex: "all",
+                brushLink: "all",
+                outOfBrush: { colorAlpha: 0.1 },
+              }
+            : undefined,
         tooltip: {
           trigger: "axis",
           confine: false,
@@ -1254,7 +1225,7 @@ export const TimeseriesVisualization = React.forwardRef<
       }
 
       // Add brush event handler if drilldown is enabled (same as old implementation)
-      if (hasDrilldown() && chartInstanceRef.current) {
+      if (hasDrilldown() && isTimeAxis && chartInstanceRef.current) {
         // Enable brush selection using dispatchAction
         chartInstanceRef.current.dispatchAction({
           type: "takeGlobalCursor",
