@@ -1,12 +1,12 @@
 [submodule "datastoria-web/external/number-flow"]
 	path = datastoria-web/external/number-flow
-	url = https://github.com/FrankChen021/number-flow.git
+	url = https://github.com/CCweixiao/number-flow.git
 	branch = local
 [submodule "datastoria-web/external/cmdk"]
 	path = datastoria-web/external/cmdk
-	url = https://github.com/FrankChen021/cmdk.git
+	url = https://github.com/CCweixiao/cmdk.git
 	branch = fix
 [submodule "datastoria-web/external/vizlayer"]
 	path = datastoria-web/external/vizlayer
-	url = https://github.com/FrankChen021/vizlayer.git
+	url = https://github.com/CCweixiao/vizlayer.git
 	branch = main
