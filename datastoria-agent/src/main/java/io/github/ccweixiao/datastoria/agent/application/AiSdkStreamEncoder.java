@@ -167,7 +167,7 @@ public final class AiSdkStreamEncoder {
       } else {
         chunk.put("type", "tool-output-available");
         chunk.put("toolCallId", e.toolCallId());
-        chunk.set("output", parseJson(e.outputJson()));
+        chunk.set("output", parseToolOutputJson(e.outputJson()));
       }
       frames.add(frame(chunk));
     } else if (event instanceof AgentRunEvent.ToolApprovalRequired e) {
@@ -288,6 +288,19 @@ public final class AiSdkStreamEncoder {
       return mapper.readTree(value);
     } catch (JsonProcessingException ignored) {
       return mapper.getNodeFactory().textNode(value);
+    }
+  }
+
+  /** Unwraps the extra JSON-string layer produced by AgentScope for Java String tool results. */
+  private com.fasterxml.jackson.databind.JsonNode parseToolOutputJson(String value) {
+    com.fasterxml.jackson.databind.JsonNode parsed = parseJson(value);
+    if (!parsed.isTextual() || parsed.textValue() == null || parsed.textValue().isBlank()) {
+      return parsed;
+    }
+    try {
+      return mapper.readTree(parsed.textValue());
+    } catch (JsonProcessingException ignored) {
+      return parsed;
     }
   }
 

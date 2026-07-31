@@ -4,6 +4,21 @@ import { memo, useMemo } from "react";
 import type { PanelDescriptor } from "../../shared/dashboard/dashboard-model";
 import { CollapsiblePart } from "./collapsible-part";
 
+export function parseVisualizationDescriptor(output: unknown): PanelDescriptor | undefined {
+  let descriptor = output;
+  if (typeof descriptor === "string") {
+    try {
+      descriptor = JSON.parse(descriptor);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) {
+    return undefined;
+  }
+  return descriptor as PanelDescriptor;
+}
+
 export const MessageToolGenerateVisualization = memo(
   function MessageToolGenerateVisualization({
     part,
@@ -12,14 +27,14 @@ export const MessageToolGenerateVisualization = memo(
     part: AppUIMessage["parts"][0];
     isRunning?: boolean;
   }) {
-    const toolPart = part as ToolPart & { output?: PanelDescriptor };
+    const toolPart = part as ToolPart & { output?: unknown };
     const state = toolPart.state;
     const isComplete = state === "output-available";
     const isError = state === "output-error";
 
     // Memoize panelDescriptor modifications to avoid mutating on every render
     const panelDescriptor = useMemo(() => {
-      const descriptor = toolPart.output;
+      const descriptor = parseVisualizationDescriptor(toolPart.output);
       if (!descriptor) return undefined;
 
       // Create a new object with modifications instead of mutating

@@ -268,6 +268,32 @@ class AiSdkStreamEncoderTest {
   }
 
   @Test
+  void toolOutputUnwrapsJsonEncodedStringResults() {
+    List<String> frames =
+        encodeAll(
+            List.of(
+                started(),
+                new AgentRunEvent.ToolOutputAvailable(
+                    "run_1",
+                    2,
+                    NOW,
+                    "call-1",
+                    "generate_visualization",
+                    "\"{\\\"type\\\":\\\"pie\\\",\\\"legendOption\\\":{\\\"placement\\\":\\\"right\\\"}}\"",
+                    false,
+                    false)));
+
+    JsonNode output =
+        chunks(frames).stream()
+            .filter(c -> "tool-output-available".equals(type(c)))
+            .findFirst()
+            .orElseThrow()
+            .path("output");
+    assertThat(output.path("type").asText()).isEqualTo("pie");
+    assertThat(output.path("legendOption").path("placement").asText()).isEqualTo("right");
+  }
+
+  @Test
   void deniedAndFailedToolsNeverExposeRawOutput() {
     List<JsonNode> chunks =
         chunks(
