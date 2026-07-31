@@ -73,9 +73,9 @@ API Key。若出现 `CLIENT_SECRET_NOT_ALLOWED`，删除浏览器旧配置/旧�
 [本地 ClickHouse](local-clickhouse.md)。最短验证：
 
 ```bash
-tools/clickhouse/install.sh
-tools/clickhouse/cluster.sh start
-tools/clickhouse/cluster.sh seed
+bin/dev/clickhouse/install.sh
+bin/dev/clickhouse/cluster.sh start
+bin/dev/clickhouse/cluster.sh seed
 curl -fsS http://127.0.0.1:18123/ping
 ```
 

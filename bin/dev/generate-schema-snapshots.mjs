@@ -3,7 +3,7 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(import.meta.dirname, "../..");
 const checkOnly = process.argv.includes("--check");
 const dialects = ["sqlite", "mysql"];
 
@@ -34,7 +34,7 @@ for (const dialect of dialects) {
 
   const output =
     `-- GENERATED FILE. DO NOT EDIT DIRECTLY.\n` +
-    `-- Regenerate with: node scripts/generate-schema-snapshots.mjs\n` +
+    `-- Regenerate with: node bin/dev/generate-schema-snapshots.mjs\n` +
     `-- Deployment helper for a NEW ${dialect.toUpperCase()} database at Flyway V${version(files.at(-1))}.\n` +
     `-- Application startup continues to use db/migration/${dialect}; this file is not auto-run.\n\n` +
     ddl.join("\n\n") +

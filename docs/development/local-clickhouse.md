@@ -44,10 +44,10 @@ curl --version
 ```bash
 cd ~/OpenProjects/datastoria-server
 
-tools/clickhouse/install.sh
-tools/clickhouse/cluster.sh start
-tools/clickhouse/cluster.sh seed
-tools/clickhouse/cluster.sh status
+bin/dev/clickhouse/install.sh
+bin/dev/clickhouse/cluster.sh start
+bin/dev/clickhouse/cluster.sh seed
+bin/dev/clickhouse/cluster.sh status
 ```
 
 项目当前固定验证版本为 `v26.5.6.64-stable`。不要在日常联调中自动跟随 latest，以免模型、
@@ -153,7 +153,7 @@ SQL
 
 ## 3. Linux：原生软件包安装
 
-仓库的 `tools/clickhouse/install.sh` 当前只处理 macOS。Linux 请使用 ClickHouse 官方 DEB/RPM
+仓库的 `bin/dev/clickhouse/install.sh` 当前只处理 macOS。Linux 请使用 ClickHouse 官方 DEB/RPM
 仓库安装 `clickhouse-server` 和 `clickhouse-client`，然后由 systemd 管理：
 
 ```bash
@@ -321,7 +321,7 @@ secret 注入，并避免开启 shell trace。
 查看状态和日志：
 
 ```bash
-tools/clickhouse/cluster.sh status
+bin/dev/clickhouse/cluster.sh status
 tail -f .local/clickhouse/log/clickhouse.log
 tail -f .local/clickhouse/log/clickhouse.err.log
 ```
@@ -329,20 +329,20 @@ tail -f .local/clickhouse/log/clickhouse.err.log
 停止与重启：
 
 ```bash
-tools/clickhouse/cluster.sh stop
-tools/clickhouse/cluster.sh restart
+bin/dev/clickhouse/cluster.sh stop
+bin/dev/clickhouse/cluster.sh restart
 ```
 
 重新执行 seed（SQL 使用 `IF NOT EXISTS` 时可重复执行）：
 
 ```bash
-tools/clickhouse/cluster.sh seed
+bin/dev/clickhouse/cluster.sh seed
 ```
 
 如需彻底删除本地 ClickHouse 数据，必须先停止进程，再手工删除明确目录：
 
 ```bash
-tools/clickhouse/cluster.sh stop
+bin/dev/clickhouse/cluster.sh stop
 ```
 
 然后确认目标确实是仓库内的 `.local/clickhouse/`，再使用系统废纸篓或其他可恢复方式清理。
@@ -352,7 +352,7 @@ tools/clickhouse/cluster.sh stop
 ```bash
 CLICKHOUSE_HTTP_PORT=28123 \
 CLICKHOUSE_TCP_PORT=29000 \
-tools/clickhouse/cluster.sh start
+bin/dev/clickhouse/cluster.sh start
 ```
 
 同一数据目录必须始终使用同一组端口。完全隔离第二个实例时同时设置：
@@ -361,12 +361,12 @@ tools/clickhouse/cluster.sh start
 CLICKHOUSE_TEST_ROOT="$PWD/.local/clickhouse-2" \
 CLICKHOUSE_HTTP_PORT=28123 \
 CLICKHOUSE_TCP_PORT=29000 \
-tools/clickhouse/install.sh
+bin/dev/clickhouse/install.sh
 
 CLICKHOUSE_TEST_ROOT="$PWD/.local/clickhouse-2" \
 CLICKHOUSE_HTTP_PORT=28123 \
 CLICKHOUSE_TCP_PORT=29000 \
-tools/clickhouse/cluster.sh start
+bin/dev/clickhouse/cluster.sh start
 ```
 
 ## 9. 常见问题
@@ -374,7 +374,7 @@ tools/clickhouse/cluster.sh start
 ### `Connection refused`
 
 ```bash
-tools/clickhouse/cluster.sh status
+bin/dev/clickhouse/cluster.sh status
 lsof -nP -iTCP:18123 -sTCP:LISTEN
 curl -v http://127.0.0.1:18123/ping
 ```
@@ -408,7 +408,7 @@ SHOW GRANTS FOR datastoria_dev;
 
 1. 确认 URL 中 `database=datastoria_test` 拼写正确。
 2. 运行 `SHOW GRANTS FOR datastoria_dev`。
-3. 确认已执行 `tools/clickhouse/cluster.sh seed`。
+3. 确认已执行 `bin/dev/clickhouse/cluster.sh seed`。
 4. 刷新 schema 树或重新选择连接。
 
 ### Java 能启动，但前端请求失败

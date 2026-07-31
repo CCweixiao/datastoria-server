@@ -1,9 +1,14 @@
 import { defineConfig } from 'vitepress'
 
+const docsBase = process.env.DOCS_BASE || '/'
+const docsOrigin = process.env.DOCS_ORIGIN || 'https://ccweixiao.github.io'
+const docsAsset = (path: string) => `${docsBase}${path.replace(/^\/+/, '')}`
+const docsUrl = (path: string) => `${docsOrigin}${docsAsset(path)}`
+
 export default defineConfig({
   title: 'DataStoria Documentation',
   description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management. Modern web interface for ClickHouse database administration.',
-  base: '/', // or '/docs/' if deploying to a subpath
+  base: docsBase,
   ignoreDeadLinks: false,
   lang: 'en-US', // SEO: Language declaration
 
@@ -23,17 +28,17 @@ export default defineConfig({
     ['meta', { name: 'robots', content: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1' }],
 
     // Favicon and app icons
-    ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
-    ['link', { rel: 'icon', href: '/icon.svg', type: 'image/svg+xml' }],
-    ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
-    ['link', { rel: 'manifest', href: '/site.webmanifest' }],
+    ['link', { rel: 'icon', href: docsAsset('/favicon.ico'), sizes: 'any' }],
+    ['link', { rel: 'icon', href: docsAsset('/icon.svg'), type: 'image/svg+xml' }],
+    ['link', { rel: 'apple-touch-icon', href: docsAsset('/apple-touch-icon.png') }],
+    ['link', { rel: 'manifest', href: docsAsset('/site.webmanifest') }],
 
     // Open Graph tags for social sharing (Facebook, LinkedIn, etc.)
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'DataStoria Documentation' }],
     ['meta', { property: 'og:title', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
     ['meta', { property: 'og:description', content: 'Modern ClickHouse management console with AI-powered natural language queries, intelligent optimization, and advanced cluster management capabilities.' }],
-    ['meta', { property: 'og:image', content: '/logo.png' }],
+    ['meta', { property: 'og:image', content: docsUrl('/logo.png') }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
     ['meta', { property: 'og:image:alt', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
@@ -44,7 +49,7 @@ export default defineConfig({
     ['meta', { name: 'twitter:site', content: '@datastoria' }],
     ['meta', { name: 'twitter:title', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
     ['meta', { name: 'twitter:description', content: 'Modern ClickHouse management console with AI-powered natural language queries, intelligent optimization, and advanced cluster management.' }],
-    ['meta', { name: 'twitter:image', content: '/logo.png' }],
+    ['meta', { name: 'twitter:image', content: docsUrl('/logo.png') }],
     ['meta', { name: 'twitter:image:alt', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
 
     // Additional SEO enhancements
@@ -64,7 +69,7 @@ export default defineConfig({
       operatingSystem: 'Web Browser',
       description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management capabilities.',
       url: 'https://github.com/CCweixiao/datastoria-server',
-      image: '/logo.png',
+      image: docsUrl('/logo.png'),
       author: {
         '@type': 'Organization',
         name: 'DataStoria',
@@ -82,7 +87,7 @@ export default defineConfig({
       },
       softwareVersion: '1.0',
       releaseNotes: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/manual/',
-      screenshot: '/logo.png',
+      screenshot: docsUrl('/logo.png'),
       featureList: [
         'Natural Language to SQL conversion',
         'AI-powered query optimization',
@@ -122,7 +127,7 @@ export default defineConfig({
       '@type': 'Organization',
       name: 'DataStoria',
       url: 'https://github.com/CCweixiao/datastoria-server',
-      logo: '/logo.png',
+      logo: docsUrl('/logo.png'),
       sameAs: [
         'https://github.com/CCweixiao/datastoria-server'
       ],
@@ -386,7 +391,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: '/logo.png', // Add your logo to docs/public/
+    logo: '/logo.png', // VitePress applies base to theme asset paths.
 
     nav: [
       { text: 'Home', link: '/' },

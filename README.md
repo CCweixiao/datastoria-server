@@ -13,7 +13,7 @@ AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与�
 - `datastoria-controller/`：Spring WebFlux HTTP/SSE Controller；
 - `datastoria-boot/`：Spring Boot 入口、环境配置与测试；
 - `datastoria-web/`：Next.js 管理平台及其 Maven 构建模块；
-- `bin/`、`deploy/`：统一安装包、初始化和进程管理；
+- `bin/`：统一安装包、运行管理和本地开发辅助脚本；
 - `docs/`：产品、架构、开发、部署和操作文档。
 
 ## 核心能力

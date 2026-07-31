@@ -47,7 +47,7 @@ application-prod.yaml     MySQL datasource，缺少必需环境变量即启动�
 `db/schema/{sqlite,mysql}/schema.sql` 是从 migration 生成的当前版本建库快照，仅供人工
 检查或新建空库；`seed.sql` 是静态初始化数据入口。应用通过
 `spring.sql.init.mode=never` 禁止自动执行快照，已有数据库只能通过 Flyway 增量升级。
-修改 migration 后运行 `node scripts/generate-schema-snapshots.mjs` 并提交同步后的快照。
+修改 migration 后运行 `node bin/dev/generate-schema-snapshots.mjs` 并提交同步后的快照。
 
 ### 2.2 类型映射
 

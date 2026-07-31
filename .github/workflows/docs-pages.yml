@@ -1,0 +1,70 @@
+name: docs-pages
+
+on:
+    push:
+        branches: [master]
+        paths:
+            - "datastoria-web/docs/**"
+            - "datastoria-web/scripts/copy-docs-manual-img.mjs"
+            - "datastoria-web/package.json"
+            - "datastoria-web/package-lock.json"
+            - ".github/workflows/docs-pages.yml"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pages: write
+    id-token: write
+
+concurrency:
+    group: pages
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - name: Set up Node.js 22
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: datastoria-web/package-lock.json
+
+            - name: Install pnpm
+              run: npm install --global pnpm@11.8.0
+
+            - name: Install dependencies
+              working-directory: datastoria-web
+              run: npm ci --force
+
+            - name: Build documentation
+              working-directory: datastoria-web
+              env:
+                  DOCS_BASE: /datastoria-server/
+                  DOCS_ORIGIN: https://ccweixiao.github.io
+              run: npm run docs:build
+
+            - name: Configure GitHub Pages
+              uses: actions/configure-pages@v5
+
+            - name: Upload Pages artifact
+              uses: actions/upload-pages-artifact@v3
+              with:
+                  path: datastoria-web/docs/.vitepress/dist
+
+    deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        runs-on: ubuntu-latest
+        needs: build
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v4

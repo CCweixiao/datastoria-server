@@ -42,7 +42,7 @@ docs/
 ## 权威性约定
 
 1. 启动和构建命令必须能从仓库根目录直接执行。
-2. 运行配置以 `application-*.yaml`、`deploy/conf/` 和 `bin/` 脚本为准。
+2. 运行配置以 `application-*.yaml`、`bin/package/conf/` 和 `bin/` 脚本为准。
 3. API 清单以 Controller 与 OpenAPI 为准；文档不复制密钥或真实凭据。
 4. 数据库结构只能由 Flyway migration 演进。
 5. 截图使用演示账号和虚构凭据；任何 Token、API Key、Cookie、数据库密码都不得进入仓库。

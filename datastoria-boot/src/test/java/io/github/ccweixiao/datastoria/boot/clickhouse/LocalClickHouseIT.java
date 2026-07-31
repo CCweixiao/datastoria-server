@@ -57,8 +57,8 @@ import reactor.core.scheduler.Scheduler;
  * <p>Run with:
  *
  * <pre>
- * tools/clickhouse/cluster.sh start
- * tools/clickhouse/cluster.sh seed
+ * bin/dev/clickhouse/cluster.sh start
+ * bin/dev/clickhouse/cluster.sh seed
  * DATASTORIA_LOCAL_CLICKHOUSE=true ./mvnw -Dtest=LocalClickHouseIT test
  * </pre>
  */

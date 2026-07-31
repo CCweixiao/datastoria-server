@@ -38,8 +38,8 @@ application-local.yaml
 application-local.yml
 application-prod.yaml
 application-prod.yml
-!deploy/conf/application-local.yaml
-!deploy/conf/application-prod.yaml
+!bin/package/conf/application-local.yaml
+!bin/package/conf/application-prod.yaml
 .env
 .env.*
 !.env.example

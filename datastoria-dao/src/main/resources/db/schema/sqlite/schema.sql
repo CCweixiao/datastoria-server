@@ -1,5 +1,5 @@
 -- GENERATED FILE. DO NOT EDIT DIRECTLY.
--- Regenerate with: node scripts/generate-schema-snapshots.mjs
+-- Regenerate with: node bin/dev/generate-schema-snapshots.mjs
 -- Deployment helper for a NEW SQLITE database at Flyway V15.
 -- Application startup continues to use db/migration/sqlite; this file is not auto-run.
 

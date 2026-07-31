@@ -12,7 +12,7 @@ TCP_PORT="${CLICKHOUSE_TCP_PORT:-19000}"
 
 require_binary() {
   if [ ! -x "${BIN}" ]; then
-    echo "ClickHouse is not installed. Run tools/clickhouse/install.sh first." >&2
+    echo "ClickHouse is not installed. Run bin/dev/clickhouse/install.sh first." >&2
     exit 1
   fi
 }
@@ -87,7 +87,7 @@ seed() {
     exit 1
   fi
   "${BIN}" client --host 127.0.0.1 --port "${TCP_PORT}" \
-    --multiquery < tools/clickhouse/seed.sql
+    --multiquery < bin/dev/clickhouse/seed.sql
   echo "Seeded the datastoria_test database."
 }
 
