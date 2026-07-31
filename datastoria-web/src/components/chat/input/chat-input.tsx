@@ -446,12 +446,13 @@ export function resolveChatInputEnterAction(event: {
   key: string;
   metaKey: boolean;
   ctrlKey: boolean;
+  shiftKey: boolean;
 }): "submit" | "newline" | null {
   if (event.key !== "Enter") {
     return null;
   }
 
-  return event.metaKey || event.ctrlKey ? "newline" : "submit";
+  return event.shiftKey || event.metaKey || event.ctrlKey ? "newline" : "submit";
 }
 
 function TokenHoverCard({
@@ -1611,12 +1612,8 @@ const ChatInputContent = React.memo(
                 <div className="relative flex min-h-full flex-col">
                   {!input && attachments.length === 0 && (
                     <div className="text-muted-foreground pointer-events-none absolute left-3 right-10 top-3 text-sm">
-                      Press Enter to send,{" "}
-                      {typeof navigator !== "undefined" && navigator.platform.includes("Mac")
-                        ? "Cmd"
-                        : "Ctrl"}{" "}
-                      + Enter for new line. Use @ to open table or setting suggestions, / for
-                      commands.
+                      Press Enter to send, Shift + Enter for new line. Use @ to open table or
+                      setting suggestions, / for commands.
                     </div>
                   )}
 
@@ -1729,7 +1726,7 @@ const ChatInputEditorElement = React.memo(function ChatInputEditorElement({
       ref={editorRef}
       role="textbox"
       aria-multiline="true"
-      aria-label="Chat input. Press Enter to send, use Cmd/Ctrl + Enter for a new line. Use @ to open table or setting suggestions, / for commands."
+      aria-label="Chat input. Press Enter to send, use Shift + Enter for a new line. Use @ to open table or setting suggestions, / for commands."
       contentEditable={!isRunning}
       suppressContentEditableWarning
       className={cn(

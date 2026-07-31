@@ -158,19 +158,21 @@ describe("SQL snippet token helpers", () => {
 });
 
 describe("chat input Enter shortcuts", () => {
-  it("submits on Enter and inserts a new line with Ctrl/Cmd+Enter", () => {
-    expect(resolveChatInputEnterAction({ key: "Enter", metaKey: false, ctrlKey: false })).toBe(
-      "submit"
-    );
-    expect(resolveChatInputEnterAction({ key: "Enter", metaKey: false, ctrlKey: true })).toBe(
-      "newline"
-    );
-    expect(resolveChatInputEnterAction({ key: "Enter", metaKey: true, ctrlKey: false })).toBe(
-      "newline"
-    );
-    expect(resolveChatInputEnterAction({ key: "Escape", metaKey: false, ctrlKey: false })).toBe(
-      null
-    );
+  const enterAction = (overrides: Partial<Parameters<typeof resolveChatInputEnterAction>[0]>) =>
+    resolveChatInputEnterAction({
+      key: "Enter",
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      ...overrides,
+    });
+
+  it("submits only on unmodified Enter", () => {
+    expect(enterAction({})).toBe("submit");
+    expect(enterAction({ shiftKey: true })).toBe("newline");
+    expect(enterAction({ ctrlKey: true })).toBe("newline");
+    expect(enterAction({ metaKey: true })).toBe("newline");
+    expect(enterAction({ key: "Escape" })).toBe(null);
   });
 });
 
