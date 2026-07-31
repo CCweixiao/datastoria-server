@@ -84,14 +84,16 @@ DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
 
 ## 文档
 
-- [文档中心](docs/README.md)
+- [在线文档](https://ccweixiao.github.io/datastoria-server/)
+- [HTTP API 文档](https://ccweixiao.github.io/datastoria-server/reference/api/)
+- [OpenAPI YAML](https://ccweixiao.github.io/datastoria-server/api/openapi.yaml)
+- [仓库内工程文档](docs/README.md)
 - [产品愿景](docs/product/vision.md)
 - [系统架构](docs/architecture/overview.md)
 - [AgentScope Java AI Agent 架构](docs/architecture/agent-runtime.md)
 - [功能模块](docs/product/modules.md)
 - [开发与调试](docs/development/getting-started.md)
 - [datastoria-web 开发与调试](docs/development/datastoria-web.md)
-- [HTTP API 文档](datastoria-web/docs/reference/api/index.md)
 - [生产部署](docs/deployment/production.md)
 - [管理平台操作手册](docs/manual/admin-console.md)
 - [安全与敏感信息](docs/security/secrets.md)
