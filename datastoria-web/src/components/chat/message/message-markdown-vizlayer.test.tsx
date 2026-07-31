@@ -221,6 +221,27 @@ describe("MessageMarkdownVizlayer", () => {
     );
   });
 
+  it("renders the supported class diagram payload", () => {
+    toChartSpecSpy.mockReturnValue("classDiagram\nclass User");
+
+    act(() => {
+      root.render(
+        <MessageMarkdownVizlayer spec='{"kind":"classDiagram","document":{"classes":[{"id":"User","members":[{"name":"id","type":"String"}]}],"relations":[]}}' />
+      );
+    });
+
+    expect(toChartSpecSpy).toHaveBeenCalledWith({
+      kind: "classDiagram",
+      document: {
+        classes: [{ id: "User", members: [{ name: "id", type: "String" }] }],
+        relations: [],
+      },
+    });
+    expect(vizlayerDiagramSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "classDiagram" })
+    );
+  });
+
   it("requests browser fullscreen from the fullscreen button", () => {
     toChartSpecSpy.mockReturnValue("flowchart TD\n  a --> b");
 

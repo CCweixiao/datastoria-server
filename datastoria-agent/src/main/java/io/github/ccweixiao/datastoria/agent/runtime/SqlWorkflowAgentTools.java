@@ -1,5 +1,6 @@
 package io.github.ccweixiao.datastoria.agent.runtime;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -159,9 +160,13 @@ public final class SqlWorkflowAgentTools {
         Choose a visualization for this ClickHouse query. Return JSON only:
         {"type":"line|bar|area|pie|table|none","title":"...","title_align":"left|center|right",
         "width":1,"legend_placement":"none|bottom|right|inside","legend_values":[],
-        "value_format":null}
+        "label_show":true,"label_format":"name|value|percent|name-value|name-percent",
+        "value_format":null,"y_axis":[{"min":null,"max":null,"min_interval":null}]}
         Honor an explicit chart request. Prefer line for time trends, bar for categorical
-        comparisons, pie only for a small distribution, and table for raw rows.
+        comparisons, pie only for a small distribution, and table for raw rows. Pie legends must
+        use inside, bottom, or right. For line, bar, and area legends at bottom or right, include
+        min and max plus sum/count/avg when used by the SQL. Only use label fields for pie and
+        y_axis for line, bar, or area.
         """
             + "\nQuestion:\n"
             + safe(userQuestion)
@@ -255,13 +260,46 @@ public final class SqlWorkflowAgentTools {
     if (!Set.of("none", "bottom", "right", "inside").contains(placement)) {
       placement = "none";
     }
+    if ("pie".equals(type) && "none".equals(placement)) {
+      placement = "inside";
+    }
     ObjectNode legend = result.putObject("legendOption");
     legend.put("placement", placement);
     ArrayNode values = legend.putArray("values");
-    for (JsonNode value : generated.path("legend_values")) {
-      if (Set.of("min", "max", "sum", "avg", "count").contains(value.asText())) {
-        values.add(value.asText());
+    if (!"pie".equals(type)) {
+      Set<String> selectedValues = new LinkedHashSet<>();
+      for (JsonNode value : generated.path("legend_values")) {
+        if (Set.of("min", "max", "sum", "avg", "count").contains(value.asText())) {
+          selectedValues.add(value.asText());
+        }
       }
+      if (Set.of("bottom", "right").contains(placement)) {
+        selectedValues.add("min");
+        selectedValues.add("max");
+        String normalizedSql = sql.toLowerCase(java.util.Locale.ROOT);
+        if (normalizedSql.matches("(?s).*\\b(sum|count)\\s*\\(.*")) {
+          selectedValues.add("sum");
+        }
+        if (normalizedSql.matches("(?s).*\\bcount\\s*\\(.*")) {
+          selectedValues.add("count");
+        }
+        if (normalizedSql.matches("(?s).*\\bavg\\s*\\(.*")) {
+          selectedValues.add("avg");
+        }
+      }
+      List.of("min", "max", "sum", "avg", "count").stream()
+          .filter(selectedValues::contains)
+          .forEach(values::add);
+    }
+    if ("pie".equals(type)) {
+      ObjectNode label = result.putObject("labelOption");
+      label.put("show", generated.path("label_show").asBoolean(true));
+      String labelFormat = generated.path("label_format").asText("name-percent");
+      label.put(
+          "format",
+          Set.of("name", "value", "percent", "name-value", "name-percent").contains(labelFormat)
+              ? labelFormat
+              : "name-percent");
     }
     String valueFormat = generated.path("value_format").asText();
     if (Set.of(
@@ -274,8 +312,31 @@ public final class SqlWorkflowAgentTools {
         .contains(valueFormat)) {
       result.put("valueFormat", valueFormat);
     }
+    if (Set.of("line", "bar", "area").contains(type) && generated.path("y_axis").isArray()) {
+      ArrayNode yAxis = result.putArray("yAxis");
+      for (JsonNode generatedAxis : generated.path("y_axis")) {
+        if (!generatedAxis.isObject()) {
+          continue;
+        }
+        ObjectNode axis = yAxis.addObject();
+        copyFiniteNumber(generatedAxis, axis, "min", "min");
+        copyFiniteNumber(generatedAxis, axis, "max", "max");
+        copyFiniteNumber(generatedAxis, axis, "min_interval", "minInterval");
+      }
+      if (yAxis.isEmpty()) {
+        result.remove("yAxis");
+      }
+    }
     result.putObject("datasource").put("sql", sql);
     return result;
+  }
+
+  private static void copyFiniteNumber(
+      JsonNode source, ObjectNode target, String sourceName, String targetName) {
+    JsonNode value = source.path(sourceName);
+    if (value.isNumber() && Double.isFinite(value.asDouble())) {
+      target.put(targetName, value.asDouble());
+    }
   }
 
   private Mono<JsonNode> nestedJson(String systemPrompt, String userPrompt) {

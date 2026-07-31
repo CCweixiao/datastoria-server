@@ -31,6 +31,7 @@ import {
 } from "./dashboard-model";
 import type { VisualizationRef } from "./dashboard-visualization-layout";
 import { DashboardVisualizationPanel } from "./dashboard-visualization-panel";
+import { getTimeseriesLegendPresentation } from "./timeseries-legend-layout";
 import type { TimeSpan } from "./timespan-selector";
 import { useEcharts } from "./use-echarts";
 
@@ -53,10 +54,16 @@ interface LegendTableProps {
   chartInstance?: echarts.ECharts;
   legendOption: TimeseriesDescriptor["legendOption"];
   legendData?: LegendData;
+  placement: "bottom" | "right";
 }
 
 // Legend table component
-const LegendTable: React.FC<LegendTableProps> = ({ chartInstance, legendOption, legendData }) => {
+const LegendTable: React.FC<LegendTableProps> = ({
+  chartInstance,
+  legendOption,
+  legendData,
+  placement,
+}) => {
   const [legendToggleState] = useState<Map<string, number>>(new Map());
   const [unselectedSeries, setUnselectedSeries] = useState<Map<string, boolean>>(new Map());
   const [sortConfig, setSortConfig] = useState<{
@@ -204,7 +211,14 @@ const LegendTable: React.FC<LegendTableProps> = ({ chartInstance, legendOption, 
   }
 
   return (
-    <div className="h-[25%] min-h-[70px] overflow-auto custom-scrollbar border-t flex-none">
+    <div
+      className={cn(
+        "overflow-auto custom-scrollbar flex-none",
+        placement === "right"
+          ? "h-full w-[35%] min-w-[220px] border-l"
+          : "h-[25%] min-h-[70px] w-full border-t"
+      )}
+    >
       <Table>
         <TableHeader>
           <TableRow className="cursor-pointer bg-muted">
@@ -315,6 +329,7 @@ export const TimeseriesVisualization = React.forwardRef<
   TimeseriesVisualizationProps
 >(function TimeseriesVisualization(props, ref) {
   const { data, meta, descriptor, selectedTimeSpan: _selectedTimeSpan, onChartSelection } = props;
+  const legendPresentation = getTimeseriesLegendPresentation(descriptor.legendOption?.placement);
 
   // Refs
   const { chartContainerRef, chartInstanceRef } = useEcharts();
@@ -1137,9 +1152,7 @@ export const TimeseriesVisualization = React.forwardRef<
           // Show ECharts legend only if:
           // 1. There are series to display, AND
           // 2. Either no legendOption is configured, OR legendOption.placement is "inside"
-          show:
-            series.length > 0 &&
-            (!descriptor.legendOption || descriptor.legendOption.placement === "inside"),
+          show: series.length > 0 && legendPresentation === "inside",
           top: 0,
           type: "scroll",
           icon: "circle",
@@ -1149,11 +1162,7 @@ export const TimeseriesVisualization = React.forwardRef<
           right: 20,
           bottom: 8,
           // Adjust top margin based on whether ECharts legend is shown
-          top:
-            series.length > 0 &&
-            (!descriptor.legendOption || descriptor.legendOption.placement === "inside")
-              ? 32
-              : 12,
+          top: series.length > 0 && legendPresentation === "inside" ? 32 : 12,
           containLabel: true,
         },
         xAxis: {
@@ -1354,7 +1363,12 @@ export const TimeseriesVisualization = React.forwardRef<
   }));
 
   return (
-    <CardContent className="px-0 p-0 flex flex-col h-full">
+    <CardContent
+      className={cn(
+        "px-0 p-0 flex h-full",
+        legendPresentation === "right" ? "flex-row" : "flex-col"
+      )}
+    >
       <div
         ref={chartContainerRef}
         className={cn("w-full min-h-0", descriptor.height ? "flex-none" : "flex-1")}
@@ -1365,13 +1379,13 @@ export const TimeseriesVisualization = React.forwardRef<
         }}
       />
       {descriptor.legendOption &&
-        descriptor.legendOption.placement !== "none" &&
-        descriptor.legendOption.placement === "bottom" &&
+        (legendPresentation === "bottom" || legendPresentation === "right") &&
         legendData && (
           <LegendTable
             chartInstance={chartInstanceRef.current || undefined}
             legendData={legendData}
             legendOption={descriptor.legendOption}
+            placement={legendPresentation}
           />
         )}
     </CardContent>
