@@ -69,6 +69,14 @@ public class PlainTextException extends RuntimeException {
     return new PlainTextException(HttpStatus.BAD_REQUEST, body);
   }
 
+  /** HTTP 400 with a stable error code and a locale-aware body. */
+  public static PlainTextException badRequest(ApiErrorCode code) {
+    if (code.status() != HttpStatus.BAD_REQUEST.value()) {
+      throw new IllegalArgumentException("Error code must use HTTP 400: " + code.name());
+    }
+    return localized(code, code.message(Locale.ENGLISH), code.message(Locale.SIMPLIFIED_CHINESE));
+  }
+
   /** HTTP 401 with the literal body {@code Authentication required}. */
   public static PlainTextException authenticationRequired() {
     return localized(ApiErrorCode.AUTHENTICATION_REQUIRED, "Authentication required", "需要身份认证");

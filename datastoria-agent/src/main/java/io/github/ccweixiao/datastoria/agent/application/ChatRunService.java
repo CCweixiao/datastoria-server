@@ -45,6 +45,7 @@ import io.github.ccweixiao.datastoria.common.domain.ChatMessage;
 import io.github.ccweixiao.datastoria.common.domain.ChatSession;
 import io.github.ccweixiao.datastoria.common.domain.Model;
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.error.ProviderOperationException;
@@ -515,7 +516,7 @@ public class ChatRunService {
     Objects.requireNonNull(user, "user");
 
     if (req.sessionId() == null || req.sessionId().isBlank()) {
-      throw PlainTextException.badRequest("sessionId is required");
+      throw PlainTextException.badRequest(ApiErrorCode.SESSION_ID_REQUIRED);
     }
     if (req.continuation()) {
       throw PlainTextException.badRequest("continuation runs are not supported yet");
@@ -531,7 +532,7 @@ public class ChatRunService {
                     throw new NotFoundException("ChatSession", req.sessionId());
                   }
                   if (req.connectionId() == null || req.connectionId().isBlank()) {
-                    throw PlainTextException.badRequest("connectionId is required");
+                    throw PlainTextException.badRequest(ApiErrorCode.CONNECTION_ID_REQUIRED);
                   }
                   Instant createdAt = Instant.now();
                   ChatSession temporary =
@@ -556,7 +557,7 @@ public class ChatRunService {
               throw new ResourceInUseException("AgentRun", active.id());
             });
     if (req.connectionId() == null || req.connectionId().isBlank()) {
-      throw PlainTextException.badRequest("connectionId is required");
+      throw PlainTextException.badRequest(ApiErrorCode.CONNECTION_ID_REQUIRED);
     }
     if (!req.connectionId().equals(session.connectionId())) {
       // The session lookup is already tenant + user scoped. Requiring its pinned connection avoids
@@ -574,7 +575,7 @@ public class ChatRunService {
 
     Model modelConfig = resolveModel(req, tenant);
     if (!modelConfig.enabled()) {
-      throw PlainTextException.badRequest("Selected model is disabled");
+      throw PlainTextException.badRequest(ApiErrorCode.MODEL_DISABLED);
     }
 
     ResolvedAgent agent = resolveAgent(req, tenant);
@@ -957,7 +958,7 @@ public class ChatRunService {
     }
     String modelKey = req.modelId();
     if (modelKey == null || modelKey.isBlank()) {
-      throw PlainTextException.badRequest("modelConfigId or model.modelId is required");
+      throw PlainTextException.badRequest(ApiErrorCode.MODEL_SELECTION_REQUIRED);
     }
     // Best-effort legacy {provider,modelId} resolution by model key; modelConfigId is preferred.
     return modelRepository.findEnabled(tenant).stream()

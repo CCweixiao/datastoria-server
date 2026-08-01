@@ -27,6 +27,7 @@ import io.github.ccweixiao.datastoria.common.dto.ChatSessionDTO;
 import io.github.ccweixiao.datastoria.common.dto.CreateSessionRequest;
 import io.github.ccweixiao.datastoria.common.dto.CreateSessionResponse;
 import io.github.ccweixiao.datastoria.common.dto.SessionPageDTO;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.error.SharePermissionDeniedException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
@@ -286,7 +287,7 @@ public class SessionService {
       return DEFAULT_LIMIT;
     }
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
-      throw PlainTextException.badRequest("Invalid limit");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_LIMIT);
     }
     return limit;
   }
@@ -315,24 +316,24 @@ public class SessionService {
     if (req.connectionId() == null
         || req.connectionId().isBlank()
         || req.connectionId().length() > 255) {
-      throw PlainTextException.badRequest("Invalid connectionId");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_CONNECTION_ID);
     }
     if (req.sessionId() != null) {
       String trimmed = req.sessionId().trim();
       if (trimmed.isEmpty() || trimmed.length() > 64) {
-        throw PlainTextException.badRequest("Invalid sessionId");
+        throw PlainTextException.badRequest(ApiErrorCode.INVALID_SESSION_ID);
       }
     }
     if (req.messages() != null) {
       for (AppUIMessage m : req.messages()) {
         if (m.id() == null || m.id().isBlank() || m.id().length() > 64) {
-          throw PlainTextException.badRequest("Invalid messages");
+          throw PlainTextException.badRequest(ApiErrorCode.INVALID_MESSAGES);
         }
         if (m.role() == null || !INITIAL_ROLES.contains(m.role())) {
-          throw PlainTextException.badRequest("Invalid messages");
+          throw PlainTextException.badRequest(ApiErrorCode.INVALID_MESSAGES);
         }
         if (m.parts() == null || !m.parts().isArray()) {
-          throw PlainTextException.badRequest("Invalid messages");
+          throw PlainTextException.badRequest(ApiErrorCode.INVALID_MESSAGES);
         }
       }
     }

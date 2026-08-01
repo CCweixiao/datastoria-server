@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.github.ccweixiao.datastoria.common.dto.CreateSessionRequest;
 import io.github.ccweixiao.datastoria.common.dto.CreateSessionResponse;
 import io.github.ccweixiao.datastoria.common.dto.SessionPageDTO;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.service.SessionService;
@@ -109,14 +110,14 @@ public class ChatSessionController {
 
   private CreateSessionRequest parseCreateRequest(JsonNode raw) {
     if (raw == null || !raw.isObject()) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
     try {
       return objectMapper.treeToValue(raw, CreateSessionRequest.class);
     } catch (MismatchedInputException e) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     } catch (IOException e) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
   }
 
@@ -127,7 +128,7 @@ public class ChatSessionController {
    */
   private String parseRenameTitle(JsonNode raw) {
     if (raw == null || !raw.isObject()) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
     JsonNode titleNode = raw.get("title");
     if (titleNode == null || !titleNode.isTextual()) {

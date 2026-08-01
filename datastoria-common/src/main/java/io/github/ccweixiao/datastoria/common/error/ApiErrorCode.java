@@ -58,6 +58,36 @@ public enum ApiErrorCode {
       "反馈引用的消息不在当前会话中。"),
   INVALID_REQUEST(
       400, "Invalid request", "One or more request fields are invalid.", "请求无效", "一个或多个请求字段无效。"),
+  INVALID_REQUEST_FORMAT(
+      400, "Invalid request format", "Invalid request format", "请求格式无效", "请求格式无效"),
+  INVALID_JSON(400, "Invalid JSON", "Invalid JSON in request body", "JSON 无效", "请求正文中的 JSON 无效"),
+  INVALID_LIMIT(400, "Invalid limit", "Invalid limit", "数量限制无效", "数量限制无效"),
+  INVALID_CONNECTION_ID(
+      400, "Invalid connection id", "Invalid connectionId", "连接 ID 无效", "连接 ID 无效"),
+  INVALID_SESSION_ID(400, "Invalid session id", "Invalid sessionId", "会话 ID 无效", "会话 ID 无效"),
+  INVALID_MESSAGES(400, "Invalid messages", "Invalid messages", "消息无效", "消息无效"),
+  SESSION_ID_REQUIRED(400, "Session id required", "sessionId is required", "需要会话 ID", "必须提供会话 ID"),
+  CONNECTION_ID_REQUIRED(
+      400, "Connection id required", "connectionId is required", "需要连接 ID", "必须提供连接 ID"),
+  MODEL_SELECTION_REQUIRED(
+      400, "Model selection required", "Select an enabled model first", "需要选择模型", "请先选择已启用的模型"),
+  MODEL_DISABLED(400, "Model disabled", "Selected model is disabled", "模型已禁用", "所选模型已禁用"),
+  REPOSITORY_FILE_TOO_LARGE(
+      400,
+      "Repository file too large",
+      "Repository file is too large to browse",
+      "仓库文件过大",
+      "仓库文件过大，无法浏览"),
+  INVALID_FILE_RANGE(
+      400, "Invalid file range", "Requested file range is invalid", "文件范围无效", "请求的文件范围无效"),
+  REPOSITORY_PATH_REQUIRED(
+      400, "Repository path required", "A repo-relative path is required", "需要仓库路径", "必须提供仓库相对路径"),
+  REPOSITORY_PATH_OUTSIDE_ROOT(
+      400,
+      "Repository path outside root",
+      "Repository path escapes the configured root",
+      "仓库路径超出根目录",
+      "仓库路径超出了配置的根目录"),
   METHOD_NOT_ALLOWED(
       405,
       "Method not allowed",
