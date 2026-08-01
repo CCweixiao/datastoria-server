@@ -1,4 +1,5 @@
 import { DataTable } from "@/components/shared/dashboard/data-table";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
@@ -19,6 +20,7 @@ export const MessageToolExecuteSql = memo(function ExecuteSqlPart({
   part: AppUIMessage["parts"][0];
   isRunning?: boolean;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart & {
     input?: { sql?: string };
     output?: ExecuteSqlToolOutput;
@@ -38,7 +40,7 @@ export const MessageToolExecuteSql = memo(function ExecuteSqlPart({
     >
       {input?.sql && (
         <>
-          <div className="text-[10px] text-muted-foreground">input:</div>
+          <div className="text-[10px] text-muted-foreground">{t("tool.input")}</div>
           <MessageMarkdownSql
             code={input.sql}
             showExecuteButton={false}
@@ -55,7 +57,7 @@ export const MessageToolExecuteSql = memo(function ExecuteSqlPart({
       )}
       {output && (
         <div className="mt-1 text-[10px] text-muted-foreground">
-          <div>output:</div>
+          <div>{t("tool.output")}</div>
           {output.error ? (
             <pre className="bg-muted/30 pl-2 leading-tight whitespace-pre-wrap break-words max-w-full max-h-[200px] overflow-auto text-destructive">
               {output.error}
@@ -76,7 +78,7 @@ export const MessageToolExecuteSql = memo(function ExecuteSqlPart({
               />
             </div>
           ) : (
-            <div>success: no data returned</div>
+            <div>{t("tool.successNoData")}</div>
           )}
         </div>
       )}

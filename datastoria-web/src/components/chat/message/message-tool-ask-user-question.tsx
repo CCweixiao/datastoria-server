@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -158,6 +159,7 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
   pendingAction?: PendingActionData;
   isRunning?: boolean;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart;
   const toolCallId =
     (toolPart as { toolCallId?: string }).toolCallId ||
@@ -189,13 +191,13 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
     answer: AskUserQuestionOutput
   ): Promise<{ success: true } | { success: false; error: string }> => {
     if (!toolCallId) {
-      return { success: false, error: "Question is missing a tool call id." };
+      return { success: false, error: t("tool.questionMissingId") };
     }
     if (!pendingAction) {
-      return { success: false, error: "Question action is unavailable." };
+      return { success: false, error: t("tool.questionActionUnavailable") };
     }
     if (isSubmitting || hasSubmitted) {
-      return { success: false, error: "Answer submission is already in progress." };
+      return { success: false, error: t("tool.submissionInProgress") };
     }
     setSubmitError(null);
     setIsSubmitting(true);
@@ -208,7 +210,7 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
       });
       setHasSubmitted(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to submit answer.";
+      const message = error instanceof Error ? error.message : t("tool.submitFailed");
       setSubmitError(message);
       setIsSubmitting(false);
       return { success: false, error: message };
@@ -232,7 +234,7 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
     const normalizedValue =
       selectedOption.input === "none" ? selectedOption.label : draftValue.trim();
     if (!normalizedValue) {
-      setSubmitError("Please enter a value before submitting.");
+      setSubmitError(t("tool.enterValue"));
       return;
     }
 
@@ -253,7 +255,7 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
       return (
         <div className="flex items-start gap-2">
           <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-muted-foreground" />
-          <div className="text-sm text-muted-foreground">Preparing question...</div>
+          <div className="text-sm text-muted-foreground">{t("tool.preparingQuestion")}</div>
         </div>
       );
     }
@@ -262,9 +264,9 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
       <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
         <div className="flex items-center gap-2 font-medium text-destructive">
           <CircleAlert className="h-4 w-4" />
-          Ask User Question
+          {t("tool.askUserQuestion")}
         </div>
-        <div className="mt-2 text-muted-foreground">Question unavailable.</div>
+        <div className="mt-2 text-muted-foreground">{t("tool.questionUnavailable")}</div>
       </div>
     );
   }
@@ -374,10 +376,10 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
                     {isSubmitting || hasSubmitted ? (
                       <>
                         {isSubmitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                        {isSubmitting ? "Submitting" : "Submitted"}
+                        {isSubmitting ? t("tool.submitting") : t("tool.submitted")}
                       </>
                     ) : (
-                      "Submit"
+                      t("tool.submit")
                     )}
                   </Button>
                   {!singleOption && (

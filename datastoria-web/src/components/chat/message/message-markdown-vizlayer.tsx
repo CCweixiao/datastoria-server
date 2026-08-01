@@ -1,6 +1,7 @@
 "use client";
 
 import useIsDarkTheme from "@/components/shared/dashboard/use-is-dark-theme";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { toastManager } from "@/lib/toast";
@@ -42,6 +43,7 @@ type FullscreenDocument = Document & {
 };
 
 export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) {
+  const { t } = useUiPreferences();
   const isDark = useIsDarkTheme();
   const inlineViewportRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -61,13 +63,10 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
     } catch (error) {
       return {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to build Mermaid from Vizlayer document.",
+        error: error instanceof Error ? error.message : t("diagram.buildFailed"),
       };
     }
-  }, [parsed]);
+  }, [parsed, t]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -128,19 +127,19 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
       } else if (container.msRequestFullscreen) {
         await container.msRequestFullscreen();
       } else {
-        throw new Error("Fullscreen API unavailable");
+        throw new Error(t("diagram.fullscreenUnavailable"));
       }
     } catch {
-      toastManager.show("Failed to open diagram in fullscreen.", "error");
+      toastManager.show(t("diagram.fullscreenFailed"), "error");
     }
-  }, []);
+  }, [t]);
 
   const handleDownloadSvg = useCallback(() => {
     const viewport = inlineViewportRef.current;
     const svg = viewport?.querySelector("svg");
 
     if (!svg) {
-      toastManager.show("Diagram download is unavailable for this render output.", "error");
+      toastManager.show(t("diagram.downloadUnavailable"), "error");
       return;
     }
 
@@ -157,9 +156,9 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
       anchor.remove();
       URL.revokeObjectURL(url);
     } catch {
-      toastManager.show("Failed to download diagram as SVG.", "error");
+      toastManager.show(t("diagram.downloadFailed"), "error");
     }
-  }, []);
+  }, [t]);
 
   if (!parsed.ok) {
     return (
@@ -169,8 +168,8 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
           variant="ghost"
           size="icon"
           className="absolute top-4 right-4 z-10 h-7 w-7 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [&_svg]:h-4 [&_svg]:w-4"
-          aria-label="Copy Vizlayer JSON"
-          title="Copy Vizlayer JSON"
+          aria-label={t("diagram.copyVizlayer")}
+          title={t("diagram.copyVizlayer")}
         />
         <DiagramError title={parsed.error} message={spec} />
       </div>
@@ -185,8 +184,8 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
           variant="ghost"
           size="icon"
           className="absolute top-4 right-4 z-10 h-7 w-7 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [&_svg]:h-4 [&_svg]:w-4"
-          aria-label="Copy Vizlayer JSON"
-          title="Copy Vizlayer JSON"
+          aria-label={t("diagram.copyVizlayer")}
+          title={t("diagram.copyVizlayer")}
         />
         <DiagramError title={chart.error} message={spec} />
       </div>
@@ -201,15 +200,15 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
           variant="ghost"
           size="icon"
           className="relative !top-auto !right-auto h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
-          aria-label="Copy Mermaid code"
-          title="Copy Mermaid code"
+          aria-label={t("diagram.copyMermaid")}
+          title={t("diagram.copyMermaid")}
         />
         <Button
           variant="ghost"
           size="icon"
           className="h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
-          aria-label={isFullscreen ? "Exit fullscreen diagram" : "Open diagram in fullscreen"}
-          title={isFullscreen ? "Exit fullscreen diagram" : "Open diagram in fullscreen"}
+          aria-label={isFullscreen ? t("diagram.exitFullscreen") : t("diagram.fullscreen")}
+          title={isFullscreen ? t("diagram.exitFullscreen") : t("diagram.fullscreen")}
           onClick={handleFullscreenToggle}
         >
           <Maximize2 className="!h-3 !w-3" />
@@ -218,8 +217,8 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
           variant="ghost"
           size="icon"
           className="h-6 w-6 rounded-sm [&_svg]:h-3.5 [&_svg]:w-3.5"
-          aria-label="Download diagram as SVG"
-          title="Download diagram as SVG"
+          aria-label={t("diagram.downloadSvg")}
+          title={t("diagram.downloadSvg")}
           onClick={handleDownloadSvg}
         >
           <Download className="!h-3 !w-3" />
@@ -230,6 +229,9 @@ export function MessageMarkdownVizlayer({ spec }: MessageMarkdownVizlayerProps) 
         {renderDiagram({
           spec: parsed.spec,
           isDark,
+          renderingLabel: t("diagram.rendering"),
+          renderErrorTitle: t("diagram.vizlayerRenderFailed"),
+          invalidDocumentTitle: t("diagram.vizlayerInvalid"),
         })}
       </div>
     </div>
@@ -260,7 +262,19 @@ function parseVizlayerSpec(spec: string): ParsedVizlayerSpec {
   };
 }
 
-function renderDiagram({ spec, isDark }: { spec: VizlayerSpec; isDark: boolean }) {
+function renderDiagram({
+  spec,
+  isDark,
+  renderingLabel,
+  renderErrorTitle,
+  invalidDocumentTitle,
+}: {
+  spec: VizlayerSpec;
+  isDark: boolean;
+  renderingLabel: string;
+  renderErrorTitle: string;
+  invalidDocumentTitle: string;
+}) {
   return (
     <VizlayerDiagram
       {...spec}
@@ -268,22 +282,22 @@ function renderDiagram({ spec, isDark }: { spec: VizlayerSpec; isDark: boolean }
         "flex min-w-max justify-center overflow-x-auto",
         "[&_.edgeLabel]:fill-foreground [&_.label]:fill-foreground [&_.node_label]:fill-foreground"
       )}
-      loadingFallback={<DiagramLoadingState />}
+      loadingFallback={<DiagramLoadingState label={renderingLabel} />}
       errorFallback={(message: string) => (
-        <DiagramError title="Unable to render Vizlayer diagram" message={message} />
+        <DiagramError title={renderErrorTitle} message={message} />
       )}
       invalidDocumentFallback={(message: string) => (
-        <DiagramError title="Invalid Vizlayer document" message={message} />
+        <DiagramError title={invalidDocumentTitle} message={message} />
       )}
       theme={isDark ? "dark" : "default"}
     />
   );
 }
 
-function DiagramLoadingState() {
+function DiagramLoadingState({ label }: { label: string }) {
   return (
     <div className="rounded-md bg-muted/20 px-3 py-8 text-center text-sm text-muted-foreground">
-      Rendering diagram...
+      {label}
     </div>
   );
 }
