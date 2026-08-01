@@ -11,6 +11,7 @@ import {
 } from "@/components/chat/session/session-connection-id";
 import { SessionManager } from "@/components/chat/session/session-manager";
 import { useConnection } from "@/components/connection/connection-context";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { AppUIMessage, Message } from "@/lib/ai/ai-types";
@@ -154,13 +155,12 @@ const ChatHeader = React.memo(
     isSharing,
     canShare,
   }: ChatHeaderProps) => {
+    const { t } = useUiPreferences();
     const isMobile = useIsMobile();
     const { icon, tooltip } = getDisplayModeButtonInfo(displayMode);
     const [title, setTitle] = useState<string | undefined>(initialTitle);
     const isShareUnavailable = !canShare;
-    const shareTitle = isShareUnavailable
-      ? "Sharing is unavailable for this session"
-      : "Copy share link";
+    const shareTitle = isShareUnavailable ? t("chat.shareUnavailable") : t("chat.copyShareLink");
 
     // Reset title when chat ID changes
     useEffect(() => {
@@ -182,9 +182,9 @@ const ChatHeader = React.memo(
       <div className="h-9 border-b flex items-center gap-2 px-2 shrink-0 bg-background z-10">
         <h2
           className="min-w-0 flex-1 truncate text-sm font-semibold"
-          title={title || "Work with AI"}
+          title={title || t("chat.workWithAi")}
         >
-          {title || "Work with AI"}
+          {title || t("chat.workWithAi")}
         </h2>
         <div className="flex items-center shrink-0">
           <Button
@@ -193,7 +193,7 @@ const ChatHeader = React.memo(
             className="h-6 w-6"
             onClick={onNewChat}
             disabled={isRunning}
-            title="New Session"
+            title={t("chat.newSession")}
           >
             <Plus className="!h-3.5 !w-3.5" />
           </Button>
@@ -203,7 +203,7 @@ const ChatHeader = React.memo(
             className="h-6 w-6"
             onClick={onExport}
             disabled={isRunning}
-            title="Export session as Markdown"
+            title={t("chat.exportMarkdown")}
           >
             <Download className="!h-3.5 !w-3.5" />
           </Button>
@@ -251,7 +251,7 @@ const ChatHeader = React.memo(
               className="h-6 w-6"
               onClick={onClose}
               disabled={isRunning}
-              title="Close chat panel"
+              title={t("chat.closePanel")}
             >
               <X className="!h-3.5 !w-3.5" />
             </Button>
@@ -271,6 +271,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
+  const { t } = useUiPreferences();
   const {
     pendingCommand,
     consumeCommand,
@@ -583,14 +584,14 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
 
       const shareUrl = new URL(data.url, window.location.origin).toString();
       await navigator.clipboard.writeText(shareUrl);
-      toastManager.show("Share link copied to clipboard", "success");
+      toastManager.show(t("chat.shareCopied"), "success");
     } catch (error) {
       console.error("Failed to share session", error);
-      toastManager.show("Failed to create share link", "error");
+      toastManager.show(t("chat.shareFailed"), "error");
     } finally {
       setIsSharing(false);
     }
-  }, [chat?.id, isSharing]);
+  }, [chat?.id, isSharing, t]);
 
   useEffect(() => {
     if (!chat?.id) {

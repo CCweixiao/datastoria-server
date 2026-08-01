@@ -18,6 +18,7 @@ import io.github.ccweixiao.datastoria.agent.runtime.RunnableAgent;
 import io.github.ccweixiao.datastoria.common.agent.AgentRunEvent;
 import io.github.ccweixiao.datastoria.common.agent.RunContext;
 import io.github.ccweixiao.datastoria.common.domain.Model;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.ClientSecretNotAllowedException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
@@ -74,9 +75,10 @@ public class SkillReviewController {
                           preference ->
                               models.findById(preference.selectedModelId(), identity.tenantId()))
                       .orElseThrow(
-                          () -> PlainTextException.badRequest("Select an enabled model first"));
+                          () ->
+                              PlainTextException.badRequest(ApiErrorCode.MODEL_SELECTION_REQUIRED));
               if (!model.enabled() || model.deletedAt() != null) {
-                throw PlainTextException.badRequest("Select an enabled model first");
+                throw PlainTextException.badRequest(ApiErrorCode.MODEL_SELECTION_REQUIRED);
               }
               String runId = UUID.randomUUID().toString();
               RunContext context =

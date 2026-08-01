@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import type { SkillReviewResponse } from "@/lib/ai/skills/skill-review";
 import { X } from "lucide-react";
@@ -13,16 +14,17 @@ export const SkillReviewPanel = memo(function SkillReviewPanel({
   review: SkillReviewResponse;
   onDismiss: () => void;
 }) {
+  const { t } = useUiPreferences();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 flex-shrink-0 items-center justify-between border-b px-4">
-        <p className="text-xs font-medium text-muted-foreground">Review Findings</p>
+        <p className="text-xs font-medium text-muted-foreground">{t("skills.reviewFindings")}</p>
         <Button
           variant="ghost"
           size="sm"
           className="h-5 w-5 p-0 text-xs"
           onClick={onDismiss}
-          aria-label="Dismiss review findings"
+          aria-label={t("skills.dismissReview")}
         >
           <X className="!h-3.5 !w-3.5" />
         </Button>

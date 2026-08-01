@@ -59,6 +59,8 @@ Prefer targeted checks when possible, but do not invent alternate toolchains if 
 - Ensure new UI works on both desktop and common narrow layouts.
 - Avoid unnecessary client-side state duplication; prefer deriving view state from existing sources where practical.
 - For changes in chat, query, or dashboard flows, verify loading, empty, error, and success states.
+- Define every new or changed user-facing message in both centralized catalogs under `src/lib/i18n/messages`; do not add inline UI copy.
+- Read interface language through `useUiPreferences`; `settings.ui.language` supports `system`, `en`, and `zh-CN` with user configuration overriding system defaults.
 
 ### Vercel / React Best Practices (apply to all frontend changes)
 

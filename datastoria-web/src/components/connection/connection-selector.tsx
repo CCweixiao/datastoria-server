@@ -1,6 +1,7 @@
 import { useConnection } from "@/components/connection/connection-context";
 import { ConnectionDetailPanel } from "@/components/connection/connection-detail-panel";
 import { HighlightableCommandItem } from "@/components/shared/cmdk/cmdk-extension";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -48,6 +49,7 @@ export function ConnectionSelector({
   className,
   defaultConnectionName: defaultConnectionNameProp,
 }: ConnectionSelectorProps) {
+  const { t } = useUiPreferences();
   const isMobile = useIsMobile();
   const { connection, pendingConfig, isConnectionAvailable, switchConnection } = useConnection();
   const [connections, setConnections] = useState<ConnectionConfig[]>([]);
@@ -185,11 +187,11 @@ export function ConnectionSelector({
         >
           <CommandInput
             ref={inputRef}
-            placeholder="Search connections..."
+            placeholder={t("connection.search")}
             className="!h-9 text-sm w-full"
           />
           <CommandList className="!rounded-none max-h-[500px] flex-1 overflow-y-auto w-full">
-            <CommandEmpty className="p-2 text-center text-sm">No connections found</CommandEmpty>
+            <CommandEmpty className="p-2 text-center text-sm">{t("connection.empty")}</CommandEmpty>
             {connections.map((conn) => {
               // `isSelected` reflects the current connection (prop or context),
               // not the cmdk highlighted value. This keeps the active selection

@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
@@ -10,6 +11,7 @@ export const MessageToolGenerateSql = memo(function GenerateSqlPart({
   part: AppUIMessage["parts"][0];
   isRunning?: boolean;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart & { output?: { sql?: string; notes?: string } };
   const output = toolPart.output;
   const state = toolPart.state;
@@ -18,7 +20,7 @@ export const MessageToolGenerateSql = memo(function GenerateSqlPart({
     <CollapsiblePart toolName={"Generate SQL"} state={state} isRunning={isRunning}>
       {output?.sql && (
         <>
-          <div className="text-[10px] text-muted-foreground">output:</div>
+          <div className="text-[10px] text-muted-foreground">{t("tool.output")}</div>
           <MessageMarkdownSql
             code={output.sql}
             showExecuteButton={false}

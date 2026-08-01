@@ -57,7 +57,7 @@ public class SystemConfigurationProvisioner {
             .replace("\n", "")
             .trim());
     defaults.put(QUERY_CONTEXT_KEY, "{\"max_execution_time\":60}");
-    defaults.put(UI_KEY, "{\"theme\":\"dark\"}");
+    defaults.put(UI_KEY, "{\"theme\":\"dark\",\"language\":\"system\"}");
     return Map.copyOf(defaults);
   }
 }

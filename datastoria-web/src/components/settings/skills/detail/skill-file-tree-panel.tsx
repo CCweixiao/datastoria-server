@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { File } from "lucide-react";
 import { memo } from "react";
@@ -25,10 +26,11 @@ export const SkillFileTreePanel = memo(function SkillFileTreePanel({
   onSkillMdClick: () => void;
   onFileClick: (path: string) => void;
 }) {
+  const { t } = useUiPreferences();
   return (
     <>
       <div className="flex h-10 flex-shrink-0 items-center border-b px-3">
-        <span className="text-xs font-medium text-muted-foreground">Files</span>
+        <span className="text-xs font-medium text-muted-foreground">{t("skills.files")}</span>
       </div>
 
       <ScrollArea className="flex-1">
@@ -44,7 +46,9 @@ export const SkillFileTreePanel = memo(function SkillFileTreePanel({
           </button>
 
           {dirTree.length === 0 ? (
-            <p className="text-xs text-muted-foreground px-1 mt-2">No additional files</p>
+            <p className="text-xs text-muted-foreground px-1 mt-2">
+              {t("skills.noAdditionalFiles")}
+            </p>
           ) : (
             dirTree.map((node) => (
               <SkillFileTreeNode

@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ interface SnippetItemProps {
 }
 
 export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
+  const { t } = useUiPreferences();
   const isBuiltin = snippet.builtin;
   const [isEditing, setIsEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(snippet.caption);
@@ -75,13 +77,13 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
     const normalizedSql = editSql.trim();
 
     if (!normalizedCaption || !normalizedSql) {
-      setEditError("Name and SQL are required.");
+      setEditError(t("snippet.fieldsRequired"));
       return;
     }
     try {
       const manager = QuerySnippetManager.getInstance();
       if (normalizedCaption !== snippet.caption && manager.hasSnippet(normalizedCaption)) {
-        setEditError("Snippet name already exists.");
+        setEditError(t("snippet.nameExistsPeriod"));
         return;
       }
 
@@ -89,7 +91,7 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
       setEditError(null);
       setIsEditing(false);
     } catch {
-      setEditError("Failed to save snippet.");
+      setEditError(t("snippet.saveFailedPeriod"));
     }
   };
 
@@ -142,8 +144,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 e.stopPropagation();
                 handleCancelEdit();
               }}
-              title="Cancel"
-              aria-label="Cancel edit"
+              title={t("common.cancel")}
+              aria-label={t("snippet.cancelEdit")}
             >
               <X className="!h-3 !w-3" />
             </Button>
@@ -156,8 +158,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 e.stopPropagation();
                 handleSaveEdit();
               }}
-              title="Save"
-              aria-label="Save snippet"
+              title={t("common.save")}
+              aria-label={t("snippet.save")}
             >
               <Check className="!h-3 !w-3" />
             </Button>
@@ -174,7 +176,7 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm mb-1 text-destructive">
-                    Validation error
+                    {t("snippet.validationError")}
                   </div>
                   <div className="text-xs text-muted-foreground">{editError}</div>
                 </div>
@@ -211,8 +213,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
               e.stopPropagation();
               handleRun(snippet);
             }}
-            title="Run in new tab"
-            aria-label="Run in new tab"
+            title={t("snippet.runNewTab")}
+            aria-label={t("snippet.runNewTab")}
           >
             <Play className="!h-3 !w-3" />
           </Button>
@@ -224,8 +226,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
               e.stopPropagation();
               handleInsert(snippet);
             }}
-            title="Insert at cursor"
-            aria-label="Insert at cursor"
+            title={t("snippet.insertCursor")}
+            aria-label={t("snippet.insertCursor")}
           >
             <ArrowRight className="!h-3 !w-3" />
           </Button>
@@ -238,8 +240,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 e.stopPropagation();
                 handleCloneClick();
               }}
-              title="Clone / Edit Copy"
-              aria-label="Clone / Edit Copy"
+              title={t("snippet.clone")}
+              aria-label={t("snippet.clone")}
             >
               <Copy className="!h-3 !w-3" />
             </Button>
@@ -255,10 +257,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 handleEditClick();
               }
             }}
-            title={isBuiltin ? "Built-in snippets are read-only. Clone to edit a copy." : "Edit"}
-            aria-label={
-              isBuiltin ? "Built-in snippets are read-only. Clone to edit a copy." : "Edit snippet"
-            }
+            title={isBuiltin ? t("snippet.readonly") : t("snippet.edit")}
+            aria-label={isBuiltin ? t("snippet.readonly") : t("snippet.edit")}
           >
             <Pencil className="!h-3 !w-3" />
           </Button>
@@ -273,8 +273,8 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                 handleDeleteClick();
               }
             }}
-            title={isBuiltin ? "Built-in snippets cannot be deleted." : "Delete"}
-            aria-label={isBuiltin ? "Built-in snippets cannot be deleted." : "Delete snippet"}
+            title={isBuiltin ? t("snippet.cannotDelete") : t("common.delete")}
+            aria-label={isBuiltin ? t("snippet.cannotDelete") : t("snippet.delete")}
           >
             <Trash2 className="!h-3 !w-3" />
           </Button>
@@ -290,9 +290,11 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm mb-1 text-destructive">Confirm deletion</div>
+              <div className="font-semibold text-sm mb-1 text-destructive">
+                {t("snippet.confirmDeletion")}
+              </div>
               <div className="text-xs mb-3 text-muted-foreground">
-                Are you sure you want to delete this snippet? This action cannot be undone.
+                {t("snippet.deleteDescription")}
               </div>
               <div className="flex justify-end gap-2">
                 <Button
@@ -304,7 +306,7 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                     handleDeleteCancel();
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -315,7 +317,7 @@ export function SnippetTooltipContent({ snippet }: SnippetTooltipContentProps) {
                     handleDeleteConfirm();
                   }}
                 >
-                  Delete
+                  {t("common.delete")}
                 </Button>
               </div>
             </div>
@@ -352,6 +354,7 @@ function SnippetHoverCardContent({
   onRun: (snippet: Snippet) => void;
   onInsert: (snippet: Snippet) => void;
 }) {
+  const { t } = useUiPreferences();
   const [isEditing, setIsEditing] = useState(false);
   const [editCaption, setEditCaption] = useState(snippet.caption);
   const [editSql, setEditSql] = useState(snippet.sql);
@@ -372,8 +375,8 @@ function SnippetHoverCardContent({
   const handleSaveEdit = () => {
     if (!editCaption.trim() || !editSql.trim()) {
       Dialog.alert({
-        title: "Validation Error",
-        description: "Name and SQL are required.",
+        title: t("snippet.validationError"),
+        description: t("snippet.fieldsRequired"),
       });
       return;
     }
@@ -382,8 +385,8 @@ function SnippetHoverCardContent({
       setIsEditing(false);
     } catch {
       Dialog.alert({
-        title: "Error",
-        description: "Failed to save snippet.",
+        title: t("common.error"),
+        description: t("snippet.saveFailedPeriod"),
       });
     }
   };
@@ -426,8 +429,8 @@ function SnippetHoverCardContent({
                 e.stopPropagation();
                 handleCancelEdit();
               }}
-              title="Cancel"
-              aria-label="Cancel edit"
+              title={t("common.cancel")}
+              aria-label={t("snippet.cancelEdit")}
             >
               <X className="!h-3 !w-3" />
             </Button>
@@ -440,8 +443,8 @@ function SnippetHoverCardContent({
                 e.stopPropagation();
                 handleSaveEdit();
               }}
-              title="Save"
-              aria-label="Save snippet"
+              title={t("common.save")}
+              aria-label={t("snippet.save")}
             >
               <Check className="!h-3 !w-3" />
             </Button>
@@ -473,8 +476,8 @@ function SnippetHoverCardContent({
               e.stopPropagation();
               onRun(snippet);
             }}
-            title="Run in new tab"
-            aria-label="Run in new tab"
+            title={t("snippet.runNewTab")}
+            aria-label={t("snippet.runNewTab")}
           >
             <Play className="!h-3 !w-3" />
           </Button>
@@ -486,8 +489,8 @@ function SnippetHoverCardContent({
               e.stopPropagation();
               onInsert(snippet);
             }}
-            title="Insert at cursor"
-            aria-label="Insert at cursor"
+            title={t("snippet.insertCursor")}
+            aria-label={t("snippet.insertCursor")}
           >
             <ArrowRight className="!h-3 !w-3" />
           </Button>
@@ -500,8 +503,8 @@ function SnippetHoverCardContent({
                 e.stopPropagation();
                 handleCloneClick();
               }}
-              title="Clone / Edit Copy"
-              aria-label="Clone / Edit Copy"
+              title={t("snippet.clone")}
+              aria-label={t("snippet.clone")}
             >
               <Copy className="!h-3 !w-3" />
             </Button>
@@ -516,8 +519,8 @@ function SnippetHoverCardContent({
                   e.stopPropagation();
                   handleEditClick();
                 }}
-                title="Edit"
-                aria-label="Edit snippet"
+                title={t("common.edit")}
+                aria-label={t("snippet.edit")}
               >
                 <Pencil className="!h-3 !w-3" />
               </Button>
@@ -529,8 +532,8 @@ function SnippetHoverCardContent({
                   e.stopPropagation();
                   handleDeleteClick();
                 }}
-                title="Delete"
-                aria-label="Delete snippet"
+                title={t("common.delete")}
+                aria-label={t("snippet.delete")}
               >
                 <Trash2 className="!h-3 !w-3" />
               </Button>
@@ -547,9 +550,11 @@ function SnippetHoverCardContent({
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm mb-1 text-destructive">Confirm deletion</div>
+              <div className="font-semibold text-sm mb-1 text-destructive">
+                {t("snippet.confirmDeletion")}
+              </div>
               <div className="text-xs mb-3 text-muted-foreground">
-                Are you sure you want to delete this snippet? This action cannot be undone.
+                {t("snippet.deleteDescription")}
               </div>
               <div className="flex justify-end gap-2">
                 <Button
@@ -561,7 +566,7 @@ function SnippetHoverCardContent({
                     handleDeleteCancel();
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -572,7 +577,7 @@ function SnippetHoverCardContent({
                     handleDeleteConfirm();
                   }}
                 >
-                  Delete
+                  {t("common.delete")}
                 </Button>
               </div>
             </div>

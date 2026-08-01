@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tree, type TreeDataItem } from "@/components/ui/tree";
@@ -105,6 +106,7 @@ function appendSnippetsToTree(
 }
 
 export function SnippetListView() {
+  const { t } = useUiPreferences();
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [search, setSearch] = useState("");
 
@@ -144,7 +146,7 @@ export function SnippetListView() {
       <div className="relative border-b-2 flex items-center h-9">
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search snippets..."
+          placeholder={t("snippet.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={cn(
@@ -158,7 +160,7 @@ export function SnippetListView() {
             size="sm"
             className="absolute right-8 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
             onClick={() => setSearch("")}
-            title="Clear search"
+            title={t("schema.clearSearch")}
           >
             <X className="h-3 w-3" />
           </Button>
@@ -168,7 +170,7 @@ export function SnippetListView() {
           size="sm"
           className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
           onClick={() => openSaveSnippetDialog()}
-          title="Add new snippet"
+          title={t("snippet.add")}
         >
           <Plus className="h-4 w-4" />
         </Button>

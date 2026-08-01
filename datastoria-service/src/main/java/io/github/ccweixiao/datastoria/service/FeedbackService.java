@@ -15,6 +15,7 @@ import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.dto.FeedbackAcceptedResponse;
 import io.github.ccweixiao.datastoria.common.dto.FeedbackRecordedResponse;
 import io.github.ccweixiao.datastoria.common.dto.FeedbackUpsertRequest;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.FeedbackTargetNotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
@@ -96,32 +97,32 @@ public class FeedbackService {
 
   private void validate(FeedbackUpsertRequest req) {
     if (req.source() == null || !SOURCE.equals(req.source())) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.sessionId() == null || req.sessionId().isBlank() || req.sessionId().length() > 64) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.messageId() == null || req.messageId().isBlank() || req.messageId().length() > 255) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.payload() == null
         || req.payload().queryId() == null
         || req.payload().queryId().isBlank()
         || req.payload().queryId().length() > 255) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.payload().errorCode() != null && req.payload().errorCode().length() > 64) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.payload().sql() != null && req.payload().sql().length() > 100_000) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (req.freeText() != null && req.freeText().length() > 2000) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     }
     if (!req.solved()) {
       if (req.reasonCode() == null || !REASON_CODES.contains(req.reasonCode())) {
-        throw PlainTextException.badRequest("Invalid request format");
+        throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
       }
     }
   }

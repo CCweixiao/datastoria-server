@@ -2,6 +2,7 @@
 
 import { StatusPopover } from "@/components/connection/connection-edit-component";
 import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { copyToClipboardWithMeta } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ interface QueryHistorySheetProps {
 }
 
 export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistorySheetProps) {
+  const { t } = useUiPreferences();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<QueryHistoryEntry[]>([]);
   const [searchText, setSearchText] = useState("");
@@ -98,11 +100,10 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
             <div className="space-y-1">
               <SheetTitle className="flex items-center gap-2">
                 <History className="h-4 w-4" />
-                SQL History
+                {t("query.historyTitle")}
               </SheetTitle>
               <SheetDescription>
-                Successful query runs are stored locally per user. Up to {MAX_QUERY_HISTORY_SIZE}{" "}
-                items.
+                {t("query.historyHelp", { count: MAX_QUERY_HISTORY_SIZE })}
               </SheetDescription>
             </div>
           </div>
@@ -114,7 +115,7 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
             <Input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search SQL text"
+              placeholder={t("query.searchHistory")}
               className="h-9 pl-9"
             />
           </div>
@@ -131,17 +132,15 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                 onClick={() => setIsClearAllOpen(true)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Clear All
+                {t("common.clearAll")}
               </Button>
             }
             side="left"
             align="end"
             icon={<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />}
-            title="Confirm clear all"
+            title={t("query.confirmClearAll")}
           >
-            <div className="mb-3 text-xs">
-              Are you sure to delete all SQL history entries? This action cannot be reverted.
-            </div>
+            <div className="mb-3 text-xs">{t("query.clearAllDescription")}</div>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -150,7 +149,7 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                 className="h-7"
                 onClick={() => setIsClearAllOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -162,7 +161,7 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                   setIsClearAllOpen(false);
                 }}
               >
-                Clear all
+                {t("common.clearAll")}
               </Button>
             </div>
           </StatusPopover>
@@ -171,14 +170,14 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
           {!hasEntries ? (
             <EmptyState
               icon={Clock3}
-              title="No SQL history yet"
-              description="Run a query successfully and it will appear here."
+              title={t("query.noHistory")}
+              description={t("query.noHistoryHelp")}
             />
           ) : showNoResults ? (
             <EmptyState
               icon={Search}
-              title="No matching history"
-              description="Try a different keyword."
+              title={t("query.noMatchingHistory")}
+              description={t("query.tryKeyword")}
             />
           ) : shouldUseVirtualization ? (
             <div
@@ -243,6 +242,7 @@ function QueryHistoryEntryCard({
   onDelete: (id: string) => void;
   onRun: (sql: string) => void;
 }) {
+  const { t } = useUiPreferences();
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -276,12 +276,16 @@ function QueryHistoryEntryCard({
             size="icon"
             className="h-5 w-5"
             onClick={() => onRun(entry.rawSQL)}
-            title="Run SQL"
-            aria-label="Run SQL"
+            title={t("query.runSql")}
+            aria-label={t("query.runSql")}
           >
             <Play className="!h-3.5 !w-3.5" />
           </Button>
-          <HistorySheetCopyButton value={entry.rawSQL} aria-label="Copy SQL" title="Copy SQL" />
+          <HistorySheetCopyButton
+            value={entry.rawSQL}
+            aria-label={t("query.copySql")}
+            title={t("query.copySql")}
+          />
           <StatusPopover
             open={isDeleteOpen}
             onOpenChange={(open) => {
@@ -300,8 +304,8 @@ function QueryHistoryEntryCard({
                   event.stopPropagation();
                   setIsDeleteOpen(true);
                 }}
-                title="Delete SQL history entry"
-                aria-label="Delete SQL history entry"
+                title={t("query.deleteHistory")}
+                aria-label={t("query.deleteHistory")}
               >
                 <Trash2 className="!h-3.5 !w-3.5" />
               </Button>
@@ -309,11 +313,9 @@ function QueryHistoryEntryCard({
             side="left"
             align="start"
             icon={<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />}
-            title="Confirm deletion"
+            title={t("query.confirmDeletion")}
           >
-            <div className="mb-3 text-xs">
-              Are you sure to delete this SQL history entry? This action cannot be reverted.
-            </div>
+            <div className="mb-3 text-xs">{t("query.deleteHistoryDescription")}</div>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -325,7 +327,7 @@ function QueryHistoryEntryCard({
                   setIsHovered(false);
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -338,7 +340,7 @@ function QueryHistoryEntryCard({
                   setIsHovered(false);
                 }}
               >
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
           </StatusPopover>
@@ -374,6 +376,7 @@ function HistorySheetCopyButton({
   className?: string;
   value: string;
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const { t } = useUiPreferences();
   const [hasCopied, setHasCopied] = useState(false);
 
   useEffect(() => {
@@ -393,7 +396,7 @@ function HistorySheetCopyButton({
       await copyToClipboardWithMeta(value);
       setHasCopied(true);
     } catch {
-      toastManager.show("Failed to copy to clipboard", "error");
+      toastManager.show(t("query.copyFailed"), "error");
     }
   };
 

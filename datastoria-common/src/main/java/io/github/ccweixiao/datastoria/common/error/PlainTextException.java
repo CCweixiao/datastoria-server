@@ -1,5 +1,7 @@
 package io.github.ccweixiao.datastoria.common.error;
 
+import java.util.Locale;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
@@ -20,19 +22,25 @@ public class PlainTextException extends RuntimeException {
 
   private final HttpStatus status;
   private final String body;
+  private final String bodyZh;
+  private final ApiErrorCode code;
   private final MediaType contentType;
 
   public PlainTextException(HttpStatus status, String body) {
-    super(body);
-    this.status = status;
-    this.body = body;
-    this.contentType = MediaType.TEXT_PLAIN;
+    this(status, ApiErrorCode.INVALID_REQUEST, body, body, MediaType.TEXT_PLAIN);
   }
 
   public PlainTextException(HttpStatus status, String body, MediaType contentType) {
+    this(status, ApiErrorCode.INVALID_REQUEST, body, body, contentType);
+  }
+
+  private PlainTextException(
+      HttpStatus status, ApiErrorCode code, String body, String bodyZh, MediaType contentType) {
     super(body);
     this.status = status;
+    this.code = code;
     this.body = body;
+    this.bodyZh = bodyZh;
     this.contentType = contentType;
   }
 
@@ -44,6 +52,14 @@ public class PlainTextException extends RuntimeException {
     return body;
   }
 
+  public String body(Locale locale) {
+    return ApiErrorCode.isChinese(locale) ? bodyZh : body;
+  }
+
+  public ApiErrorCode code() {
+    return code;
+  }
+
   public MediaType contentType() {
     return contentType;
   }
@@ -53,23 +69,39 @@ public class PlainTextException extends RuntimeException {
     return new PlainTextException(HttpStatus.BAD_REQUEST, body);
   }
 
+  /** HTTP 400 with a stable error code and a locale-aware body. */
+  public static PlainTextException badRequest(ApiErrorCode code) {
+    if (code.status() != HttpStatus.BAD_REQUEST.value()) {
+      throw new IllegalArgumentException("Error code must use HTTP 400: " + code.name());
+    }
+    return localized(code, code.message(Locale.ENGLISH), code.message(Locale.SIMPLIFIED_CHINESE));
+  }
+
   /** HTTP 401 with the literal body {@code Authentication required}. */
   public static PlainTextException authenticationRequired() {
-    return new PlainTextException(HttpStatus.UNAUTHORIZED, "Authentication required");
+    return localized(ApiErrorCode.AUTHENTICATION_REQUIRED, "Authentication required", "需要身份认证");
   }
 
   /** HTTP 403 with the literal body {@code Invalid session share code}. */
   public static PlainTextException invalidShareCode() {
-    return new PlainTextException(HttpStatus.FORBIDDEN, "Invalid session share code");
+    return localized(ApiErrorCode.INVALID_SHARE_CODE, "Invalid session share code", "会话共享码无效");
   }
 
   /** HTTP 404 with the literal body {@code Not found}. */
   public static PlainTextException notFound() {
-    return new PlainTextException(HttpStatus.NOT_FOUND, "Not found");
+    return localized(ApiErrorCode.NOT_FOUND, "Not found", "资源不存在");
   }
 
   /** HTTP 409 with the literal body {@code Session connectionId mismatch}. */
   public static PlainTextException connectionIdMismatch() {
-    return new PlainTextException(HttpStatus.CONFLICT, "Session connectionId mismatch");
+    return localized(
+        ApiErrorCode.CONNECTION_ID_MISMATCH,
+        "Session connectionId mismatch",
+        "会话的 connectionId 不匹配");
+  }
+
+  private static PlainTextException localized(ApiErrorCode code, String bodyEn, String bodyZh) {
+    return new PlainTextException(
+        HttpStatus.valueOf(code.status()), code, bodyEn, bodyZh, MediaType.TEXT_PLAIN);
   }
 }

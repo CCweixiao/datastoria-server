@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type { PlanToolOutput } from "@/lib/ai/agent/plan/planning-types";
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import { memo, useEffect } from "react";
@@ -14,6 +15,7 @@ export const MessageToolPlan = memo(function MessageToolPlan({
   part: AppUIMessage["parts"][0];
   isRunning?: boolean;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart;
   const state = toolPart.state;
   const output = toolPart.output as PlanToolOutput;
@@ -29,7 +31,7 @@ export const MessageToolPlan = memo(function MessageToolPlan({
     <CollapsiblePart toolName={"Plan"} state={state} isRunning={isRunning}>
       {toolPart.output != null && (
         <div className="mt-1 max-h-[300px] overflow-auto text-[10px] text-muted-foreground">
-          <div className="mb-0.5">output:</div>
+          <div className="mb-0.5">{t("tool.output")}</div>
           <pre className="bg-muted/30 rounded p-2 overflow-x-auto shadow-sm leading-tight border border-muted/20">
             {JSON.stringify(toolPart.output, null, 2)}
           </pre>

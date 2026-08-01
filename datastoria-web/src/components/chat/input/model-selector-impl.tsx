@@ -3,6 +3,7 @@ import {
   AgentConfigurationManager,
   type AgentConfiguration,
 } from "@/components/settings/agent/agent-manager";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -132,12 +133,13 @@ function ReasoningDetailSection({
   onChange: (configuration: AgentConfiguration) => void;
   supportsReasoning: boolean;
 }) {
+  const { t } = useUiPreferences();
   const activeLevel = resolveActiveReasoningLevel(levels, configuration.reasoningLevel);
   const staticReasoningLevelLabel = supportsReasoning
     ? levels.length > 0
-      ? "Configurable"
-      : "Built-in"
-    : "Not supported";
+      ? t("chat.reasoningConfigurable")
+      : t("chat.reasoningBuiltIn")
+    : t("chat.reasoningUnsupported");
 
   const handleSelect = useCallback(
     (level: ReasoningLevel) => {
@@ -156,11 +158,13 @@ function ReasoningDetailSection({
     value: string;
   }) => (
     <div className="flex flex-col gap-1">
-      <div className="text-[9px] font-semibold text-muted-foreground">Reasoning Level</div>
+      <div className="text-[9px] font-semibold text-muted-foreground">
+        {t("chat.reasoningLevel")}
+      </div>
       <RadioGroup
         className="flex flex-col gap-0.5"
         value={input.value}
-        aria-label="Reasoning level"
+        aria-label={t("chat.reasoningLevel")}
       >
         <div
           title={input.title}
@@ -188,8 +192,8 @@ function ReasoningDetailSection({
   if (isInteractive && !supportsReasoning) {
     return renderStaticReasoningOption({
       id: "reasoning-level-not-supported",
-      label: "Not supported",
-      title: "Reasoning is not supported by this model",
+      label: t("chat.reasoningUnsupported"),
+      title: t("chat.reasoningUnsupportedHelp"),
       value: UNSUPPORTED_REASONING_VALUE,
     });
   }
@@ -197,8 +201,8 @@ function ReasoningDetailSection({
   if (isInteractive && supportsReasoning && levels.length === 0) {
     return renderStaticReasoningOption({
       id: "reasoning-level-built-in",
-      label: "Built-in",
-      title: "Reasoning is built into this model",
+      label: t("chat.reasoningBuiltIn"),
+      title: t("chat.reasoningBuiltInHelp"),
       value: BUILT_IN_REASONING_VALUE,
     });
   }
@@ -206,7 +210,9 @@ function ReasoningDetailSection({
   if (!isInteractive || levels.length === 0) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="text-[9px] font-semibold text-muted-foreground">Reasoning Level</div>
+        <div className="text-[9px] font-semibold text-muted-foreground">
+          {t("chat.reasoningLevel")}
+        </div>
         <div className="text-[10px] leading-relaxed text-popover-foreground">
           {staticReasoningLevelLabel}
         </div>
@@ -216,12 +222,14 @@ function ReasoningDetailSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-[9px] font-semibold text-muted-foreground">Reasoning Level</div>
+      <div className="text-[9px] font-semibold text-muted-foreground">
+        {t("chat.reasoningLevel")}
+      </div>
       <RadioGroup
         className="flex flex-col gap-0.5"
         value={activeLevel}
         onValueChange={handleSelect}
-        aria-label="Reasoning level"
+        aria-label={t("chat.reasoningLevel")}
       >
         {levels.map((level) => {
           const itemId = `reasoning-level-${level.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -229,7 +237,7 @@ function ReasoningDetailSection({
           return (
             <div
               key={level}
-              title={`Use ${formatReasoningLevel(level)} reasoning`}
+              title={t("chat.useReasoning", { level: formatReasoningLevel(level) })}
               className={cn(
                 "flex h-6 w-full items-center gap-2 rounded-sm px-2 text-left text-[10px] outline-none transition-colors",
                 "hover:bg-accent hover:text-accent-foreground",
@@ -256,17 +264,19 @@ function ReasoningDetailSection({
 }
 
 function FreeBadge() {
+  const { t } = useUiPreferences();
   return (
     <Badge className="ml-auto rounded-sm bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-none hover:bg-green-100 dark:hover:bg-green-900/30 text-[9px]">
-      Free
+      {t("chat.free")}
     </Badge>
   );
 }
 
 function SystemBadge() {
+  const { t } = useUiPreferences();
   return (
     <Badge className="rounded-sm bg-info/10 text-info border-none hover:bg-info/10 text-[9px]">
-      System
+      {t("chat.system")}
     </Badge>
   );
 }
@@ -346,6 +356,7 @@ export function ModelSelectorImpl({
   showConfigureAction = true,
   showReasoningControls,
 }: ModelSelectorImplProps = {}) {
+  const { t } = useUiPreferences();
   const [open, setOpen] = useState(false);
   const { availableModels, selectedModel, setSelectedModel, isLoading } = useModelConfig();
   const effectiveAutoSelectAvailable = availableModels.some(
@@ -566,7 +577,7 @@ export function ModelSelectorImpl({
               )}
             >
               <CommandInput
-                placeholder="Search models..."
+                placeholder={t("chat.searchModels")}
                 className="h-[32px] text-[10px] shrink-0"
                 wrapperClassName="px-2"
                 iconClassName="h-3 w-3"
@@ -575,7 +586,7 @@ export function ModelSelectorImpl({
                 <div className="flex items-center justify-between px-2 pt-1.5 shrink-0">
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <Layers className="h-3 w-3 opacity-50" />
-                    <span>Group by provider</span>
+                    <span>{t("chat.groupByProvider")}</span>
                   </div>
                   <Switch
                     checked={groupByProvider}
@@ -592,7 +603,7 @@ export function ModelSelectorImpl({
                 )}
               >
                 <CommandEmpty className="h-[32px] py-2 text-center text-[10px]">
-                  No model found.
+                  {t("chat.noModel")}
                 </CommandEmpty>
                 {groupByProvider
                   ? // Grouped view

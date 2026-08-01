@@ -1,7 +1,9 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { normalizeLocale, translate } from "@/lib/i18n/i18n";
 import { useState } from "react";
 import { Dialog } from "../../shared/use-dialog";
 import { QuerySnippetManager } from "../snippet/query-snippet-manager";
@@ -21,6 +23,7 @@ function SaveSnippetForm({
   initialSql: string;
   onSaved?: () => void;
 }) {
+  const { t } = useUiPreferences();
   const [name, setName] = useState(initialName);
   const [sql, setSql] = useState(initialSql);
   const [error, setError] = useState<string | null>(null);
@@ -30,18 +33,18 @@ function SaveSnippetForm({
     const normalizedSql = sql.trim();
 
     if (!normalizedName) {
-      setError("Name is required");
+      setError(t("snippet.nameRequired"));
       return;
     }
 
     if (!normalizedSql) {
-      setError("SQL is required");
+      setError(t("snippet.sqlRequired"));
       return;
     }
 
     const manager = QuerySnippetManager.getInstance();
     if (manager.hasSnippet(normalizedName)) {
-      setError("Snippet name already exists");
+      setError(t("snippet.nameExists"));
       return;
     }
 
@@ -51,17 +54,17 @@ function SaveSnippetForm({
       Dialog.close();
     } catch (saveError) {
       console.error(saveError);
-      setError("Failed to save snippet");
+      setError(t("snippet.saveFailed"));
     }
   };
 
   return (
     <div className="flex flex-col gap-4 py-4">
       <div className="grid gap-2">
-        <Label htmlFor="name">Name(will be used as the suggestion for auto-completion)</Label>
+        <Label htmlFor="name">{t("snippet.nameLabel")}</Label>
         <Input
           id="name"
-          placeholder="e.g., daily_active_users"
+          placeholder={t("snippet.nameExample")}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
@@ -85,10 +88,10 @@ function SaveSnippetForm({
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => Dialog.close()}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="button" onClick={handleSave}>
-          Save
+          {t("common.save")}
         </Button>
       </div>
     </div>
@@ -100,10 +103,12 @@ export function openSaveSnippetDialog({
   initialName = "",
   onSaved,
 }: OpenSaveSnippetDialogOptions = {}) {
+  const locale = normalizeLocale(
+    typeof document === "undefined" ? "en" : document.documentElement.lang
+  );
   Dialog.showDialog({
-    title: "Save Snippet",
-    description:
-      "Save your query as a reusable snippet. You can access it from the snippet library or auto-complete it in the editor.",
+    title: translate(locale, "snippet.saveTitle"),
+    description: translate(locale, "snippet.saveHelp"),
     className: "sm:max-w-[800px]",
     mainContent: (
       <SaveSnippetForm initialName={initialName} initialSql={initialSql} onSaved={onSaved} />
