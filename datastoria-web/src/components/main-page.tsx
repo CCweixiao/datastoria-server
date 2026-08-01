@@ -27,11 +27,9 @@ import {
   QueryError,
   type ConnectionConfig,
   type DatabaseInfo,
-  type JSONCompactFormatResponse,
   type TableInfo,
 } from "@/lib/connection/connection";
 import { hostNameManager } from "@/lib/host-name-manager";
-import { SqlUtils } from "@/lib/sql-utils";
 import { cn } from "@/lib/utils";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { AlertCircle, CheckCircle2, Circle, Database, Loader2, RotateCcw, Zap } from "lucide-react";
@@ -120,266 +118,19 @@ function extractTableNames(result: SchemaLoadResult): {
   return { tableNames, databaseNames };
 }
 
-// Initialize cluster info on a temporary connection and update metadata directly
+// Metadata is loaded and cached by the backend; the browser only keeps the active snapshot.
 async function getConnectionMetadata(connection: Connection): Promise<void> {
-  let remoteHostName: string | undefined;
-  const isCluster = Boolean(connection.cluster && connection.cluster.length > 0);
-
-  // Use FQDN instead of hostname is that the hostname returns short name on k8s,
-  // which fails to resolve in remote function
-  const metadataQuery = connection
-    .query(
-      `SELECT currentUser(), 
-      timezone(),
-      hostName(),
-      FQDN(),
-      version()`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((metadataResponse) => {
-      if (metadataResponse.httpStatus === 200) {
-        const data = metadataResponse.data.json<JSONCompactFormatResponse>();
-        const internalUser = data.data[0][0];
-        const timezone = data.data[0][1];
-        const hostName = data.data[0][2] as string;
-        const hostname = data.data[0][3] as string;
-        const serverVersion = data.data[0][4] as string;
-        // Index mapping for JSONCompact row:
-        // 0: currentUser()
-        // 1: timezone()
-        // 2: hostName()
-        // 3: FQDN()
-        // 4: version()
-
-        remoteHostName = isCluster ? hostname : undefined;
-        if (!isCluster) {
-          hostNameManager.shortenHostnames([hostname]);
-        }
-        connection.metadata = {
-          ...connection.metadata,
-          displayName: hostname,
-          remoteHostName,
-          serverVersion,
-          internalUser: internalUser as string,
-          timezone: timezone as string,
-          hostNames:
-            !isCluster && hostName.length > 0 ? new Set([hostName]) : connection.metadata.hostNames,
-        };
-      }
-    });
-
-  const nodeNamesQuery = connection
-    .query(
-      `SELECT cluster, host_name, host_address, port, shard_num, replica_num, is_local
-           FROM system.clusters
-           ${isCluster ? `WHERE cluster = '${SqlUtils.escapeSqlString(connection.cluster!)}'` : ""}
-           ORDER BY cluster, shard_num, replica_num`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        const clusterNames = new Set(
-          data.data
-            .map((row) => row[0])
-            .filter((value): value is string => typeof value === "string")
-        );
-        const detectedCluster =
-          connection.cluster || (clusterNames.size === 1 ? [...clusterNames][0] : undefined);
-        const selectedRows = detectedCluster
-          ? data.data.filter((row) => row[0] === detectedCluster)
-          : [];
-        const nodeNames = new Set<string>();
-        const fqdnValues = new Set<string>();
-        const clusterNodes = [];
-
-        for (const row of selectedRows) {
-          const hostName = row[1];
-          const fqdn = row[2];
-          if (typeof hostName === "string" && hostName.length > 0) {
-            nodeNames.add(hostName);
-          }
-          if (typeof fqdn === "string" && fqdn.length > 0) {
-            fqdnValues.add(fqdn);
-          }
-          if (typeof hostName === "string" && typeof fqdn === "string") {
-            clusterNodes.push({
-              hostName,
-              hostAddress: `${fqdn}:${Number(row[3] ?? 9000)}`,
-              shardNumber: Number(row[4] ?? 0),
-              replicaNumber: Number(row[5] ?? 0),
-              isLocal: Boolean(row[6]),
-            });
-          }
-        }
-
-        if (fqdnValues.size > 0) {
-          hostNameManager.shortenHostnames([...fqdnValues]);
-        }
-
-        connection.metadata = {
-          ...connection.metadata,
-          detectedCluster,
-          hostNames: nodeNames.size > 0 ? nodeNames : connection.metadata.hostNames,
-          clusterNodes,
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to load cluster topology:", e);
-    });
-
-  // Separate queries for column checks - each query is independent and failures are ignored
-  const functionTableQuery = connection
-    .query(
-      `SELECT 
-    hasColumnInTable('system', 'functions', 'description'),
-    (SELECT 1 FROM system.functions WHERE name = 'formatQuery' LIMIT 1)`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          function_table_has_description_column: Boolean(data.data[0]?.[0]),
-          has_format_query_function: Boolean(data.data[0]?.[1]),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to check system.functions table:", e);
-    });
-
-  const metricLogTableQuery = connection
-    .query(
-      `SELECT 
-    hasColumnInTable('system', 'metric_log', 'ProfileEvent_MergeSourceParts'),
-    hasColumnInTable('system', 'metric_log', 'ProfileEvent_MutationTotalParts')`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          metric_log_table_has_ProfileEvent_MergeSourceParts: Boolean(data.data[0]?.[0]),
-          metric_log_table_has_ProfileEvent_MutationTotalParts: Boolean(data.data[0]?.[1]),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to check metric_log table columns:", e);
-    });
-
-  const queryLogTableQuery = connection
-    .query(
-      `SELECT count() > 0 FROM system.columns
-WHERE database = 'system' AND table = 'query_log' AND name = 'hostname'`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          query_log_table_has_hostname_column: Boolean(data.data[0]?.[0]),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to check query_log_table_has_hostname_column:", e);
-    });
-
-  const spanLogTableQuery = connection
-    .query(
-      `SELECT count() > 0 FROM system.columns
-WHERE database = 'system' AND table = 'opentelemetry_span_log' AND name = 'hostname'`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          span_log_table_has_hostname_column: Boolean(data.data[0]?.[0]),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to check span_log_table_has_hostname_column:", e);
-    });
-
-  const partLogTableQuery = connection
-    .query(
-      `SELECT count() > 0 FROM system.columns
-WHERE database = 'system' AND table = 'part_log' AND name = 'hostname'`,
-      { default_format: "JSONCompact" }
-    )
-    .response.then((response) => {
-      if (response.httpStatus === 200) {
-        const data = response.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          part_log_table_has_node_name_column: Boolean(data.data[0]?.[0]),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to check part_log_table_has_node_name_column:", e);
-    });
-
-  const settingsQuery = connection
-    .query(
-      `SELECT name, value, readonly FROM system.settings WHERE name in ('skip_unavailable_shards')`,
-      {
-        default_format: "JSONCompact",
-      }
-    )
-    .response.then((settingsResponse) => {
-      if (settingsResponse.httpStatus === 200) {
-        const data = settingsResponse.data.json<JSONCompactFormatResponse>();
-        if (data.data.length > 0) {
-          connection.metadata = {
-            ...connection.metadata,
-            is_readonly_skip_unavailable_shards: data.data[0][2] ? true : false,
-          };
-        }
-      }
-    });
-
-  // Fetch ProfileEvents from system.events for SQL validation
-  const profileEventsQuery = connection
-    .query(`SELECT DISTINCT event FROM system.events ORDER BY event`, {
-      default_format: "JSONCompact",
-    })
-    .response.then((eventsResponse) => {
-      if (eventsResponse.httpStatus === 200) {
-        const data = eventsResponse.data.json<JSONCompactFormatResponse>();
-        connection.metadata = {
-          ...connection.metadata,
-          profileEvents: new Set(data.data.map((row) => row[0] as string)),
-        };
-      }
-    })
-    .catch((e) => {
-      console.warn("Failed to load ProfileEvents:", e);
-      // Don't fail initialization if ProfileEvents fetch fails
-    });
-
-  await Promise.all([
-    metadataQuery,
-    nodeNamesQuery,
-    settingsQuery,
-    profileEventsQuery,
-    functionTableQuery,
-    metricLogTableQuery,
-    queryLogTableQuery,
-    spanLogTableQuery,
-    partLogTableQuery,
-  ]);
+  const metadata = await connection.loadMetadata();
+  if (metadata.remoteHostName) {
+    hostNameManager.shortenHostnames([metadata.remoteHostName]);
+  }
+  connection.metadata = {
+    ...connection.metadata,
+    ...metadata,
+    hostNames: new Set(metadata.hostNames),
+    profileEvents: new Set(metadata.profileEvents),
+  };
 }
-
 type StepStatus = "pending" | "loading" | "success" | "error";
 
 interface LoadingStep {

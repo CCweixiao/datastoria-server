@@ -3,6 +3,8 @@
 <mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ClickHouseConnectionMapper">
 
   <resultMap id="ChMap" type="io.github.ccweixiao.datastoria.dao.persistence.entity.ClickHouseConnectionEntity" autoMapping="true">
+    <!-- The column name does not follow the property name: cluster_name must map to cluster. -->
+    <result property="cluster" column="cluster_name"/>
     <!-- Read encrypted binary columns as byte arrays. -->
     <result property="passwordCipher" column="password_cipher"
             typeHandler="org.apache.ibatis.type.ByteArrayTypeHandler"/>

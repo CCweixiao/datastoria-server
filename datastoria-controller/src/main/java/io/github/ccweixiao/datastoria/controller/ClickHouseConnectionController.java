@@ -18,12 +18,14 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionMetadataResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionRequest;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionTestResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseQueryRequest;
 import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
+import io.github.ccweixiao.datastoria.service.ClickHouseConnectionMetadataService;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 
 import jakarta.validation.Valid;
@@ -35,9 +37,12 @@ import reactor.core.publisher.Mono;
 public class ClickHouseConnectionController {
 
   private final ClickHouseConnectionService service;
+  private final ClickHouseConnectionMetadataService metadataService;
 
-  public ClickHouseConnectionController(ClickHouseConnectionService service) {
+  public ClickHouseConnectionController(
+      ClickHouseConnectionService service, ClickHouseConnectionMetadataService metadataService) {
     this.service = service;
+    this.metadataService = metadataService;
   }
 
   @GetMapping
@@ -67,6 +72,14 @@ public class ClickHouseConnectionController {
         .map(this::etag);
   }
 
+  @GetMapping("/{id}/metadata")
+  public Mono<ResponseEntity<ClickHouseConnectionMetadataResponse>> metadata(
+      @PathVariable String id) {
+    return IdentityContext.current()
+        .flatMap(identity -> metadataService.get(id, identity))
+        .map(ResponseEntity::ok);
+  }
+
   @PutMapping("/{id}")
   @AdminAccess
   public Mono<ResponseEntity<ClickHouseConnectionResponse>> update(
@@ -76,6 +89,7 @@ public class ClickHouseConnectionController {
     Long ifMatch = RevisionHeader.parse(ifMatchHeader);
     return IdentityContext.current()
         .flatMap(identity -> service.update(id, ifMatch, request, identity))
+        .doOnSuccess(ignored -> metadataService.invalidate(id))
         .map(this::etag);
   }
 
@@ -87,6 +101,7 @@ public class ClickHouseConnectionController {
     Long ifMatch = RevisionHeader.parse(ifMatchHeader);
     return IdentityContext.current()
         .flatMap(identity -> service.delete(id, ifMatch, identity))
+        .doOnSuccess(ignored -> metadataService.invalidate(id))
         .thenReturn(ResponseEntity.noContent().build());
   }
 

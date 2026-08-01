@@ -74,6 +74,11 @@ class ClickHouseReadOnlySqlClassifierTest {
                 "analytics"))
         .isEqualTo("SELECT hostName() FROM clusterAllReplicas('analytics', system.tables)");
 
+    assertThat(
+            classifier.requireReadOnly(
+                "SELECT * FROM clusterAllReplicas('default', system.metric_log)", "default"))
+        .isEqualTo("SELECT * FROM clusterAllReplicas('default', system.metric_log)");
+
     for (String sql :
         List.of(
             "SELECT * FROM clusterAllReplicas('other', system.tables)",

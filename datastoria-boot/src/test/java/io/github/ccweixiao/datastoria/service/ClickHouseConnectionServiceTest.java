@@ -37,4 +37,19 @@ class ClickHouseConnectionServiceTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Invalid ClickHouse target node");
   }
+
+  @Test
+  void wrapsUnbracketedIpv6TargetNodeBeforeUsingRemote() {
+    String wrapped =
+        ClickHouseConnectionService.wrapForTargetNode(
+            "SELECT 1", "::1:9000", null, "default", "secret");
+
+    assertThat(wrapped).contains("'[::1]:9000'");
+  }
+
+  @Test
+  void keepsBracketedIpv6TargetNode() {
+    assertThat(ClickHouseConnectionService.normalizeTargetNode("[2001:db8::10]:9440"))
+        .isEqualTo("[2001:db8::10]:9440");
+  }
 }

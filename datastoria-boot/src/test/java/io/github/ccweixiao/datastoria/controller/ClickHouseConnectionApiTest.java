@@ -40,7 +40,13 @@ class ClickHouseConnectionApiTest {
   @BeforeEach
   void clean() {
     dbHelper.cleanAll();
-    when(remoteClient.execute(any(), anyString(), anyString())).thenReturn(Mono.just("{}"));
+    when(remoteClient.execute(any(), anyString(), anyString()))
+        .thenAnswer(
+            invocation ->
+                Mono.just(
+                    invocation.getArgument(2, String.class).contains("system.clusters")
+                        ? "1\n"
+                        : "{}"));
     when(remoteClient.execute(any(), anyString(), anyString(), any())).thenReturn(Mono.just("{}"));
     when(remoteClient.executeStream(any(), anyString(), anyString(), any()))
         .thenReturn(
@@ -91,6 +97,7 @@ class ClickHouseConnectionApiTest {
     assertThat(created.toString()).doesNotContain("super-secret-password");
     assertThat(created.path("credentialConfigured").asBoolean()).isTrue();
     assertThat(created.path("credentialMaskedHint").asText()).isEqualTo("sup…ord");
+    assertThat(created.path("cluster").asText()).isEqualTo("default");
     String id = created.path("id").asText();
 
     web.get()
@@ -102,6 +109,8 @@ class ClickHouseConnectionApiTest {
         .expectBody()
         .jsonPath("$[0].id")
         .isEqualTo(id)
+        .jsonPath("$[0].cluster")
+        .isEqualTo("default")
         .jsonPath("$[0].password")
         .doesNotExist();
 
@@ -116,7 +125,7 @@ class ClickHouseConnectionApiTest {
               "name": "renamed",
               "url": "http://127.0.0.1:8123",
               "username": "default",
-              "cluster": "default",
+              "cluster": "production_cluster",
               "enabled": true
             }
             """)
@@ -128,6 +137,8 @@ class ClickHouseConnectionApiTest {
         .isEqualTo("renamed")
         .jsonPath("$.credentialConfigured")
         .isEqualTo(true)
+        .jsonPath("$.cluster")
+        .isEqualTo("production_cluster")
         .jsonPath("$.revision")
         .isEqualTo(1);
 

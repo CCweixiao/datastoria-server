@@ -187,6 +187,40 @@ export interface ClusterNode {
   isLocal: boolean;
 }
 
+interface BackendConnectionMetadata {
+  displayName: string;
+  remoteHostName?: string;
+  serverVersion?: string;
+  internalUser: string;
+  timezone: string;
+  functionTableHasDescriptionColumn: boolean;
+  metricLogTableHasProfileEventMergeSourceParts: boolean;
+  metricLogTableHasProfileEventMutationTotalParts: boolean;
+  queryLogTableHasHostnameColumn: boolean;
+  spanLogTableHasHostnameColumn: boolean;
+  partLogTableHasNodeNameColumn: boolean;
+  hasFormatQueryFunction: boolean;
+  readonlySkipUnavailableShards: boolean;
+  hostNames: string[];
+  detectedCluster?: string;
+  clusterNodes: Array<{
+    hostName: string;
+    hostAddress: string;
+    shardNumber: number;
+    replicaNumber: number;
+    local: boolean;
+  }>;
+  profileEvents: string[];
+}
+
+export type LoadedConnectionMetadata = Omit<
+  ConnectionMetadata,
+  "hostNames" | "profileEvents" | "clickhouseSettings"
+> & {
+  hostNames: string[];
+  profileEvents: string[];
+};
+
 const USER_CANCELLED_ERROR_MESSAGE = "User cancelled";
 
 export class Connection {
@@ -264,6 +298,42 @@ export class Connection {
 
   static create(config: ConnectionConfig): Connection {
     return new Connection(config);
+  }
+
+  async loadMetadata(): Promise<LoadedConnectionMetadata> {
+    if (!this.id) {
+      throw new QueryError("Connection must be saved before loading metadata");
+    }
+    const response = await backendApiFetch(backendApiUrl(`/api/connections/${this.id}/metadata`));
+    if (!response.ok) {
+      const { message, body } = await readBackendError(response);
+      throw new QueryError(message, response.status, undefined, body);
+    }
+    const metadata = (await response.json()) as BackendConnectionMetadata;
+    return {
+      displayName: metadata.displayName,
+      remoteHostName: metadata.remoteHostName,
+      serverVersion: metadata.serverVersion,
+      internalUser: metadata.internalUser,
+      timezone: metadata.timezone,
+      function_table_has_description_column: metadata.functionTableHasDescriptionColumn,
+      metric_log_table_has_ProfileEvent_MergeSourceParts:
+        metadata.metricLogTableHasProfileEventMergeSourceParts,
+      metric_log_table_has_ProfileEvent_MutationTotalParts:
+        metadata.metricLogTableHasProfileEventMutationTotalParts,
+      query_log_table_has_hostname_column: metadata.queryLogTableHasHostnameColumn,
+      span_log_table_has_hostname_column: metadata.spanLogTableHasHostnameColumn,
+      part_log_table_has_node_name_column: metadata.partLogTableHasNodeNameColumn,
+      has_format_query_function: metadata.hasFormatQueryFunction,
+      is_readonly_skip_unavailable_shards: metadata.readonlySkipUnavailableShards,
+      hostNames: metadata.hostNames,
+      detectedCluster: metadata.detectedCluster,
+      clusterNodes: metadata.clusterNodes.map((node) => ({
+        ...node,
+        isLocal: node.local,
+      })),
+      profileEvents: metadata.profileEvents,
+    };
   }
 
   matchesSessionConnectionId(connectionId?: string | null): boolean {
@@ -578,26 +648,21 @@ export class Connection {
    * @returns [processedSql, hasClusterFunctions] - The processed SQL and whether cluster functions were added
    */
   private resolveClusterTemplates(sql: string): [string, boolean] {
-    const effectiveCluster = this.cluster || this.metadata.detectedCluster;
-    const hasCluster = Boolean(effectiveCluster);
+    const effectiveCluster =
+      this.cluster?.trim() || this.metadata.detectedCluster?.trim() || "default";
+    const escapedCluster = effectiveCluster.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
     let usedClusterFunctions = false;
 
     // Replace {clusterAllReplicas:table_name} patterns
     sql = sql.replace(/\{clusterAllReplicas:([^}]+)\}/g, (_match, tableName) => {
-      if (hasCluster) {
-        usedClusterFunctions = true;
-        return `clusterAllReplicas('{cluster}', ${tableName})`;
-      }
-      return tableName;
+      usedClusterFunctions = true;
+      return `clusterAllReplicas('${escapedCluster}', ${tableName})`;
     });
 
     // Replace {cluster:table_name} patterns (note: different from simple {cluster})
     sql = sql.replace(/\{cluster:([^}]+)\}/g, (_match, tableName) => {
-      if (hasCluster) {
-        usedClusterFunctions = true;
-        return `cluster('{cluster}', ${tableName})`;
-      }
-      return tableName;
+      usedClusterFunctions = true;
+      return `cluster('${escapedCluster}', ${tableName})`;
     });
 
     // Replace {table:table_name} patterns (no cluster wrapping)
@@ -605,10 +670,8 @@ export class Connection {
       return tableName;
     });
 
-    // Replace {cluster} with actual cluster name (simple variable without colon)
-    if (hasCluster) {
-      sql = sql.replace(/\{cluster\}/g, effectiveCluster!);
-    }
+    // Replace {cluster} with the escaped cluster name (simple variable without colon).
+    sql = sql.replace(/\{cluster\}/g, escapedCluster);
 
     return [sql, usedClusterFunctions];
   }

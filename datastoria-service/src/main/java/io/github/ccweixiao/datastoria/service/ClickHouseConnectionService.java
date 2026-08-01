@@ -64,7 +64,7 @@ public class ClickHouseConnectionService {
   public Mono<ClickHouseConnectionResponse> create(
       ClickHouseConnectionRequest request, Identity identity) {
     requireAdmin(identity);
-    return Mono.fromCallable(
+    return Mono.defer(
             () -> {
               validateUrl(request.url());
               EncryptedPassword password = encrypt(request.password());
@@ -87,7 +87,11 @@ public class ClickHouseConnectionService {
                       null,
                       null,
                       null);
-              return ClickHouseConnectionResponse.from(repository.save(connection));
+              String plaintextPassword = request.password() == null ? "" : request.password();
+              return validateConfiguredCluster(connection, plaintextPassword)
+                  .then(
+                      Mono.fromCallable(
+                          () -> ClickHouseConnectionResponse.from(repository.save(connection))));
             })
         .subscribeOn(jdbcScheduler);
   }
@@ -95,7 +99,7 @@ public class ClickHouseConnectionService {
   public Mono<ClickHouseConnectionResponse> update(
       String id, Long ifMatch, ClickHouseConnectionRequest request, Identity identity) {
     requireAdmin(identity);
-    return Mono.fromCallable(
+    return Mono.defer(
             () -> {
               validateUrl(request.url());
               ClickHouseConnection existing = require(id, identity);
@@ -126,9 +130,18 @@ public class ClickHouseConnectionService {
                       existing.createdAt(),
                       null,
                       null);
-              return ClickHouseConnectionResponse.from(
-                  repository.update(
-                      updated, ifMatch == null ? existing.revision() : ifMatch.longValue()));
+              String plaintextPassword =
+                  request.password() == null ? decryptPassword(existing) : request.password();
+              return validateConfiguredCluster(updated, plaintextPassword)
+                  .then(
+                      Mono.fromCallable(
+                          () ->
+                              ClickHouseConnectionResponse.from(
+                                  repository.update(
+                                      updated,
+                                      ifMatch == null
+                                          ? existing.revision()
+                                          : ifMatch.longValue()))));
             })
         .subscribeOn(jdbcScheduler);
   }
@@ -188,11 +201,13 @@ public class ClickHouseConnectionService {
                       null,
                       null);
               long started = System.nanoTime();
-              return remoteClient
-                  .execute(
-                      transientConnection,
-                      request.password() == null ? "" : request.password(),
-                      "SELECT 1 FORMAT JSON")
+              String plaintextPassword = request.password() == null ? "" : request.password();
+              return validateConfiguredCluster(transientConnection, plaintextPassword)
+                  .then(
+                      Mono.defer(
+                          () ->
+                              remoteClient.execute(
+                                  transientConnection, plaintextPassword, "SELECT 1 FORMAT JSON")))
                   .thenReturn(
                       new ClickHouseConnectionTestResponse(
                           true,
@@ -240,7 +255,7 @@ public class ClickHouseConnectionService {
               String gatedSql =
                   identity.isAdmin()
                       ? sql
-                      : sqlClassifier.requireReadOnly(sql, connection.cluster());
+                      : sqlClassifier.requireReadOnly(sql, effectiveCluster(connection.cluster()));
               String effectiveSql =
                   wrapForTargetNode(
                       gatedSql, targetNode, targetUser, connection.username(), password);
@@ -258,10 +273,7 @@ public class ClickHouseConnectionService {
     if (targetNode == null || targetNode.isBlank()) {
       return sql;
     }
-    String node = targetNode.trim();
-    if (!node.matches("[A-Za-z0-9._:-]+")) {
-      throw new IllegalArgumentException("Invalid ClickHouse target node");
-    }
+    String node = normalizeTargetNode(targetNode);
     String user = targetUser == null || targetUser.isBlank() ? configuredUser : targetUser.trim();
     return """
         SELECT * FROM remote(
@@ -282,6 +294,60 @@ public class ClickHouseConnectionService {
 
   private static String escapeClickHouseString(String value) {
     return value.replace("\\", "\\\\").replace("'", "\\'");
+  }
+
+  static String normalizeTargetNode(String targetNode) {
+    String node = targetNode.trim();
+    if (node.matches("\\[[0-9A-Fa-f:.%]+]:[0-9]{1,5}")) {
+      return node;
+    }
+    if (node.chars().filter(character -> character == ':').count() > 1) {
+      int portSeparator = node.lastIndexOf(':');
+      String host = node.substring(0, portSeparator);
+      String port = node.substring(portSeparator + 1);
+      if (host.matches("[0-9A-Fa-f:.%]+") && port.matches("[0-9]{1,5}")) {
+        return "[" + host + "]:" + port;
+      }
+    }
+    if (node.matches("[A-Za-z0-9._-]+(?::[0-9]{1,5})?")) {
+      return node;
+    }
+    throw new IllegalArgumentException("Invalid ClickHouse target node");
+  }
+
+  private static String effectiveCluster(String configuredCluster) {
+    return configuredCluster == null || configuredCluster.isBlank()
+        ? "default"
+        : configuredCluster.trim();
+  }
+
+  private Mono<Void> validateConfiguredCluster(
+      ClickHouseConnection connection, String plaintextPassword) {
+    String cluster = connection.cluster();
+    if (cluster == null || cluster.isBlank()) {
+      return Mono.empty();
+    }
+    String normalizedCluster = cluster.trim();
+    String sql =
+        "SELECT count() FROM system.clusters WHERE cluster = '"
+            + escapeClickHouseString(normalizedCluster)
+            + "' FORMAT TabSeparatedRaw";
+    return remoteClient
+        .execute(connection, plaintextPassword, sql)
+        .flatMap(
+            result -> {
+              try {
+                if (Long.parseLong(result.trim()) > 0) {
+                  return Mono.empty();
+                }
+              } catch (NumberFormatException ignored) {
+                // Treat unexpected ClickHouse output as a failed validation.
+              }
+              return Mono.error(
+                  new IllegalArgumentException(
+                      "ClickHouse cluster is not defined in system.clusters: "
+                          + normalizedCluster));
+            });
   }
 
   private ClickHouseConnection require(String id, Identity identity) {

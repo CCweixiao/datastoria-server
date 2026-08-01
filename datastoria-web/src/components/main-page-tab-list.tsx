@@ -3,6 +3,7 @@ import { useChatPanel } from "@/components/chat/view/use-chat-panel";
 import { ClusterTab } from "@/components/cluster-tab/cluster-tab";
 import { useConnection } from "@/components/connection/connection-context";
 import { showConnectionEditDialog } from "@/components/connection/connection-edit-component";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { SYSTEM_TABLE_REGISTRY } from "@/components/system-table-tab/system-table-registry";
 import { TabManager, type TabInfo } from "@/components/tab-manager";
 import { Button } from "@/components/ui/button";
@@ -191,6 +192,7 @@ function EmptyStateButton({
 function EmptyTabPlaceholderComponent() {
   const { connection, switchConnection } = useConnection();
   const { setDisplayMode } = useChatPanel();
+  const { t } = useUiPreferences();
   const hasConnection = Boolean(connection);
   const isClusterMode = connection?.cluster && connection.cluster.length > 0;
 
@@ -246,41 +248,39 @@ function EmptyTabPlaceholderComponent() {
         <AppLogo width={64} height={64} />
       </div>
 
-      <h3 className="text-2xl font-semibold tracking-tight mb-2">Welcome to DataStoria</h3>
+      <h3 className="mb-2 text-2xl font-semibold tracking-tight">{t("welcome.title")}</h3>
 
       <p className="text-muted-foreground mb-2 text-sm leading-relaxed">
-        {hasConnection
-          ? "Select a table from the sidebar to view its details, or start by clicking the following buttons."
-          : "Connect a cluster to unlock schema-aware chat, SQL execution, diagnostics, and dashboards. You can still ask general questions without connecting."}
+        {hasConnection ? t("welcome.connectedHelp") : t("welcome.disconnectedHelp")}
       </p>
 
       {/* Action Buttons - VSCode style */}
       <div className="flex flex-col items-start gap-1">
         {!hasConnection && (
           <EmptyStateButton icon={Database} onClick={openCreateConnectionDialog} variant="primary">
-            Create a ClickHouse Connection
+            {t("welcome.createConnection")}
           </EmptyStateButton>
         )}
 
         <EmptyStateButton icon={Sparkles} onClick={() => setDisplayMode("tabWidth")}>
-          {hasConnection ? "Work with AI" : "Ask a general question"}
+          {hasConnection ? t("welcome.workWithAi") : t("welcome.askGeneralQuestion")}
         </EmptyStateButton>
 
         {hasConnection && (
           <EmptyStateButton icon={Terminal} onClick={openQueryTab}>
-            Query Data with SQL
+            {t("welcome.queryWithSql")}
           </EmptyStateButton>
         )}
 
         {hasConnection && (
           <EmptyStateButton icon={Monitor} onClick={openNodeTab}>
-            Node Dashboard
+            {t("welcome.nodeDashboard")}
           </EmptyStateButton>
         )}
 
         {isClusterMode && (
           <EmptyStateButton icon={Network} onClick={openClusterTab}>
-            Cluster Dashboard
+            {t("welcome.clusterDashboard")}
           </EmptyStateButton>
         )}
 
@@ -292,7 +292,7 @@ function EmptyTabPlaceholderComponent() {
                 className="flex items-center gap-2 rounded px-3 py-1.5 text-sm text-muted-foreground outline-none transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
               >
                 <ScrollText className="h-4 w-4" />
-                System Tables
+                {t("welcome.systemTables")}
                 <ChevronDown className="h-3 w-3" />
               </button>
             </DropdownMenuTrigger>

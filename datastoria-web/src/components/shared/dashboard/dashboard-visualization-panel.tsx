@@ -318,9 +318,16 @@ export const DashboardVisualizationPanel = forwardRef<
             ...query.headers,
           },
         ] as const;
-        const { response, abortController } = query.targetNode
-          ? connection.queryOnTargetNode(queryArgs[0], query.targetNode, queryArgs[1], queryArgs[2])
-          : connection.queryOnNode(...queryArgs);
+        const { response, abortController } = query.direct
+          ? connection.query(queryArgs[0], queryArgs[1], queryArgs[2])
+          : query.targetNode
+            ? connection.queryOnTargetNode(
+                queryArgs[0],
+                query.targetNode,
+                queryArgs[1],
+                queryArgs[2]
+              )
+            : connection.queryOnNode(...queryArgs);
         apiCancellerRef.current = abortController;
 
         const apiResponse = await response;
@@ -408,14 +415,16 @@ export const DashboardVisualizationPanel = forwardRef<
                   ...query.headers,
                 },
               ] as const;
-              const { response: offsetResponse, abortController: offsetAbort } = query.targetNode
-                ? connection.queryOnTargetNode(
-                    offsetArgs[0],
-                    query.targetNode,
-                    offsetArgs[1],
-                    offsetArgs[2]
-                  )
-                : connection.queryOnNode(...offsetArgs);
+              const { response: offsetResponse, abortController: offsetAbort } = query.direct
+                ? connection.query(offsetArgs[0], offsetArgs[1], offsetArgs[2])
+                : query.targetNode
+                  ? connection.queryOnTargetNode(
+                      offsetArgs[0],
+                      query.targetNode,
+                      offsetArgs[1],
+                      offsetArgs[2]
+                    )
+                  : connection.queryOnNode(...offsetArgs);
 
               secondaryApiCancellerRef.current = offsetAbort;
 

@@ -104,6 +104,8 @@ export interface DateTimeFilterSpec {
 export interface SQLQuery {
   sql: string;
   targetNode?: string;
+  /** Execute against the configured HTTP endpoint without wrapping the SQL in remote(). */
+  direct?: boolean;
   headers?: Record<string, string>;
   params?: Record<string, unknown>;
 

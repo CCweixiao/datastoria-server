@@ -33,6 +33,7 @@
         <spotless.version>2.44.5</spotless.version>
         <google-java-format.version>1.17.0</google-java-format.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
+        <guava.version>33.5.0-jre</guava.version>
         <maven-assembly-plugin.version>3.7.1</maven-assembly-plugin.version>
         <datastoria.web.skip>false</datastoria.web.skip>
     </properties>

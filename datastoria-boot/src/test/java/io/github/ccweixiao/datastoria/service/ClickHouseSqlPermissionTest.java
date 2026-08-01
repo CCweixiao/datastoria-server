@@ -137,6 +137,38 @@ class ClickHouseSqlPermissionTest {
   }
 
   @Test
+  void connectionTestRejectsClusterMissingFromSystemClusters() {
+    ClickHouseConnectionRequest request =
+        new ClickHouseConnectionRequest(
+            "test", "http://ch:8123", "default", "secret", "missing", null, true);
+    when(remoteClient.execute(any(), anyString(), anyString())).thenReturn(Mono.just("0\n"));
+
+    assertThatThrownBy(() -> service.test(request, admin()).block())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("ClickHouse cluster is not defined in system.clusters: missing");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(remoteClient).execute(any(), anyString(), sql.capture());
+    assertThat(sql.getValue()).contains("FROM system.clusters").contains("cluster = 'missing'");
+  }
+
+  @Test
+  void connectionTestAcceptsClusterDefinedForMultipleReplicas() {
+    ClickHouseConnectionRequest request =
+        new ClickHouseConnectionRequest(
+            "test", "http://ch:8123", "default", "secret", "analytics", null, true);
+    when(remoteClient.execute(any(), anyString(), anyString()))
+        .thenAnswer(
+            invocation ->
+                Mono.just(
+                    invocation.getArgument(2, String.class).contains("system.clusters")
+                        ? "4\n"
+                        : "{}"));
+
+    assertThat(service.test(request, admin()).block()).isNotNull();
+  }
+
+  @Test
   void regularUserCanListTenantConnectionsCreatedByAnAdmin() {
     when(repository.findAll("default")).thenReturn(java.util.List.of(connection()));
 

@@ -10,6 +10,7 @@ import React, {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import type { LayoutItem, ResponsiveLayouts } from "react-grid-layout";
 import DashboardFilterComponent, { type SelectedFilter } from "./dashboard-filter";
@@ -212,6 +213,8 @@ const DashboardPage = forwardRef<DashboardPageRef, DashboardPageProps>(
     const inputFilterRef = useRef<HTMLInputElement>(null);
     const filterRef = useRef<DashboardFilterComponent>(null);
     const panelsRef = useRef<DashboardPanelContainerRef>(null);
+    const [activeTimeSpan, setActiveTimeSpan] = useState<TimeSpan>();
+    const [activeFilterExpression, setActiveFilterExpression] = useState("1=1");
 
     useImperativeHandle(
       ref,
@@ -268,6 +271,8 @@ const DashboardPage = forwardRef<DashboardPageRef, DashboardPageProps>(
           }
         }
         const filterExpression = parts.length > 0 ? parts.join(" AND ") : "1=1";
+        setActiveTimeSpan(timeSpan);
+        setActiveFilterExpression(filterExpression);
         panelsRef.current?.refresh(timeSpan, filterExpression);
       },
       []
@@ -375,7 +380,9 @@ const DashboardPage = forwardRef<DashboardPageRef, DashboardPageProps>(
             ref={panelsRef}
             dashboard={panels}
             dashboardId={dashboardId}
-            initialLoading={false}
+            initialTimeSpan={activeTimeSpan}
+            initialFilterExpression={activeFilterExpression}
+            initialLoading={Boolean(activeTimeSpan)}
             onChartSelection={chartSelectionFilterName ? handleChartSelection : undefined}
             showSectionEditControls={showSectionEditControls}
             onSectionRename={onSectionRename}

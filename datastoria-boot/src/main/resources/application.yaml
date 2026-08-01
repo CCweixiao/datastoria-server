@@ -38,6 +38,10 @@ info:
     description: Spring Boot backend for DataStoria
 
 datastoria:
+  clickhouse:
+    metadata-cache:
+      ttl: ${DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL:PT5M}
+      maximum-size: ${DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE:1000}
   # Base64-encoded 32-byte AES-256 key used to encrypt server-managed credentials at rest.
   # Keep this value stable: changing it makes existing encrypted credentials unreadable.
   master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=

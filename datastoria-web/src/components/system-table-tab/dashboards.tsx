@@ -14,8 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type JSONFormatResponse, type QueryResponse } from "@/lib/connection/connection";
 import { hostNameManager } from "@/lib/host-name-manager";
 import { AlertTriangle, EllipsisVertical, Network, Server } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { scopeDashboardQueryToCluster } from "./dashboard-scope";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { dashboardNodeScopeValue, resolveDashboardQueryExecution } from "./dashboard-scope";
 
 interface DashboardRow {
   dashboard: string;
@@ -49,35 +49,32 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
   });
   const [error, setError] = useState<string | null>(null);
   const [skippedDashboards, setSkippedDashboards] = useState<SkippedDashboard[]>([]);
-  const previousConnectionRef = useRef<string | null>(null);
   const selectedNode =
     monitorScope === "cluster"
       ? undefined
-      : clusterNodes.find((node) => node.hostName === monitorScope);
+      : clusterNodes.find((node) => dashboardNodeScopeValue(node) === monitorScope);
 
   useEffect(() => {
     if (clusterNodes.length <= 1) {
-      setMonitorScope(clusterNodes[0]?.hostName ?? "cluster");
+      setMonitorScope(clusterNodes[0] ? dashboardNodeScopeValue(clusterNodes[0]) : "cluster");
     } else if (
       monitorScope !== "cluster" &&
-      !clusterNodes.some((node) => node.hostName === monitorScope)
+      !clusterNodes.some((node) => dashboardNodeScopeValue(node) === monitorScope)
     ) {
       setMonitorScope("cluster");
     }
   }, [clusterNodes, monitorScope]);
 
-  const scopeDashboardSql = useCallback(
-    (sql: string) => {
-      if (
-        monitorScope !== "cluster" ||
-        !(connection?.cluster || connection?.metadata.detectedCluster) ||
-        clusterNodes.length <= 1
-      ) {
-        return sql;
-      }
-      return scopeDashboardQueryToCluster(sql);
-    },
-    [clusterNodes.length, connection?.cluster, connection?.metadata.detectedCluster, monitorScope]
+  const resolveDashboardSql = useCallback(
+    (sql: string) =>
+      resolveDashboardQueryExecution(
+        sql,
+        connection?.cluster,
+        connection?.metadata.detectedCluster,
+        clusterNodes,
+        monitorScope
+      ),
+    [clusterNodes, connection?.cluster, connection?.metadata.detectedCluster, monitorScope]
   );
 
   const fetchDashboards = useCallback(
@@ -211,8 +208,7 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
                   collapsed: false,
                   yAxis: [{}], // Default y-axis
                   datasource: {
-                    sql: scopeDashboardSql(row.query),
-                    targetNode: selectedNode?.hostAddress,
+                    ...resolveDashboardSql(row.query),
                   },
                 });
               });
@@ -249,7 +245,7 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
           setError(null);
         });
     },
-    [connection, scopeDashboardSql, selectedNode?.hostAddress]
+    [connection, resolveDashboardSql]
   );
 
   useEffect(() => {
@@ -257,26 +253,25 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
       return;
     }
 
-    // Skip if connection hasn't changed
-    const connectionId = `${connection.connectionId}:${monitorScope}`;
-    if (previousConnectionRef.current === connectionId) {
-      return;
-    }
-    previousConnectionRef.current = connectionId;
-
     // First, check if metric_log and asynchronous_metric_log tables exist
-    connection
-      .query(
-        `SELECT name FROM system.tables WHERE database = 'system' AND (name LIKE 'metric_log%' OR name LIKE 'asynchronous_metric_log%')`,
-        {
+    const aggregateScope = monitorScope === "cluster" && clusterNodes.length > 1;
+    const tableSource = aggregateScope ? "{clusterAllReplicas:system.tables}" : "system.tables";
+    const tableCatalogExecution = resolveDashboardSql(
+      `SELECT name FROM ${tableSource} WHERE database = 'system' AND (name LIKE 'metric_log%' OR name LIKE 'asynchronous_metric_log%')`
+    );
+    const tableCatalogRequest = tableCatalogExecution.targetNode
+      ? connection.queryOnTargetNode(tableCatalogExecution.sql, tableCatalogExecution.targetNode, {
           default_format: "JSON",
           output_format_json_quote_64bit_integers: 0,
-        },
-        {
-          "Content-Type": "text/plain",
-        }
-      )
-      .response.then((response: QueryResponse) => {
+        })
+      : connection.query(tableCatalogExecution.sql, {
+          default_format: "JSON",
+          output_format_json_quote_64bit_integers: 0,
+          ...(aggregateScope ? { skip_unavailable_shards: 1 } : {}),
+        });
+
+    tableCatalogRequest.response
+      .then((response: QueryResponse) => {
         try {
           const responseData = response.data.json<JSONFormatResponse>();
           const rows = responseData.data || [];
@@ -332,7 +327,15 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
         // Continue with fetching dashboards anyway
         fetchDashboards(false, false);
       });
-  }, [connection, fetchDashboards, database, table, monitorScope]);
+  }, [
+    clusterNodes.length,
+    connection,
+    database,
+    fetchDashboards,
+    monitorScope,
+    resolveDashboardSql,
+    table,
+  ]);
 
   const headerActions =
     clusterNodes.length > 1 ? (
@@ -362,7 +365,7 @@ export const Dashboards = memo(({ database, table }: DashboardsProps) => {
           {clusterNodes.map((node) => (
             <option
               key={`${node.shardNumber}-${node.replicaNumber}-${node.hostName}`}
-              value={node.hostName}
+              value={dashboardNodeScopeValue(node)}
             >
               分片 {node.shardNumber} · 副本 {node.replicaNumber} ·{" "}
               {hostNameManager.getShortHostname(node.hostName)}

@@ -228,6 +228,26 @@ describe("Connection query context parameters", () => {
     expect(body.query).toBe("SELECT * FROM clusterAllReplicas('auto_cluster', system.metric_log)");
   });
 
+  it("falls back to the default cluster for cluster templates", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('{"data":[]}', { status: 200 }));
+    const connection = Connection.create({
+      id: "connection-default-cluster",
+      name: "single",
+      url: "http://localhost:8123",
+      user: "default",
+      password: "",
+      cluster: "",
+      editable: true,
+    });
+
+    await connection.query("SELECT * FROM {clusterAllReplicas:system.metric_log}").response;
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.query).toBe("SELECT * FROM clusterAllReplicas('default', system.metric_log)");
+  });
+
   it("uses Spring ProblemDetail detail as the query error message", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

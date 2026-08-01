@@ -31,6 +31,18 @@ export const en = {
   "sidebar.documentation": "Documentation",
   "sidebar.releaseNotes": "Release Notes",
   "sidebar.github": "View on GitHub",
+  "welcome.title": "Welcome to DataStoria",
+  "welcome.connectedHelp":
+    "Select a table from the sidebar to view its details, or start with one of the actions below.",
+  "welcome.disconnectedHelp":
+    "Connect a cluster to unlock schema-aware chat, SQL execution, diagnostics, and dashboards. You can still ask general questions without connecting.",
+  "welcome.createConnection": "Create a ClickHouse Connection",
+  "welcome.workWithAi": "Work with AI",
+  "welcome.askGeneralQuestion": "Ask a general question",
+  "welcome.queryWithSql": "Query Data with SQL",
+  "welcome.nodeDashboard": "Node Dashboard",
+  "welcome.clusterDashboard": "Cluster Dashboard",
+  "welcome.systemTables": "System Tables",
   "users.title": "User Management",
   "users.description": "Create, update, disable, reset passwords, or delete ordinary users.",
   "users.add": "Add User",
