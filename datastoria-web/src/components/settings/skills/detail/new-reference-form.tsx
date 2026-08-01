@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ export function NewReferenceForm({
 }: {
   controllerRef: MutableRefObject<NewReferenceFormController | null>;
 }) {
+  const { t } = useUiPreferences();
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +33,7 @@ export function NewReferenceForm({
   return (
     <FieldGroup className="pb-8">
       <Field>
-        <FieldLabel htmlFor="new-reference-path">File name</FieldLabel>
+        <FieldLabel htmlFor="new-reference-path">{t("skills.fileName")}</FieldLabel>
         <Input
           id="new-reference-path"
           value={fileName}

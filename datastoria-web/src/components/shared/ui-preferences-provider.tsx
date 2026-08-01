@@ -35,7 +35,14 @@ type UiPreferencesContextValue = UiPreferences & {
 
 const CONFIG_KEY = "settings.ui";
 const DEFAULT_PREFERENCES: UiPreferences = { theme: "dark", language: "system" };
-const UiPreferencesContext = createContext<UiPreferencesContextValue | null>(null);
+const DEFAULT_CONTEXT: UiPreferencesContextValue = {
+  ...DEFAULT_PREFERENCES,
+  locale: "en",
+  setTheme: () => undefined,
+  setLanguage: () => undefined,
+  t: (key, params) => translate("en", key, params),
+};
+const UiPreferencesContext = createContext<UiPreferencesContextValue>(DEFAULT_CONTEXT);
 
 function isTheme(value: unknown): value is Theme {
   return value === "dark" || value === "light" || value === "system";
@@ -117,7 +124,5 @@ export function UiPreferencesProvider({ children }: { children: React.ReactNode 
 }
 
 export function useUiPreferences(): UiPreferencesContextValue {
-  const context = useContext(UiPreferencesContext);
-  if (!context) throw new Error("useUiPreferences must be used within UiPreferencesProvider");
-  return context;
+  return useContext(UiPreferencesContext);
 }

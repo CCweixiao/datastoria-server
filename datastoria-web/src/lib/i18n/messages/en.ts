@@ -102,6 +102,57 @@ export const en = {
   "connection.delete": "Delete",
   "connection.deleteDescription":
     "Are you sure you want to delete this connection? This action cannot be reverted.",
+  "common.add": "Add",
+  "common.delete": "Delete",
+  "common.reset": "Reset",
+  "common.clearAll": "Clear all",
+  "common.code": "Code",
+  "common.name": "Name",
+  "common.action": "Action",
+  "agent.addBlacklist": "Add Blacklisted Error Codes",
+  "agent.addBlacklistHelp":
+    "Search ClickHouse error codes by number or name and select multiple entries to skip automatic explanation.",
+  "agent.searchErrorCodes": "Search by error code or name...",
+  "agent.noErrorCodes": "No error codes found.",
+  "agent.selected": "{count} selected",
+  "agent.addSelected": "Add selected",
+  "agent.contextPruning": "Context Pruning",
+  "agent.contextPruningHelp":
+    "Enable surgical pruning of SQL validations from history to save tokens.",
+  "agent.outputReasoning": "Output Reasoning",
+  "agent.outputReasoningHelp":
+    "Request reasoning summaries when the selected model supports reasoning output.",
+  "agent.responseLanguage": "AI Response Language",
+  "agent.responseLanguageHelp":
+    "Controls the response language for AI chat, visible reasoning summaries, and SQL editor AI commands.",
+  "agent.autoExplain": "Auto Explain Errors",
+  "agent.autoExplainHelp":
+    "Automatically ask AI to explain eligible ClickHouse errors inline in query results.",
+  "agent.skippedCodes": "Skipped Error Codes",
+  "agent.noCodesSelected": "No error codes selected.",
+  "agent.codeCount": "{count} error code(s)",
+  "agent.skippedCodesHelp":
+    "Error codes listed below will be skipped for auto-triggered inline explanation.",
+  "queryContext.search": "Type to search settings...",
+  "queryContext.clickToEdit": "Click to edit",
+  "queryContext.confirmDeletion": "Confirm deletion",
+  "queryContext.deleteDescription": "Are you sure you want to delete this setting?",
+  "queryContext.type": "Type",
+  "queryContext.readonly": "Readonly",
+  "queryContext.readonlyInfo": "Readonly column info",
+  "queryContext.value": "Value",
+  "queryContext.readonlyHelp":
+    "Indicates whether server-side configuration prevents this setting from being changed. Readonly values cannot be changed in the query context; contact an administrator when a change is required.",
+  "queryContext.empty": "No settings configured. Click",
+  "queryContext.addSetting": "Add Setting",
+  "queryContext.toStart": "to get started.",
+  "skills.loadFailed": "Failed to load skills",
+  "skills.empty": "No skills found.",
+  "skills.fileName": "File name",
+  "skills.files": "Files",
+  "skills.noAdditionalFiles": "No additional files",
+  "skills.reviewFindings": "Review Findings",
+  "skills.dismissReview": "Dismiss review findings",
 } as const;
 
 export type MessageKey = keyof typeof en;

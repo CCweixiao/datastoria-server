@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SkillCatalogItem } from "@/lib/ai/skills/skill-types";
 import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
@@ -8,6 +9,7 @@ import { SkillsCard } from "./skills-card";
 import { SkillsDetailView } from "./skills-detail-view";
 
 export function SkillsEdit({ initialSkillId }: { initialSkillId?: string }) {
+  const { t } = useUiPreferences();
   const [skills, setSkills] = useState<SkillCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,10 +29,10 @@ export function SkillsEdit({ initialSkillId }: { initialSkillId?: string }) {
         setLoading(false);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load skills");
+        setError(err instanceof Error ? err.message : t("skills.loadFailed"));
         setLoading(false);
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadSkills();
@@ -66,7 +68,7 @@ export function SkillsEdit({ initialSkillId }: { initialSkillId?: string }) {
         </div>
       ) : skills.length === 0 ? (
         <div className="flex items-center justify-center h-32">
-          <p className="text-sm text-muted-foreground">No skills found.</p>
+          <p className="text-sm text-muted-foreground">{t("skills.empty")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
