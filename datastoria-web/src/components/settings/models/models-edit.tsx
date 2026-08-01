@@ -2,6 +2,7 @@
 
 import { refreshModelCatalog } from "@/components/settings/models/model-config-bootstrap";
 import { ProviderLogo } from "@/components/shared/provider-logo";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import {
   type ServerModel,
   type ServerProvider,
 } from "@/lib/ai/configuration/configuration-gateway";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 import { toastManager } from "@/lib/toast";
 import {
   Bot,
@@ -43,7 +45,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ProviderPreset = ProviderInput & {
-  hint: string;
+  hintKey: MessageKey;
   color: string;
 };
 
@@ -52,42 +54,42 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     providerKey: "zhipu",
     displayName: "智谱 GLM",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    hint: "GLM 系列 · OpenAI 兼容",
+    hintKey: "models.presetZhipu",
     color: "from-blue-500/15 to-cyan-500/5",
   },
   {
     providerKey: "kimi",
     displayName: "Kimi / Moonshot",
     baseUrl: "https://api.moonshot.cn/v1",
-    hint: "Moonshot 与 Kimi 系列",
+    hintKey: "models.presetKimi",
     color: "from-violet-500/15 to-fuchsia-500/5",
   },
   {
     providerKey: "minimax",
     displayName: "MiniMax",
     baseUrl: "https://api.minimaxi.com/v1",
-    hint: "MiniMax OpenAI 兼容接口",
+    hintKey: "models.presetMinimax",
     color: "from-orange-500/15 to-amber-500/5",
   },
   {
     providerKey: "dashscope",
     displayName: "阿里云百炼",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    hint: "通义千问 · DashScope",
+    hintKey: "models.presetDashscope",
     color: "from-purple-500/15 to-indigo-500/5",
   },
   {
     providerKey: "deepseek",
     displayName: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
-    hint: "DeepSeek V4 · OpenAI 兼容",
+    hintKey: "models.presetDeepseek",
     color: "from-sky-500/15 to-blue-500/5",
   },
   {
     providerKey: "openai-compatible",
     displayName: "OpenAI Compatible",
     baseUrl: "",
-    hint: "自定义兼容服务",
+    hintKey: "models.presetCustom",
     color: "from-slate-500/15 to-zinc-500/5",
   },
 ];
@@ -139,6 +141,7 @@ function modelCapabilities(model: ServerModel) {
 }
 
 export function ModelsEdit() {
+  const { t } = useUiPreferences();
   const gateway = getAiConfigurationGateway();
   const [providers, setProviders] = useState<ServerProvider[]>([]);
   const [models, setModels] = useState<ServerModel[]>([]);
@@ -164,11 +167,11 @@ export function ModelsEdit() {
       setProviders(nextProviders.filter((provider) => provider.authType !== "oauth"));
       setModels(nextModels);
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "模型配置加载失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
-  }, [gateway]);
+  }, [gateway, t]);
 
   useEffect(() => {
     void load();
@@ -215,11 +218,11 @@ export function ModelsEdit() {
 
   const saveProvider = async () => {
     if (!providerDraft.providerKey.trim() || !providerDraft.displayName.trim()) {
-      toastManager.show("请填写供应商标识和名称", "warning");
+      toastManager.show(t("models.providerRequired"), "warning");
       return;
     }
     if (providerDraft.baseUrl && !/^https?:\/\//i.test(providerDraft.baseUrl)) {
-      toastManager.show("Base URL 必须以 http:// 或 https:// 开头", "warning");
+      toastManager.show(t("models.invalidBaseUrl"), "warning");
       return;
     }
     setBusy("provider");
@@ -234,9 +237,12 @@ export function ModelsEdit() {
       }
       setProviderDialog(false);
       await Promise.all([load(), refreshModelCatalog()]);
-      toastManager.show(editingProvider ? "供应商已更新" : "供应商已添加", "success");
+      toastManager.show(
+        editingProvider ? t("models.providerUpdated") : t("models.providerAdded"),
+        "success"
+      );
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "保存失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.saveFailed"), "error");
     } finally {
       setBusy(undefined);
     }
@@ -245,24 +251,24 @@ export function ModelsEdit() {
   const removeProvider = async (provider: ServerProvider) => {
     const providerModels = models.filter((model) => model.providerId === provider.id);
     if (providerModels.length) {
-      toastManager.show("请先删除该供应商下的模型", "warning");
+      toastManager.show(t("models.deleteModelsFirst"), "warning");
       return;
     }
-    if (!window.confirm(`确定删除供应商“${provider.displayName}”吗？`)) return;
+    if (!window.confirm(t("models.confirmDeleteProvider", { name: provider.displayName }))) return;
     setBusy(provider.id);
     try {
       await gateway.deleteProvider(provider);
       await Promise.all([load(), refreshModelCatalog()]);
-      toastManager.show("供应商已删除", "success");
+      toastManager.show(t("models.providerDeleted"), "success");
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "删除失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.deleteFailed"), "error");
     } finally {
       setBusy(undefined);
     }
   };
 
   const clearCredential = async (provider: ServerProvider) => {
-    if (!window.confirm(`确定清除“${provider.displayName}”的 API Key 吗？`)) return;
+    if (!window.confirm(t("models.confirmClearKey", { name: provider.displayName }))) return;
     setBusy(`key:${provider.id}`);
     try {
       await gateway.clearProviderCredentialById(provider.id);
@@ -272,9 +278,9 @@ export function ModelsEdit() {
           ? { ...current, credentialConfigured: false, maskedHint: null }
           : current
       );
-      toastManager.show("API Key 已清除", "success");
+      toastManager.show(t("models.keyCleared"), "success");
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "清除失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.clearFailed"), "error");
     } finally {
       setBusy(undefined);
     }
@@ -312,7 +318,7 @@ export function ModelsEdit() {
 
   const saveModel = async () => {
     if (!modelDraft.modelKey.trim() || !modelDraft.displayName.trim()) {
-      toastManager.show("请填写模型 ID 和显示名称", "warning");
+      toastManager.show(t("models.modelRequired"), "warning");
       return;
     }
     setBusy("model");
@@ -324,23 +330,26 @@ export function ModelsEdit() {
       }
       setModelDialog(false);
       await Promise.all([load(), refreshModelCatalog()]);
-      toastManager.show(editingModel ? "模型已更新" : "模型已添加", "success");
+      toastManager.show(
+        editingModel ? t("models.modelUpdated") : t("models.modelAdded"),
+        "success"
+      );
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "保存失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.saveFailed"), "error");
     } finally {
       setBusy(undefined);
     }
   };
 
   const removeModel = async (model: ServerModel) => {
-    if (!window.confirm(`确定删除模型“${model.displayName}”吗？`)) return;
+    if (!window.confirm(t("models.confirmDeleteModel", { name: model.displayName }))) return;
     setBusy(model.id);
     try {
       await gateway.deleteModel(model);
       await Promise.all([load(), refreshModelCatalog()]);
-      toastManager.show("模型已删除", "success");
+      toastManager.show(t("models.modelDeleted"), "success");
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "删除失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.deleteFailed"), "error");
     } finally {
       setBusy(undefined);
     }
@@ -365,7 +374,7 @@ export function ModelsEdit() {
       });
       await Promise.all([load(), refreshModelCatalog()]);
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "更新模型失败", "error");
+      toastManager.show(error instanceof Error ? error.message : t("models.updateFailed"), "error");
     } finally {
       setBusy(undefined);
     }
@@ -397,11 +406,16 @@ export function ModelsEdit() {
       );
       await Promise.all([load(), refreshModelCatalog()]);
       toastManager.show(
-        additions.length ? `已同步 ${additions.length} 个新模型` : "模型目录已是最新",
+        additions.length
+          ? t("models.syncedCount", { count: additions.length })
+          : t("models.catalogCurrent"),
         "success"
       );
     } catch (error) {
-      toastManager.show(error instanceof Error ? error.message : "发现模型失败", "error");
+      toastManager.show(
+        error instanceof Error ? error.message : t("models.discoveryFailed"),
+        "error"
+      );
     } finally {
       setBusy(undefined);
     }
@@ -412,14 +426,12 @@ export function ModelsEdit() {
       <div className="border-b bg-background px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold">模型与供应商</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              API Key 由 Java 后端加密保存。新环境不自动创建任何供应商或模型。
-            </p>
+            <h2 className="text-lg font-semibold">{t("models.title")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("models.securityHelp")}</p>
           </div>
           <Button onClick={() => openNewProvider()}>
             <Plus className="mr-2 h-4 w-4" />
-            添加供应商
+            {t("models.addProvider")}
           </Button>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -434,7 +446,7 @@ export function ModelsEdit() {
                 <ProviderLogo provider={preset.displayName} className="h-4 w-4" />
                 {preset.displayName}
               </div>
-              <div className="mt-1 truncate text-xs text-muted-foreground">{preset.hint}</div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">{t(preset.hintKey)}</div>
             </button>
           ))}
         </div>
@@ -443,7 +455,7 @@ export function ModelsEdit() {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索供应商或模型..."
+            placeholder={t("models.search")}
             className="pl-9"
           />
         </div>
@@ -453,21 +465,21 @@ export function ModelsEdit() {
         {loading ? (
           <div className="flex h-48 items-center justify-center text-muted-foreground">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            正在加载后端配置
+            {t("models.loading")}
           </div>
         ) : visibleProviders.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed bg-background p-10 text-center">
             <div className="rounded-full bg-primary/10 p-4">
               <Server className="h-7 w-7 text-primary" />
             </div>
-            <h3 className="mt-4 font-semibold">{search ? "没有匹配的配置" : "还没有模型供应商"}</h3>
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              使用上方预设快速接入国内模型平台，或添加任意 OpenAI 兼容服务。
-            </p>
+            <h3 className="mt-4 font-semibold">
+              {search ? t("models.noMatch") : t("models.noProviders")}
+            </h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">{t("models.emptyHelp")}</p>
             {!search && (
               <Button className="mt-4" variant="outline" onClick={() => openNewProvider()}>
                 <Plus className="mr-2 h-4 w-4" />
-                创建第一个供应商
+                {t("models.createFirstProvider")}
               </Button>
             )}
           </div>
@@ -486,13 +498,15 @@ export function ModelsEdit() {
                         <div className="min-w-0">
                           <CardTitle className="flex items-center gap-2 text-base">
                             {provider.displayName}
-                            {!provider.enabled && <Badge variant="secondary">已停用</Badge>}
+                            {!provider.enabled && (
+                              <Badge variant="secondary">{t("models.disabled")}</Badge>
+                            )}
                           </CardTitle>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <code>{provider.providerKey}</code>
                             <span>·</span>
                             <span className="max-w-[420px] truncate">
-                              {provider.baseUrl || "未配置 Base URL"}
+                              {provider.baseUrl || t("models.baseUrlMissing")}
                             </span>
                           </div>
                         </div>
@@ -508,8 +522,8 @@ export function ModelsEdit() {
                             <KeyRound className="h-3 w-3" />
                           )}
                           {provider.credentialConfigured
-                            ? provider.maskedHint || "密钥已配置"
-                            : "未配置密钥"}
+                            ? provider.maskedHint || t("models.keyConfigured")
+                            : t("models.keyMissing")}
                         </Badge>
                         <Button
                           variant="outline"
@@ -522,7 +536,7 @@ export function ModelsEdit() {
                           ) : (
                             <RefreshCw className="mr-1 h-3.5 w-3.5" />
                           )}
-                          同步模型
+                          {t("models.sync")}
                         </Button>
                         <Button
                           variant="ghost"
@@ -547,11 +561,11 @@ export function ModelsEdit() {
                     {providerModels.length === 0 ? (
                       <div className="flex items-center justify-between px-5 py-5">
                         <div className="text-sm text-muted-foreground">
-                          该供应商尚未添加模型。可手动添加，或配置密钥后同步目录。
+                          {t("models.providerEmpty")}
                         </div>
                         <Button size="sm" variant="outline" onClick={() => openNewModel(provider)}>
                           <Plus className="mr-1 h-4 w-4" />
-                          添加模型
+                          {t("models.addModel")}
                         </Button>
                       </div>
                     ) : (
@@ -577,34 +591,34 @@ export function ModelsEdit() {
                                   <div className="mt-1 flex gap-1.5">
                                     {capabilities.supportsReasoning && (
                                       <Badge variant="outline" className="h-5 text-[10px]">
-                                        推理
+                                        {t("models.reasoning")}
                                       </Badge>
                                     )}
                                     {capabilities.supportsImageInput && (
                                       <Badge variant="outline" className="h-5 text-[10px]">
-                                        图片
+                                        {t("models.image")}
                                       </Badge>
                                     )}
                                     <Badge variant="outline" className="h-5 text-[10px]">
                                       {capabilities.tier === "flagship"
-                                        ? "旗舰"
+                                        ? t("models.flagship")
                                         : capabilities.tier === "fast"
-                                          ? "高速"
+                                          ? t("models.fast")
                                           : capabilities.tier === "specialized"
-                                            ? "专项"
-                                            : "均衡"}
+                                            ? t("models.specialized")
+                                            : t("models.balanced")}
                                     </Badge>
                                     {capabilities.contextWindowTokens && (
                                       <Badge variant="outline" className="h-5 text-[10px]">
                                         {capabilities.contextWindowTokens >= 1_000_000
                                           ? `${capabilities.contextWindowTokens / 1_000_000}M`
                                           : `${Math.round(capabilities.contextWindowTokens / 1024)}K`}{" "}
-                                        上下文
+                                        {t("models.context")}
                                       </Badge>
                                     )}
                                     {model.isFree && (
                                       <Badge variant="secondary" className="h-5 text-[10px]">
-                                        免费
+                                        {t("models.free")}
                                       </Badge>
                                     )}
                                   </div>
@@ -638,7 +652,7 @@ export function ModelsEdit() {
                         <div className="px-5 py-3">
                           <Button size="sm" variant="ghost" onClick={() => openNewModel(provider)}>
                             <Plus className="mr-1 h-4 w-4" />
-                            添加模型
+                            {t("models.addModel")}
                           </Button>
                         </div>
                       </div>
@@ -657,10 +671,10 @@ export function ModelsEdit() {
           overlayClassName="!z-[10010]"
         >
           <DialogHeader>
-            <DialogTitle>{editingProvider ? "编辑供应商" : "添加模型供应商"}</DialogTitle>
-            <DialogDescription>
-              配置 OpenAI 兼容端点。API Key 只会提交到 Java 后端并加密保存。
-            </DialogDescription>
+            <DialogTitle>
+              {editingProvider ? t("models.editProvider") : t("models.providerDialogTitle")}
+            </DialogTitle>
+            <DialogDescription>{t("models.providerDialogHelp")}</DialogDescription>
           </DialogHeader>
           <div className="-mx-2 min-h-0 overflow-y-auto overscroll-contain px-2">
             {!editingProvider && (
@@ -683,7 +697,7 @@ export function ModelsEdit() {
             <div className="grid gap-4 py-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="provider-name">显示名称</Label>
+                  <Label htmlFor="provider-name">{t("models.displayName")}</Label>
                   <Input
                     id="provider-name"
                     autoComplete="off"
@@ -694,11 +708,11 @@ export function ModelsEdit() {
                         displayName: event.target.value,
                       }))
                     }
-                    placeholder="例如：智谱 GLM"
+                    placeholder={t("models.displayNameExample")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="provider-key">供应商标识</Label>
+                  <Label htmlFor="provider-key">{t("models.providerKey")}</Label>
                   <Input
                     id="provider-key"
                     autoComplete="off"
@@ -728,16 +742,14 @@ export function ModelsEdit() {
                   }
                   placeholder="https://example.com/v1"
                 />
-                <p className="text-xs text-muted-foreground">
-                  填写兼容端点根地址，不要追加 /chat/completions。
-                </p>
+                <p className="text-xs text-muted-foreground">{t("models.baseUrlHelp")}</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="provider-api-key">
                   API Key
                   {editingProvider?.credentialConfigured && (
                     <span className="ml-2 font-normal text-muted-foreground">
-                      已保存 {editingProvider.maskedHint}
+                      {t("models.keySaved", { hint: editingProvider.maskedHint ?? "" })}
                     </span>
                   )}
                 </Label>
@@ -750,8 +762,8 @@ export function ModelsEdit() {
                     onChange={(event) => setCredential(event.target.value)}
                     placeholder={
                       editingProvider?.credentialConfigured
-                        ? "留空保留现有密钥，输入新值可轮换"
-                        : "输入 API Key"
+                        ? t("models.keepKeyPlaceholder")
+                        : t("models.keyPlaceholder")
                     }
                     className="pr-10"
                   />
@@ -766,10 +778,8 @@ export function ModelsEdit() {
               </div>
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>
-                  <Label>启用供应商</Label>
-                  <p className="text-xs text-muted-foreground">
-                    停用后其模型不会出现在模型选择器中。
-                  </p>
+                  <Label>{t("models.enableProvider")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("models.enableProviderHelp")}</p>
                 </div>
                 <Switch
                   checked={providerDraft.enabled}
@@ -790,17 +800,17 @@ export function ModelsEdit() {
                   onClick={() => void clearCredential(editingProvider)}
                 >
                   <KeyRound className="mr-2 h-4 w-4" />
-                  清除密钥
+                  {t("models.clearKey")}
                 </Button>
               )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setProviderDialog(false)}>
-                取消
+                {t("common.cancel")}
               </Button>
               <Button disabled={busy === "provider"} onClick={() => void saveProvider()}>
                 {busy === "provider" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                保存
+                {t("common.save")}
               </Button>
             </div>
           </DialogFooter>
@@ -813,14 +823,14 @@ export function ModelsEdit() {
           overlayClassName="!z-[10010]"
         >
           <DialogHeader>
-            <DialogTitle>{editingModel ? "编辑模型" : "添加模型"}</DialogTitle>
-            <DialogDescription>
-              模型 ID 必须与供应商 API 接受的 model 参数完全一致。
-            </DialogDescription>
+            <DialogTitle>
+              {editingModel ? t("models.editModel") : t("models.modelDialogTitle")}
+            </DialogTitle>
+            <DialogDescription>{t("models.modelDialogHelp")}</DialogDescription>
           </DialogHeader>
           <div className="-mx-2 grid min-h-0 gap-4 overflow-y-auto overscroll-contain px-2 py-2">
             <div className="space-y-2">
-              <Label htmlFor="model-key">模型 ID</Label>
+              <Label htmlFor="model-key">{t("models.modelId")}</Label>
               <Input
                 id="model-key"
                 value={modelDraft.modelKey}
@@ -835,11 +845,11 @@ export function ModelsEdit() {
                         : current.displayName,
                   }))
                 }
-                placeholder="例如 glm-5 或 qwen-max"
+                placeholder={t("models.modelIdPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="model-name">显示名称</Label>
+              <Label htmlFor="model-name">{t("models.displayName")}</Label>
               <Input
                 id="model-name"
                 value={modelDraft.displayName}
@@ -849,11 +859,11 @@ export function ModelsEdit() {
                     displayName: event.target.value,
                   }))
                 }
-                placeholder="用户界面中显示的名称"
+                placeholder={t("models.modelNamePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="model-description">说明</Label>
+              <Label htmlFor="model-description">{t("models.description")}</Label>
               <Textarea
                 id="model-description"
                 value={modelDraft.description}
@@ -863,13 +873,13 @@ export function ModelsEdit() {
                     description: event.target.value,
                   }))
                 }
-                placeholder="模型用途、上下文限制或计费提示"
+                placeholder={t("models.descriptionPlaceholder")}
                 rows={3}
               />
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="model-tier">模型等级</Label>
+                <Label htmlFor="model-tier">{t("models.tier")}</Label>
                 <select
                   id="model-tier"
                   value={modelDraft.tier}
@@ -881,14 +891,14 @@ export function ModelsEdit() {
                   }
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
-                  <option value="flagship">旗舰</option>
-                  <option value="balanced">均衡</option>
-                  <option value="fast">高速</option>
-                  <option value="specialized">专项</option>
+                  <option value="flagship">{t("models.flagship")}</option>
+                  <option value="balanced">{t("models.balanced")}</option>
+                  <option value="fast">{t("models.fast")}</option>
+                  <option value="specialized">{t("models.specialized")}</option>
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="model-context">上下文窗口</Label>
+                <Label htmlFor="model-context">{t("models.contextWindow")}</Label>
                 <Input
                   id="model-context"
                   type="number"
@@ -902,11 +912,11 @@ export function ModelsEdit() {
                         : undefined,
                     }))
                   }
-                  placeholder="Token 数"
+                  placeholder={t("models.tokenCount")}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="model-output">最大输出</Label>
+                <Label htmlFor="model-output">{t("models.maxOutput")}</Label>
                 <Input
                   id="model-output"
                   type="number"
@@ -918,16 +928,20 @@ export function ModelsEdit() {
                       maxOutputTokens: event.target.value ? Number(event.target.value) : undefined,
                     }))
                   }
-                  placeholder="Token 数"
+                  placeholder={t("models.tokenCount")}
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {[
-                ["supportsReasoning", "支持推理", "展示推理强度选项"],
-                ["supportsImageInput", "支持图片", "允许发送图片输入"],
-                ["isFree", "免费模型", "仅作为价格提示"],
-                ["enabled", "启用模型", "可在聊天中选择"],
+                [
+                  "supportsReasoning",
+                  t("models.supportsReasoning"),
+                  t("models.supportsReasoningHelp"),
+                ],
+                ["supportsImageInput", t("models.supportsImage"), t("models.supportsImageHelp")],
+                ["isFree", t("models.freeModel"), t("models.freeModelHelp")],
+                ["enabled", t("models.enableModel"), t("models.enableModelHelp")],
               ].map(([key, title, description]) => (
                 <div key={key} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
@@ -946,7 +960,7 @@ export function ModelsEdit() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModelDialog(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button disabled={busy === "model"} onClick={() => void saveModel()}>
               {busy === "model" ? (
@@ -954,7 +968,7 @@ export function ModelsEdit() {
               ) : (
                 <WandSparkles className="mr-2 h-4 w-4" />
               )}
-              保存模型
+              {t("models.saveModel")}
             </Button>
           </DialogFooter>
         </DialogContent>
