@@ -6,6 +6,7 @@ import {
   TableDescription,
 } from "@/components/chat/mention-descriptions";
 import { useConnection } from "@/components/connection/connection-context";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -607,6 +608,7 @@ const ChatInputContent = React.memo(
     externalInput,
     forwardedRef,
   }: ChatInputContentProps) {
+    const { t } = useUiPreferences();
     const containerRef = React.useRef<HTMLDivElement>(null);
     const editorRef = React.useRef<HTMLDivElement>(null);
     const editorScrollRef = React.useRef<HTMLDivElement>(null);
@@ -1564,7 +1566,7 @@ const ChatInputContent = React.memo(
         >
           <div
             role="separator"
-            aria-label="Resize chat input"
+            aria-label={t("chat.resizeInput")}
             aria-orientation="horizontal"
             className="absolute inset-x-0 top-0 z-10 h-3 -translate-y-1/2 cursor-row-resize touch-none"
             onMouseDown={handleResizeStart}
@@ -1612,8 +1614,7 @@ const ChatInputContent = React.memo(
                 <div className="relative flex min-h-full flex-col">
                   {!input && attachments.length === 0 && (
                     <div className="text-muted-foreground pointer-events-none absolute left-3 right-10 top-3 text-sm">
-                      Press Enter to send, Shift + Enter for new line. Use @ to open table or
-                      setting suggestions, / for commands.
+                      {t("chat.inputHelp")}
                     </div>
                   )}
 
@@ -1647,7 +1648,7 @@ const ChatInputContent = React.memo(
                       <button
                         type="button"
                         className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-foreground shadow-sm"
-                        aria-label={`Remove ${attachment.filename}`}
+                        aria-label={t("chat.removeAttachment", { name: attachment.filename })}
                         onClick={() => handleRemoveAttachment(attachment.id)}
                       >
                         <X className="h-3 w-3" />
@@ -1683,7 +1684,7 @@ const ChatInputContent = React.memo(
                       onSelect={() => fileInputRef.current?.click()}
                     >
                       <ImagePlus className="h-3 w-3" />
-                      Image
+                      {t("chat.image")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1719,6 +1720,7 @@ const ChatInputEditorElement = React.memo(function ChatInputEditorElement({
   onFocus,
   onPaste,
 }: ChatInputEditorElementProps) {
+  const { t } = useUiPreferences();
   const { isRunning } = useChatInputRuntime();
 
   return (
@@ -1726,7 +1728,7 @@ const ChatInputEditorElement = React.memo(function ChatInputEditorElement({
       ref={editorRef}
       role="textbox"
       aria-multiline="true"
-      aria-label="Chat input. Press Enter to send, use Shift + Enter for a new line. Use @ to open table or setting suggestions, / for commands."
+      aria-label={t("chat.inputAria")}
       contentEditable={!isRunning}
       suppressContentEditableWarning
       className={cn(
@@ -1751,6 +1753,7 @@ const ChatInputAttachmentTrigger = React.memo(
     HTMLButtonElement,
     React.ComponentPropsWithoutRef<typeof Button> & { selectedModelSupportsImages: boolean }
   >(function ChatInputAttachmentTrigger({ selectedModelSupportsImages, className, ...props }, ref) {
+    const { t } = useUiPreferences();
     const { isRunning } = useChatInputRuntime();
 
     return (
@@ -1761,12 +1764,8 @@ const ChatInputAttachmentTrigger = React.memo(
         size="icon"
         variant="ghost"
         className={cn("h-6 w-6 rounded-md", className)}
-        title={
-          selectedModelSupportsImages
-            ? "Add attachment"
-            : "Select a vision-capable model to add images"
-        }
-        aria-label="Add attachment"
+        title={selectedModelSupportsImages ? t("chat.addAttachment") : t("chat.selectVisionModel")}
+        aria-label={t("chat.addAttachment")}
         disabled={isRunning}
       >
         <Plus className="h-3.5 w-3.5" />
@@ -1782,6 +1781,7 @@ const ChatInputFooterStatus = React.memo(function ChatInputFooterStatus({
 }: {
   onNewChat?: () => void;
 }) {
+  const { t } = useUiPreferences();
   const { hasMessages, tokenUsage } = useChatInputRuntime();
 
   if (!hasMessages) {
@@ -1795,11 +1795,11 @@ const ChatInputFooterStatus = React.memo(function ChatInputFooterStatus({
           size="sm"
           variant="ghost"
           className="h-6 gap-1 px-2 text-xs"
-          title="Start New Chat"
+          title={t("chat.startNew")}
           onClick={onNewChat}
         >
           <MessageSquarePlus className="h-3 w-3" />
-          New
+          {t("chat.newShort")}
         </Button>
       )}
       {tokenUsage && <ChatTokenStatus usage={tokenUsage} />}
@@ -1814,6 +1814,7 @@ const ChatInputSubmitButton = React.memo(function ChatInputSubmitButton({
   canSubmit: boolean;
   onSubmit: () => void;
 }) {
+  const { t } = useUiPreferences();
   const { isRunning, onStop } = useChatInputRuntime();
 
   if (isRunning) {
@@ -1823,8 +1824,8 @@ const ChatInputSubmitButton = React.memo(function ChatInputSubmitButton({
         size="icon"
         variant="destructive"
         className="h-6 w-6 rounded-md shadow-sm"
-        aria-label="Stop generating"
-        title="Stop generating"
+        aria-label={t("chat.stop")}
+        title={t("chat.stop")}
       >
         <Square className="h-3.5 w-3.5" />
       </Button>
@@ -1837,8 +1838,8 @@ const ChatInputSubmitButton = React.memo(function ChatInputSubmitButton({
       disabled={!canSubmit}
       size="icon"
       className="h-6 w-6 rounded-md shadow-sm"
-      aria-label="Send message"
-      title="Send (Enter)"
+      aria-label={t("chat.send")}
+      title={t("chat.sendEnter")}
     >
       <Send className="h-3.5 w-3.5" />
     </Button>
