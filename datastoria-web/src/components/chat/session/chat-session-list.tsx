@@ -15,6 +15,7 @@ import {
 import { useConnection } from "@/components/connection/connection-context";
 import { ConnectionDetailContent } from "@/components/connection/connection-detail-panel";
 import { StatusPopover } from "@/components/connection/connection-edit-component";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,6 +32,7 @@ import { Connection } from "@/lib/connection/connection";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
 import "@/lib/number-utils";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 import { toastManager } from "@/lib/toast";
 import { searchTree } from "@/lib/tree-search";
 import { cn } from "@/lib/utils";
@@ -94,8 +96,10 @@ const chatNodeId = (chatId: string) => `chat:${chatId}`;
 const groupNodeId = (parentId: string, label: string) => `group:${parentId}:${label}`;
 const connectionNodeId = (connectionId: string) => `connection:${connectionId}`;
 
-const getChatTitle = (chat: Pick<Chat, "title">) => chat.title || "New Chat";
-const getGroupLabel = (dateInput: Date | string) => {
+type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
+
+const getChatTitle = (chat: Pick<Chat, "title">, t: Translate) => chat.title || t("chat.newTitle");
+const getGroupLabel = (dateInput: Date | string, t: Translate) => {
   const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -104,10 +108,10 @@ const getGroupLabel = (dateInput: Date | string) => {
   const diffTime = today.getTime() - itemDate.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-  if (diffDays <= 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return "Earlier";
+  if (diffDays <= 0) return t("chat.today");
+  if (diffDays === 1) return t("chat.yesterday");
+  if (diffDays < 7) return t("chat.daysAgo", { count: diffDays });
+  return t("chat.earlier");
 };
 
 type ConnectionGroupMeta = {
@@ -150,12 +154,13 @@ function getResolvedConnectionGroupId(connectionId: string, currentConnectionId?
 
 function getConnectionGroupMeta(
   connectionId: string,
-  currentConnectionId?: string
+  currentConnectionId?: string,
+  t?: Translate
 ): ConnectionGroupMeta {
   if (isNoConnectionSessionConnectionId(connectionId)) {
     return {
-      label: "No cluster",
-      secondaryLabel: "Chat only",
+      label: t?.("chat.noCluster") ?? "No cluster",
+      secondaryLabel: t?.("chat.chatOnly") ?? "Chat only",
       isCurrent: currentConnectionId === NO_CONNECTION_SESSION_CONNECTION_ID,
       config: null,
     };
@@ -357,7 +362,8 @@ function buildHistoryTree(
   onDeleteChat: (chat: ManagedSession) => Promise<void>,
   onDeleteGroup: (label: string, chats: ManagedSession[]) => Promise<void>,
   deleteState: DeleteState,
-  onDeleteStateChange: (next: DeleteState) => void
+  onDeleteStateChange: (next: DeleteState) => void,
+  t: Translate
 ): TreeDataItem[] {
   const connectionGroups = new Map<string, ManagedSession[]>();
 
@@ -379,7 +385,7 @@ function buildHistoryTree(
   const groupMetaByConnectionId = new Map(
     connectionGroupEntries.map(([connectionId]) => [
       connectionId,
-      getConnectionGroupMeta(connectionId, currentConnectionId),
+      getConnectionGroupMeta(connectionId, currentConnectionId, t),
     ])
   );
   const sortedConnectionGroups = connectionGroupEntries.sort(
@@ -399,7 +405,7 @@ function buildHistoryTree(
     const dateGroupIndex = new Map<string, number>();
 
     for (const chat of connectionChats) {
-      const label = getGroupLabel(chat.updatedAt);
+      const label = getGroupLabel(chat.updatedAt, t);
       const existingIndex = dateGroupIndex.get(label);
       if (existingIndex === undefined) {
         dateGroupIndex.set(label, dateGroups.length);
@@ -411,7 +417,7 @@ function buildHistoryTree(
 
     const meta =
       groupMetaByConnectionId.get(connectionId) ??
-      getConnectionGroupMeta(connectionId, currentConnectionId);
+      getConnectionGroupMeta(connectionId, currentConnectionId, t);
     const connectionSearchTerms = [meta.label, meta.secondaryLabel, connectionId]
       .filter(Boolean)
       .join(" ")
@@ -486,11 +492,11 @@ function buildHistoryTree(
               onConfirm={onConfirmSwitch}
             >
               <span className={cn(!meta.isCurrent && "text-muted-foreground")}>
-                {getChatTitle(chat)}
+                {getChatTitle(chat, t)}
               </span>
             </CrossConnectionSwitchPopover>
           ),
-          search: `${getChatTitle(chat).toLowerCase()} ${connectionSearchTerms} ${label.toLowerCase()}`,
+          search: `${getChatTitle(chat, t).toLowerCase()} ${connectionSearchTerms} ${label.toLowerCase()}`,
           icon: chat.running ? Loader2 : MessageSquareText,
           iconClassName: cn(
             chat.running && "animate-spin",
@@ -508,8 +514,8 @@ function buildHistoryTree(
                 variant="ghost"
                 size="icon"
                 className="h-[18px] w-[18px] text-muted-foreground opacity-0 transition-opacity group-hover/tree:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 hover:text-foreground"
-                title="Rename conversation"
-                aria-label="Rename conversation"
+                title={t("chat.rename")}
+                aria-label={t("chat.rename")}
                 onClick={(e) => {
                   e.stopPropagation();
                   onRenameChat(chat);
@@ -523,7 +529,7 @@ function buildHistoryTree(
                 deleteState={deleteState}
                 onDeleteStateChange={onDeleteStateChange}
                 title="Delete conversation"
-                description={`Delete "${getChatTitle(chat)}"? This action cannot be reverted.`}
+                description={`Delete "${getChatTitle(chat, t)}"? This action cannot be reverted.`}
                 confirmLabel="Delete"
                 onConfirm={() => onDeleteChat(chat)}
               />
@@ -538,6 +544,7 @@ function buildHistoryTree(
 export const ChatSessionList = React.memo<ChatHistoryListProps>(
   ({ currentChatId, onNewChat, onClose, onSelectChat, className }) => {
     const { connection, switchConnection } = useConnection();
+    const { t } = useUiPreferences();
     const currentConnectionId = getSessionRepositoryConnectionId(connection);
     const history = useSessions(currentConnectionId, "all");
     const pageInfo = useSessionPageInfo();
@@ -625,7 +632,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
           if (targetConfig) {
             switchConnection(targetConfig);
           } else {
-            toastManager.show("Connection for this conversation is no longer available", "error");
+            toastManager.show(t("chat.connectionUnavailable"), "error");
             return;
           }
         }
@@ -633,7 +640,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
         onSelectChat?.(chat.chatId, chat.databaseId, chat.shareCode);
         onClose?.();
       },
-      [connection, currentChatId, onClose, onSelectChat, switchConnection]
+      [connection, currentChatId, onClose, onSelectChat, switchConnection, t]
     );
 
     const treeData = React.useMemo(
@@ -647,12 +654,13 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
           (chat) =>
             setRenameState({
               chatId: chat.chatId,
-              title: getChatTitle(chat),
+              title: getChatTitle(chat, t),
             }),
           (chat) => handleDeleteChats([chat.chatId]),
           (_label, chats) => handleDeleteChats(chats.map((chat) => chat.chatId)),
           deleteState,
-          setDeleteState
+          setDeleteState,
+          t
         ),
       [
         currentConnectionId,
@@ -661,6 +669,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
         handleSelectSession,
         history,
         switchConfirmState,
+        t,
       ]
     );
 
@@ -669,7 +678,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
         const data = node.data as HistoryNodeData | undefined;
         return (
           data?.kind === "connection" &&
-          getConnectionGroupMeta(data.connectionId, currentConnectionId).isCurrent
+          getConnectionGroupMeta(data.connectionId, currentConnectionId, t).isCurrent
         );
       });
       if (!currentConnectionNode) {
@@ -680,7 +689,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
         currentConnectionNode.id,
         ...(currentConnectionNode.children?.map((child) => child.id) ?? []),
       ];
-    }, [currentConnectionId, treeData]);
+    }, [currentConnectionId, t, treeData]);
 
     const hasVisibleTreeData = React.useMemo(() => {
       if (search.length === 0) {
@@ -696,7 +705,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
           <div className="relative border-b-2 flex items-center h-9">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search chats"
+              placeholder={t("chat.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className={cn("pl-8 rounded-none border-none flex-1 h-9", search ? "pr-24" : "pr-16")}
@@ -707,7 +716,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
                 size="sm"
                 className="absolute right-16 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
                 onClick={() => setSearch("")}
-                title="Clear search"
+                title={t("chat.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -717,7 +726,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
               size="sm"
               className="absolute right-9 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
               onClick={() => void refreshSessions()}
-              title="Refresh chats"
+              title={t("chat.refresh")}
               disabled={isRefreshing}
             >
               <RotateCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
@@ -727,7 +736,7 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
               size="sm"
               className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
               onClick={onNewChat}
-              title="New chat"
+              title={t("chat.new")}
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -780,14 +789,14 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
                       onClick={() => void handleLoadMore()}
                       disabled={isRefreshing}
                     >
-                      {isRefreshing ? "Loading..." : "Load more"}
+                      {isRefreshing ? t("chat.loading") : t("chat.loadMore")}
                     </Button>
                   </div>
                 )}
               </div>
             ) : (
               <div className="h-full flex items-center justify-center px-4 text-sm text-muted-foreground">
-                No chats found.
+                {t("chat.empty")}
               </div>
             )}
           </div>
@@ -796,8 +805,8 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
         <Dialog open={renameState !== null} onOpenChange={(open) => !open && setRenameState(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Rename conversation</DialogTitle>
-              <DialogDescription>Update the session title shown in chat history.</DialogDescription>
+              <DialogTitle>{t("chat.rename")}</DialogTitle>
+              <DialogDescription>{t("chat.renameHelp")}</DialogDescription>
             </DialogHeader>
             <Input
               value={renameState?.title ?? ""}
@@ -821,10 +830,10 @@ export const ChatSessionList = React.memo<ChatHistoryListProps>(
             />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setRenameState(null)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="button" onClick={() => void handleRenameSubmit()}>
-                Save
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -26,6 +26,7 @@ describe("session-api-base", () => {
   it("adds development identity and merges caller headers", () => {
     withEnv({ NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL: "dev@example.com" });
     expect(sessionIdentityHeaders({ "Content-Type": "application/json" })).toEqual({
+      "Accept-Language": "en",
       "x-datastoria-user-email": "dev@example.com",
       "Content-Type": "application/json",
     });
@@ -34,6 +35,7 @@ describe("session-api-base", () => {
   it("returns caller headers when development identity is unset", () => {
     withEnv({ NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL: undefined });
     expect(sessionIdentityHeaders({ Accept: "application/json" })).toEqual({
+      "Accept-Language": "en",
       Accept: "application/json",
     });
   });

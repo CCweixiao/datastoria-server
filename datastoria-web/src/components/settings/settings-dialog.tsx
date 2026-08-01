@@ -1,4 +1,5 @@
 import { useConnection } from "@/components/connection/connection-context";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog as SharedDialog } from "@/components/shared/use-dialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -42,6 +43,7 @@ function SettingsDialogWrapper({
   initialSkillId?: string;
 }) {
   const { connection } = useConnection();
+  const { t } = useUiPreferences();
   const hasConnection = connection !== null;
   const [activeSection, setActiveSection] = useState<SettingsSection>(() =>
     getAvailableSettingsSection(initialSection, hasConnection)
@@ -70,7 +72,7 @@ function SettingsDialogWrapper({
           <Sidebar collapsible="none" variant="inset" className="border-r">
             <SidebarContent>
               <SidebarGroup>
-                <SidebarGroupLabel>Settings</SidebarGroupLabel>
+                <SidebarGroupLabel>{t("settings.title")}</SidebarGroupLabel>
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -78,7 +80,7 @@ function SettingsDialogWrapper({
                       onClick={() => setActiveSection("ui")}
                       isActive={activeSection === "ui"}
                     >
-                      <span>UI</span>
+                      <span>{t("settings.ui.title")}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
 
@@ -99,7 +101,7 @@ function SettingsDialogWrapper({
                                 onClick={() => setActiveSection("query-context")}
                                 isActive={activeSection === "query-context"}
                               >
-                                <span>Query Context</span>
+                                <span>{t("settings.queryContext.title")}</span>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                           </SidebarMenuSub>
@@ -125,7 +127,7 @@ function SettingsDialogWrapper({
                               onClick={() => setActiveSection("models")}
                               isActive={activeSection === "models"}
                             >
-                              <span>Models</span>
+                              <span>{t("settings.models.title")}</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
 
@@ -135,7 +137,7 @@ function SettingsDialogWrapper({
                               onClick={() => setActiveSection("agent")}
                               isActive={activeSection === "agent"}
                             >
-                              <span>Agent</span>
+                              <span>{t("settings.agent.title")}</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
 
@@ -145,7 +147,7 @@ function SettingsDialogWrapper({
                               onClick={() => setActiveSection("skills")}
                               isActive={activeSection === "skills"}
                             >
-                              <span>Skills</span>
+                              <span>{t("settings.skills.title")}</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         </SidebarMenuSub>
@@ -162,10 +164,16 @@ function SettingsDialogWrapper({
             {/* Header */}
             <div className="flex-shrink-0 border-b px-4 py-2 flex items-center justify-between">
               <div className="flex flex-col">
-                <div className="text-sm font-medium">{activePage.title}</div>
-                <div className="text-xs text-muted-foreground">{activePage.description}</div>
+                <div className="text-sm font-medium">{t(activePage.titleKey)}</div>
+                <div className="text-xs text-muted-foreground">{t(activePage.descriptionKey)}</div>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClose}
+                className="h-8 w-8"
+                aria-label={t("common.close")}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>

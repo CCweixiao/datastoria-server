@@ -14,7 +14,10 @@ export function backendApiUrl(path: string): string {
 
 export function backendApiHeaders(extra?: HeadersInit): HeadersInit {
   const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+  const language =
+    typeof document === "undefined" ? "en" : document.documentElement.lang || navigator.language;
   return {
+    "Accept-Language": language,
     ...(email ? { "x-datastoria-user-email": email } : {}),
     ...(extra ?? {}),
   };
