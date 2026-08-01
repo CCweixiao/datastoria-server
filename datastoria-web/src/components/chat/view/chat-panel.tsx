@@ -7,6 +7,7 @@ import {
   getSessionRepositoryConnectionId,
   isConnectionResolutionPending,
   isNoConnectionSessionConnectionId,
+  resolveSessionConnection,
 } from "@/components/chat/session/session-connection-id";
 import { SessionManager } from "@/components/chat/session/session-manager";
 import { useConnection } from "@/components/connection/connection-context";
@@ -329,9 +330,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
       const isSharedSession = Boolean(shareCode);
       const targetConnection = isSharedSession
         ? null
-        : options && "connectionOverride" in options
-          ? options.connectionOverride
-          : connection;
+        : resolveSessionConnection(connection, options?.connectionOverride);
       const targetConnectionId =
         options?.connectionId ??
         chatData?.databaseId ??

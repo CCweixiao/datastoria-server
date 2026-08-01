@@ -16,6 +16,13 @@ export function isNoConnectionSessionConnectionId(connectionId?: string | null):
   return connectionId === NO_CONNECTION_SESSION_CONNECTION_ID;
 }
 
+export function resolveSessionConnection<T>(
+  currentConnection: T | null,
+  connectionOverride?: T | null
+): T | null {
+  return connectionOverride === undefined ? currentConnection : connectionOverride;
+}
+
 export function isConnectionResolutionPending({
   isInitialized,
   isConnectionAvailable,
