@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
+import io.github.ccweixiao.datastoria.common.clickhouse.ClickHouseReadOnlySqlClassifier;
 import io.github.ccweixiao.datastoria.common.error.ProviderOperationException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;

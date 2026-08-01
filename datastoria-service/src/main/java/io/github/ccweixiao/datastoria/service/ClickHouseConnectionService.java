@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import io.github.ccweixiao.datastoria.common.clickhouse.ClickHouseReadOnlySqlClassifier;
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
 import io.github.ccweixiao.datastoria.common.crypto.EnvelopeEncryptionService;
 import io.github.ccweixiao.datastoria.common.crypto.MaskedHintBuilder;
@@ -31,6 +32,8 @@ public class ClickHouseConnectionService {
   private final EnvelopeEncryptionService crypto;
   private final ClickHouseRemoteClient remoteClient;
   private final Scheduler jdbcScheduler;
+  private final ClickHouseReadOnlySqlClassifier sqlClassifier =
+      new ClickHouseReadOnlySqlClassifier();
 
   public ClickHouseConnectionService(
       ClickHouseConnectionRepository repository,
@@ -226,8 +229,14 @@ public class ClickHouseConnectionService {
                     new IllegalArgumentException("ClickHouse connection is disabled: " + id));
               }
               String password = decryptPassword(connection);
+              // Non-admin callers may only run read-only SQL; admins may execute DDL/DML.
+              String gatedSql =
+                  identity.isAdmin()
+                      ? sql
+                      : sqlClassifier.requireReadOnly(sql, connection.cluster());
               String effectiveSql =
-                  wrapForTargetNode(sql, targetNode, targetUser, connection.username(), password);
+                  wrapForTargetNode(
+                      gatedSql, targetNode, targetUser, connection.username(), password);
               return remoteClient.executeStream(connection, password, effectiveSql, parameters);
             })
         .subscribeOn(jdbcScheduler);

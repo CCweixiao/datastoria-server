@@ -7,6 +7,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.ccweixiao.datastoria.common.clickhouse.ClickHouseReadOnlySqlClassifier;
+
 class ClickHouseReadOnlySqlClassifierTest {
 
   private final ClickHouseReadOnlySqlClassifier classifier = new ClickHouseReadOnlySqlClassifier();

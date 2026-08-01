@@ -28,8 +28,7 @@ public class CorsConfig {
             "Idempotency-Key",
             "If-Match",
             "Last-Event-ID",
-            "X-Session-Share-Code",
-            "x-datastoria-user-email"));
+            "X-Session-Share-Code"));
     configuration.setExposedHeaders(
         List.of(
             "Deprecation",

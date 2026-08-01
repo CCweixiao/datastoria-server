@@ -7,9 +7,16 @@ spring:
 
 datastoria:
   master-key: ${DATASTORIA_MASTER_KEY}
-  auth:
-    success-url: ${DATASTORIA_AUTH_SUCCESS_URL}
-  identity:
-    default-tenant: ${DATASTORIA_DEFAULT_TENANT}
+  security:
+    default-tenant: ${DATASTORIA_DEFAULT_TENANT:default}
+    jwt:
+      secret: ${DATASTORIA_JWT_SECRET}
+      ttl-minutes: ${DATASTORIA_JWT_TTL_MINUTES:480}
+    bootstrap-admin:
+      username: ${DATASTORIA_BOOTSTRAP_ADMIN_USERNAME:admin}
+      password: ${DATASTORIA_BOOTSTRAP_ADMIN_PASSWORD}
+      role: ${DATASTORIA_BOOTSTRAP_ADMIN_ROLE:ADMIN}
+      tenant: ${DATASTORIA_DEFAULT_TENANT:default}
+      email: ${DATASTORIA_BOOTSTRAP_ADMIN_EMAIL:}
   cors:
     allowed-origins: ${DATASTORIA_CORS_ALLOWED_ORIGINS}

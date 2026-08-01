@@ -34,12 +34,12 @@ class CorsConfigTest {
         .contains("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     assertThat(configuration.getAllowedHeaders())
         .contains(
+            "Authorization",
             "Content-Type",
             "Idempotency-Key",
             "If-Match",
             "Last-Event-ID",
-            "X-Session-Share-Code",
-            "x-datastoria-user-email");
+            "X-Session-Share-Code");
     assertThat(configuration.getExposedHeaders())
         .contains(
             "ETag",

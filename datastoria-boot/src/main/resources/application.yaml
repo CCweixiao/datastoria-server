@@ -38,10 +38,11 @@ info:
     description: Spring Boot backend for DataStoria
 
 # Exactly one runtime profile is supported:
-#   dev  -> MySQL 5.7 with convenient local defaults and development identity headers
-#   prod -> MySQL 5.7 with environment-owned credentials and OAuth2 authentication
-# Both profiles use the same Flyway migrations, MyBatis mappers and MysqlAgentStateStore.
-# Running without a profile intentionally fails because no datasource URL is configured.
+#   dev  -> MySQL 5.7 with convenient local defaults and a fixed JWT secret / bootstrap admin
+#   prod -> MySQL 5.7 with environment-owned credentials, JWT secret and bootstrap admin
+# Both profiles authenticate identically: username + password login issuing a JWT, enforced by
+# JwtIdentityWebFilter. They share the same Flyway migrations, MyBatis mappers and
+# MysqlAgentStateStore. Running without a profile intentionally fails (no datasource URL).
 
 # MyBatis-Plus configuration shared by dev and prod. No global
 # TenantLine/LogicDelete/OptimisticLocker plugins are enabled here: tenant_id, deleted_at and

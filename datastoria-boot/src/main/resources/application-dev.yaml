@@ -11,10 +11,18 @@ datastoria:
     repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
   skills:
     seed-enabled: true
-  identity:
-    default-tenant: tenant-dev
-    default-user: dev@example.com
-    default-roles: ROLE_ADMIN,ROLE_USER
-    admin-users: dev@example.com
+  security:
+    default-tenant: default
+    jwt:
+      # Dev-only HS256 secret. Any non-empty string works (it is SHA-256 hashed to 32 bytes).
+      # Prod must override via DATASTORIA_JWT_SECRET.
+      secret: dev-secret-change-me
+      ttl-minutes: 480
+    bootstrap-admin:
+      username: admin
+      password: admin123
+      role: ADMIN
+      tenant: default
+      email: admin@example.com
   cors:
     allowed-origins: http://localhost:3000,http://127.0.0.1:3000

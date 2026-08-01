@@ -1,15 +1,17 @@
-package io.github.ccweixiao.datastoria.agent.runtime;
+package io.github.ccweixiao.datastoria.common.clickhouse;
 
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Fail-closed lexical guard for Agent-generated ClickHouse SQL.
+ * Fail-closed lexical guard for ClickHouse SQL, shared by the agent tool path and the REST query
+ * endpoint.
  *
  * <p>This is deliberately narrower than the ClickHouse grammar. It accepts query/introspection
  * statements and rejects ambiguous constructs rather than trying to prove every possible SQL
- * extension safe. ClickHouse's {@code readonly=2} setting remains the database-side second layer.
+ * extension safe. ClickHouse's {@code readonly=2} setting remains the database-side second layer
+ * for the agent path.
  */
 public final class ClickHouseReadOnlySqlClassifier {
 

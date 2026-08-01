@@ -10,9 +10,9 @@ import org.springframework.test.context.TestPropertySource;
 /**
  * Covers the two P3 fixtures that require an explicit "missing header = unauthenticated" semantic
  * which the default {@code dev}/{@code test} profile intentionally disables for developer
- * convenience. The class flips {@code datastoria.identity.allow-anonymous=false} so the {@link
- * io.github.ccweixiao.datastoria.common.identity.IdentityWebFilter} returns HTTP 401 with a
- * plain-text body for callers that omit {@code x-datastoria-user-email}.
+ * convenience. The class flips {@code datastoria.identity.allow-anonymous=false} so the test
+ * identity filter does not pre-resolve an identity, leaving {@code JwtIdentityWebFilter} to return
+ * HTTP 401 with a plain-text body for callers that omit {@code x-datastoria-user-email}.
  *
  * <p>Covers fixtures: {@code A03-list-unauthenticated}, {@code A09-share-unauthenticated}.
  */

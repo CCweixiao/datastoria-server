@@ -13,7 +13,9 @@ import org.springframework.web.server.MethodNotAllowedException;
 
 import io.github.ccweixiao.datastoria.common.agent.PendingActionConflictException;
 import io.github.ccweixiao.datastoria.common.agent.PendingActionExpiredException;
+import io.github.ccweixiao.datastoria.common.error.BadCredentialsException;
 import io.github.ccweixiao.datastoria.common.error.ClientSecretNotAllowedException;
+import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.FeedbackTargetNotFoundException;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
@@ -43,6 +45,22 @@ public class GlobalExceptionHandler {
       NotFoundException ex) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
         .body(problems.forStatus(404, "NOT_FOUND", "Resource not found", safeMessage(ex)));
+  }
+
+  @ExceptionHandler(BadCredentialsException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleBadCredentials(
+      BadCredentialsException ex) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .body(
+            problems.forStatus(
+                401, "UNAUTHENTICATED", "Authentication failed", "Invalid username or password."));
+  }
+
+  @ExceptionHandler(ConflictException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleConflict(
+      ConflictException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(problems.forStatus(409, "CONFLICT", "Conflict", safeMessage(ex)));
   }
 
   @ExceptionHandler(RevisionConflictException.class)
