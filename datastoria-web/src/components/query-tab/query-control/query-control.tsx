@@ -1,5 +1,6 @@
 import { useChatPanel } from "@/components/chat/view/use-chat-panel";
 import { useConnection } from "@/components/connection/connection-context";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +19,7 @@ import { openSaveSnippetDialog } from "../snippet/save-snippet-dialog";
 import { showMultipleStatementsConfirmDialog } from "./multiple-statements-confirm-dialog";
 
 export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
+  const { t } = useUiPreferences();
   const { isSqlExecuting, executeQuery, executeBatch } = useQueryExecutor();
   const { connection } = useConnection();
   const { displayMode, setDisplayMode } = useChatPanel();
@@ -103,7 +105,7 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
             className={`h-6 gap-1 px-2 text-xs rounded-sm`}
           >
             <Play className="h-3 w-3" />
-            {hasSelectedText ? "Run Selected Text(Cmd+Enter)" : "Run Current Line(Cmd+Enter)"}
+            {hasSelectedText ? t("query.runSelected") : t("query.runCurrent")}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -112,13 +114,15 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
                 size="sm"
                 variant="ghost"
                 className="h-6 px-1 text-xs rounded-sm"
-                aria-label="Run options"
+                aria-label={t("query.runOptions")}
               >
                 <ChevronDown className="h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={handleRunBatchSqls}>Run Batch SQLs</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleRunBatchSqls}>
+                {t("query.runBatch")}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -132,21 +136,25 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
               variant="ghost"
               className="h-6 gap-1 px-2 text-xs rounded-sm"
             >
-              {selectedText ? "Explain Selected SQL" : "Explain Current Line"}
+              {selectedText ? t("query.explainSelected") : t("query.explainCurrent")}
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => handleExplain("ast")}>Explain AST</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExplain("syntax")}>
-              Explain Syntax
+            <DropdownMenuItem onClick={() => handleExplain("ast")}>
+              {t("query.explainAst")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExplain("plan")}>Explain Plan</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExplain("syntax")}>
+              {t("query.explainSyntax")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExplain("plan")}>
+              {t("query.explainPlan")}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExplain("pipeline")}>
-              Explain Pipeline
+              {t("query.explainPipeline")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExplain("estimate")}>
-              Explain Estimate
+              {t("query.explainEstimate")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -161,7 +169,7 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
           onClick={() => openSaveSnippetDialog({ initialSql: selectedText || text })}
         >
           <Bookmark className="h-3 w-3" />
-          Save
+          {t("query.save")}
         </Button>
 
         <Separator orientation="vertical" className="h-4" />
@@ -173,7 +181,7 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
           onClick={onOpenHistory}
         >
           <History className="h-3 w-3" />
-          History
+          {t("query.history")}
         </Button>
 
         <Separator orientation="vertical" className="h-4" />
@@ -187,7 +195,7 @@ export function QueryControl({ onOpenHistory }: { onOpenHistory: () => void }) {
           }}
         >
           <MessageSquare className="h-3 w-3" />
-          Toggle Agent
+          {t("query.toggleAgent")}
         </Button>
       </div>
     </TooltipProvider>

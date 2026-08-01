@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -6,6 +7,7 @@ interface QueryExecutionTimerProps {
 }
 
 export function QueryExecutionTimer({ isExecuting }: QueryExecutionTimerProps) {
+  const { t } = useUiPreferences();
   const [formattedTime, setFormattedTime] = useState("00:00.000");
   // Store startTime in state as requested, though we use the captured 'now' value in the interval
 
@@ -56,7 +58,7 @@ export function QueryExecutionTimer({ isExecuting }: QueryExecutionTimerProps) {
   return (
     <div className="flex items-center gap-1.5">
       {isExecuting && <Loader2 className="!h-3 !w-3 animate-spin text-muted-foreground" />}
-      <span className="text-xs text-muted-foreground">Elapsed: </span>
+      <span className="text-xs text-muted-foreground">{t("query.elapsed")} </span>
       <span className="text-xs text-muted-foreground font-mono">{formattedTime}</span>
     </div>
   );

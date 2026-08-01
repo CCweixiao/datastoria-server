@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { FileText, Loader2, Table } from "lucide-react";
@@ -37,6 +38,7 @@ export function QueryResponseView({
   view = "query",
   tabId: _tabId,
 }: QueryResponseViewProps) {
+  const { t } = useUiPreferences();
   const [selectedTab, setSelectedTab] = useState("result");
   const [displayMode, setDisplayMode] = useState<DisplayMode>("text");
   const queryExecutor = useQueryExecutorOptional();
@@ -96,7 +98,7 @@ export function QueryResponseView({
   if (isLoading) {
     return (
       <div className="h-full w-full overflow-auto p-4 flex flex-col items-center justify-center">
-        <div className="text-sm text-muted-foreground">Executing query...</div>
+        <div className="text-sm text-muted-foreground">{t("query.executing")}</div>
       </div>
     );
   }
@@ -142,14 +144,14 @@ export function QueryResponseView({
             value="result"
             className="rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
           >
-            Result
+            {t("query.result")}
           </TabsTrigger>
           {queryResponse.httpHeaders && (
             <TabsTrigger
               value="headers"
               className="rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
             >
-              Response Headers
+              {t("query.responseHeaders")}
             </TabsTrigger>
           )}
         </TabsList>
@@ -162,14 +164,19 @@ export function QueryResponseView({
             onValueChange={handleDisplayModeChange}
             className="h-7"
           >
-            <ToggleGroupItem value="text" size="sm" className="h-7 w-7 p-0" title="Text view">
+            <ToggleGroupItem
+              value="text"
+              size="sm"
+              className="h-7 w-7 p-0"
+              title={t("query.textView")}
+            >
               <FileText className="h-3.5 w-3.5" />
             </ToggleGroupItem>
             <ToggleGroupItem
               value="table"
               size="sm"
               className="h-7 w-7 p-0"
-              title="Table view"
+              title={t("query.tableView")}
               disabled={isLoadingTableData}
             >
               {isLoadingTableData ? (
@@ -212,16 +219,16 @@ export function QueryResponseView({
               isLoadingTableData ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-sm text-muted-foreground">Loading table data...</span>
+                  <span className="ml-2 text-sm text-muted-foreground">
+                    {t("query.loadingTable")}
+                  </span>
                 </div>
               ) : queryResponse.tableData ? (
                 <QueryResponseTableView
                   queryResponse={{ ...queryResponse, data: queryResponse.tableData }}
                 />
               ) : (
-                <div className="py-4 text-sm text-muted-foreground">
-                  Click the table icon to load table view.
-                </div>
+                <div className="py-4 text-sm text-muted-foreground">{t("query.loadTableHint")}</div>
               )
             ) : (
               // Normal SQL Response and EXPLAIN ESTIMATE (text view)
