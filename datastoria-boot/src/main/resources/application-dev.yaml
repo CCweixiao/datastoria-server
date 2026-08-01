@@ -19,10 +19,10 @@ datastoria:
       secret: dev-secret-change-me
       ttl-minutes: 480
     bootstrap-admin:
-      username: admin
-      password: admin123
+      username: datastoria
+      password: datastoria
       role: ADMIN
       tenant: default
-      email: admin@example.com
+      email: datastoria@example.com
   cors:
     allowed-origins: http://localhost:3000,http://127.0.0.1:3000

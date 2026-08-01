@@ -103,11 +103,7 @@ public enum ApiErrorCode {
   AUTHENTICATION_REQUIRED(
       401, "Authentication required", "Authentication is required.", "需要身份认证", "需要完成身份认证。"),
   AUTHENTICATION_FAILED(
-      401,
-      "Authentication failed",
-      "Invalid username or password.",
-      "身份验证失败",
-      "用户名或密码错误。"),
+      401, "Authentication failed", "Invalid username or password.", "身份验证失败", "用户名或密码错误。"),
   ADMIN_ACCESS_REQUIRED(
       403,
       "Administrator access required",
@@ -115,11 +111,7 @@ public enum ApiErrorCode {
       "需要管理员权限",
       "需要管理员权限才能执行此操作。"),
   USERNAME_ALREADY_EXISTS(
-      409,
-      "Username already exists",
-      "The username is already in use.",
-      "用户名已存在",
-      "该用户名已被使用。"),
+      409, "Username already exists", "The username is already in use.", "用户名已存在", "该用户名已被使用。"),
   INVALID_SHARE_CODE(403, "Invalid share code", "Invalid session share code.", "共享码无效", "会话共享码无效。"),
   CONNECTION_ID_MISMATCH(
       409,

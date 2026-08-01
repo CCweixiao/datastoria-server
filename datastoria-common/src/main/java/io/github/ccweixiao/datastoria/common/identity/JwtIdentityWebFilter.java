@@ -49,8 +49,7 @@ public class JwtIdentityWebFilter implements WebFilter {
   private final JwtTokenService tokenService;
   private final TokenAccountResolver accountResolver;
 
-  public JwtIdentityWebFilter(
-      JwtTokenService tokenService, TokenAccountResolver accountResolver) {
+  public JwtIdentityWebFilter(JwtTokenService tokenService, TokenAccountResolver accountResolver) {
     this.tokenService = tokenService;
     this.accountResolver = accountResolver;
   }
@@ -70,10 +69,22 @@ public class JwtIdentityWebFilter implements WebFilter {
     if (verified.isEmpty()) {
       return writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED);
     }
+    // resolve() returns Mono<Identity> (empty when the account is
+    // gone/disabled/version-mismatched).
+    // Branch on whether it resolved BEFORE running the chain: enforce() returns Mono<Void>, which
+    // never emits a value, so a switchIfEmpty after it would fire on every successful request too —
+    // after the response is already committed — and crash modifying read-only headers.
     return accountResolver
         .resolve(verified.get())
-        .flatMap(identity -> enforce(identity, path, exchange, chain))
-        .switchIfEmpty(Mono.defer(() -> writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED)));
+        .map(Optional::of)
+        .defaultIfEmpty(Optional.empty())
+        .flatMap(
+            maybeIdentity -> {
+              if (maybeIdentity.isEmpty()) {
+                return writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED);
+              }
+              return enforce(maybeIdentity.get(), path, exchange, chain);
+            });
   }
 
   private static Mono<Void> enforce(

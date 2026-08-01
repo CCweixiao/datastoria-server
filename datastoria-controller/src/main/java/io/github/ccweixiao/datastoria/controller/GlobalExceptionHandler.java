@@ -9,13 +9,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.MethodNotAllowedException;
 
 import io.github.ccweixiao.datastoria.common.agent.PendingActionConflictException;
 import io.github.ccweixiao.datastoria.common.agent.PendingActionExpiredException;
-import io.github.ccweixiao.datastoria.common.error.BadCredentialsException;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
+import io.github.ccweixiao.datastoria.common.error.BadCredentialsException;
 import io.github.ccweixiao.datastoria.common.error.ClientSecretNotAllowedException;
 import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.FeedbackTargetNotFoundException;
@@ -59,8 +60,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(ConflictException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleConflict(
       ConflictException ex) {
-    return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(problems.forError(ex.code()));
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(problems.forError(ex.code()));
   }
 
   @ExceptionHandler(RevisionConflictException.class)
@@ -149,26 +149,41 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleValidation(
       MethodArgumentNotValidException ex) {
-    var fieldErrors =
-        ex.getBindingResult().getFieldErrors().stream()
-            .map(
-                fe ->
-                    java.util.Map.entry(
-                        fe.getField(),
-                        (Object)
-                            java.util.Map.of(
-                                "code",
-                                fe.getCode() == null ? "invalid" : fe.getCode(),
-                                "message",
-                                fe.getDefaultMessage() == null ? "" : fe.getDefaultMessage())))
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    java.util.Map.Entry::getKey,
-                    java.util.Map.Entry::getValue,
-                    (a, b) -> b,
-                    java.util.LinkedHashMap::new));
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors));
+        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex)));
+  }
+
+  /**
+   * WebFlux throws {@link WebExchangeBindException} (not the MVC {@link
+   * MethodArgumentNotValidException}) when {@code @Valid} on a {@code @RequestBody} fails; map it
+   * to the same 400 field-error shape.
+   */
+  @ExceptionHandler(WebExchangeBindException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleWebFluxBind(
+      WebExchangeBindException ex) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex)));
+  }
+
+  private static java.util.Map<String, Object> fieldErrors(
+      org.springframework.validation.BindingResult result) {
+    return result.getFieldErrors().stream()
+        .map(
+            fe ->
+                java.util.Map.entry(
+                    fe.getField(),
+                    (Object)
+                        java.util.Map.of(
+                            "code",
+                            fe.getCode() == null ? "invalid" : fe.getCode(),
+                            "message",
+                            fe.getDefaultMessage() == null ? "" : fe.getDefaultMessage())))
+        .collect(
+            java.util.stream.Collectors.toMap(
+                java.util.Map.Entry::getKey,
+                java.util.Map.Entry::getValue,
+                (a, b) -> b,
+                java.util.LinkedHashMap::new));
   }
 
   @ExceptionHandler(IllegalArgumentException.class)

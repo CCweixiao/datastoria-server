@@ -310,9 +310,9 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
   const createDraftSession = useCallback(
     () => ({
       id: uuidv7(),
-      title: "New Chat",
+      title: t("chat.newTitle"),
     }),
-    []
+    [t]
   );
 
   const loadChat = useCallback(
@@ -327,7 +327,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
             toAppUiMessage
           ) as AppUIMessage[])
         : [];
-      setChatTitle(chatData?.title ?? "New Chat");
+      setChatTitle(chatData?.title ?? t("chat.newTitle"));
       const isSharedSession = Boolean(shareCode);
       const targetConnection = isSharedSession
         ? null
@@ -352,7 +352,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
       chatViewRef.current = null;
       setIsChatViewReady(false);
     },
-    [connection, getSessionShareCode]
+    [connection, getSessionShareCode, t]
   );
 
   const loadDraftChat = useCallback(async (): Promise<void> => {
@@ -543,8 +543,9 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
       SessionManager.getSession(chat.id, { shareCode }),
       SessionManager.getMessages(chat.id, { shareCode }),
     ]);
+    const fallbackTitle = t("chat.newTitle");
     const title =
-      (storedSession?.title?.trim() || chatTitle?.trim() || "New Chat").trim() || "New Chat";
+      (storedSession?.title?.trim() || chatTitle?.trim() || fallbackTitle).trim() || fallbackTitle;
     const userLabel = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL?.trim() || "You";
     const markdown = buildSessionMarkdown(title, storedMessages, userLabel);
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
@@ -557,7 +558,7 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-  }, [chat?.id, chatTitle, getSessionShareCode]);
+  }, [chat?.id, chatTitle, getSessionShareCode, t]);
 
   const handleShareSession = useCallback(async () => {
     if (!chat?.id || isSharing) {

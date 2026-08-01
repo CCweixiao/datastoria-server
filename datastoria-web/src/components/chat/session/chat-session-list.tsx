@@ -203,6 +203,7 @@ function HistoryNodeDeleteButton({
   confirmLabel: string;
   onConfirm: () => Promise<void>;
 }) {
+  const { t } = useUiPreferences();
   const isOpen = deleteState?.nodeId === nodeId;
 
   return (
@@ -252,7 +253,7 @@ function HistoryNodeDeleteButton({
             onDeleteStateChange(null);
           }}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           type="button"
@@ -528,9 +529,9 @@ function buildHistoryTree(
                 nodeId={chatNodeId(chat.chatId)}
                 deleteState={deleteState}
                 onDeleteStateChange={onDeleteStateChange}
-                title="Delete conversation"
-                description={`Delete "${getChatTitle(chat, t)}"? This action cannot be reverted.`}
-                confirmLabel="Delete"
+                title={t("chat.deleteTitle")}
+                description={t("chat.deleteDescription", { title: getChatTitle(chat, t) })}
+                confirmLabel={t("chat.deleteConfirm")}
                 onConfirm={() => onDeleteChat(chat)}
               />
             </div>

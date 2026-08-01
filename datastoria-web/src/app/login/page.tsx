@@ -1,12 +1,5 @@
 "use client";
 
-import {
-  AgreementDialog,
-  PRIVACY_POLICY,
-  PRIVACY_POLICY_ZH_CN,
-  TERMS_OF_SERVICE,
-  TERMS_OF_SERVICE_ZH_CN,
-} from "@/app/login/agreement-dialog";
 import { AppLogo } from "@/components/app-logo";
 import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,17 +12,16 @@ import { Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
-const GITHUB_URL = "https://github.com/FrankChen021/datastoria";
-const DOCS_URL = "https://docs.datastoria.app";
+const GITHUB_URL = "https://github.com/CCweixiao/datastoria-server/";
+const DOCS_URL = "https://ccweixiao.github.io/datastoria-server/";
 
 function LoginPageContent() {
-  const { locale, t } = useUiPreferences();
+  const { t } = useUiPreferences();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string>();
-  const [agreement, setAgreement] = useState<string>();
   const requestedCallback = searchParams.get("callbackUrl") ?? "/";
   const callbackUrl =
     requestedCallback.startsWith("/") && !requestedCallback.startsWith("//")
@@ -105,7 +97,7 @@ function LoginPageContent() {
             </Button>
           </form>
 
-          <div className="space-y-3 border-t pt-4 text-center text-xs text-muted-foreground">
+          <div className="border-t pt-4 text-center text-xs text-muted-foreground">
             <p>
               <a
                 href={GITHUB_URL}
@@ -125,39 +117,9 @@ function LoginPageContent() {
                 {t("login.docs")}
               </a>
             </p>
-            <p>
-              {t("login.consentPrefix")} {" "}
-              <button
-                type="button"
-                className="underline underline-offset-4 transition-colors hover:text-primary"
-                onClick={() =>
-                  setAgreement(locale === "zh-CN" ? TERMS_OF_SERVICE_ZH_CN : TERMS_OF_SERVICE)
-                }
-              >
-                {t("login.terms")}
-              </button>{" "}
-              {t("login.and")} {" "}
-              <button
-                type="button"
-                className="underline underline-offset-4 transition-colors hover:text-primary"
-                onClick={() =>
-                  setAgreement(locale === "zh-CN" ? PRIVACY_POLICY_ZH_CN : PRIVACY_POLICY)
-                }
-              >
-                {t("login.privacy")}
-              </button>
-              .
-            </p>
           </div>
         </CardContent>
       </Card>
-      <AgreementDialog
-        isOpen={agreement != null}
-        onOpenChange={(open) => {
-          if (!open) setAgreement(undefined);
-        }}
-        content={agreement ?? ""}
-      />
     </main>
   );
 }

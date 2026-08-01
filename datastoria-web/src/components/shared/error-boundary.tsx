@@ -61,7 +61,7 @@ export class ErrorBoundary extends PureComponent<Props, State> {
                 </Button>
                 <Button type="button" variant="outline" asChild className="gap-2">
                   <a
-                    href="https://github.com/FrankChen021/datastoria/issues/new"
+                    href="https://github.com/CCweixiao/datastoria-server/issues/new"
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open GitHub issues"

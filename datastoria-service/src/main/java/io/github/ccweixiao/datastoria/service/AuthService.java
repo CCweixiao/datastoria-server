@@ -57,9 +57,7 @@ public class AuthService {
   private io.github.ccweixiao.datastoria.common.domain.UserAccount authenticate(
       String username, String password) {
     io.github.ccweixiao.datastoria.common.domain.UserAccount account =
-        users
-            .findByUsername(username)
-            .orElseThrow(BadCredentialsException::new);
+        users.findByUsername(username).orElseThrow(BadCredentialsException::new);
     if (!account.enabled()) {
       throw new BadCredentialsException();
     }

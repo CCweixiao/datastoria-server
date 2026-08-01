@@ -28,7 +28,12 @@ public class CorsConfig {
             "Idempotency-Key",
             "If-Match",
             "Last-Event-ID",
-            "X-Session-Share-Code"));
+            "X-Session-Share-Code",
+            // Transitional: the Next.js API wrapper still attaches this legacy header to every
+            // request. The backend ignores it (auth is JWT-only now); it is allowed here solely so
+            // the browser preflight does not block calls during the frontend migration. Remove once
+            // the frontend stops sending it.
+            "x-datastoria-user-email"));
     configuration.setExposedHeaders(
         List.of(
             "Deprecation",

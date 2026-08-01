@@ -481,7 +481,11 @@ function HelpSidebarMenuItem() {
           <button
             className="w-full flex items-center gap-2 text-left px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
             onClick={() => {
-              window.open("https://docs.datastoria.app", "_blank", "noopener,noreferrer");
+              window.open(
+                "https://ccweixiao.github.io/datastoria-server/",
+                "_blank",
+                "noopener,noreferrer"
+              );
               onClose();
             }}
           >
@@ -518,7 +522,11 @@ function GitHubButton() {
         className: simpleTooltipClass,
       }}
       onClick={() =>
-        window.open("https://github.com/FrankChen021/datastoria", "_blank", "noopener,noreferrer")
+        window.open(
+          "https://github.com/CCweixiao/datastoria-server/",
+          "_blank",
+          "noopener,noreferrer"
+        )
       }
     >
       <GitHubIcon className="h-5 w-5" />

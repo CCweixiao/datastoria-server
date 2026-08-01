@@ -127,7 +127,7 @@ export function ReleaseNotesView() {
     return <div className="p-8 text-center text-muted-foreground">No release notes available.</div>;
   }
 
-  const repoUrl = releases[0]?.repo_url ?? "https://github.com/FrankChen021/datastoria";
+  const repoUrl = releases[0]?.repo_url ?? "https://github.com/CCweixiao/datastoria-server/";
 
   return (
     <ScrollArea className="h-full pr-4">

@@ -3,6 +3,7 @@
 import { AppLogo } from "@/components/app-logo";
 import { useAgentCommands } from "@/components/chat/agent-command-context";
 import { MessageMarkdown } from "@/components/chat/message/message-markdown";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,59 @@ const GREETINGS = [
   "Hello and welcome! Let's explore your ClickHouse cluster and data!",
 ];
 
+const ZH_CN_GREETINGS = [
+  "你好！今天有什么可以帮你？",
+  "你好！想探索哪些数据？",
+  "很高兴见到你！准备好深入分析数据了吗？",
+  "你好！需要我帮你分析什么？",
+  "欢迎！让我们一起探索 ClickHouse 集群和数据吧！",
+];
+
+const ZH_CN_GROUP_NAMES: Record<string, string> = {
+  Diagnostics: "诊断",
+  "Data Exploration": "数据探索",
+  Visualization: "可视化",
+  "SQL Optimization": "SQL 优化",
+  "SQL Generation": "SQL 生成",
+  "SQL Explanation": "SQL 解释",
+  "Source Code Inspection": "源码分析",
+  Others: "其他",
+};
+
+const ZH_CN_QUESTIONS: Record<string, string> = {
+  "What's the status of the current cluster?": "当前集群的状态如何？",
+  "Which table has the largest number of parts and what's the cause?":
+    "哪个表的分区片段数量最多，原因是什么？",
+  "What're the top 3 SELECT queries that consume the most CPU time over the past 3 hours?":
+    "过去 3 小时 CPU 消耗最高的 3 条 SELECT 查询是什么？",
+  "How many INSERT queries, insert rows, insert bytes were executed in the last 1 hour from `system.query_log` ?":
+    "过去 1 小时内，`system.query_log` 中执行了多少次 INSERT、写入多少行和多少字节？",
+  "Show me the number of SELECT queries by minute from `system.query_log` over the past 3 hours in bar chart":
+    "用柱状图展示过去 3 小时 `system.query_log` 中每分钟的 SELECT 查询数量",
+  "Visualize the trend of ProfileEvent_DistributedConnectionFailTry from the `system.metric_log` by hour in the last 12 hours":
+    "按小时可视化过去 12 小时 `system.metric_log` 中 ProfileEvent_DistributedConnectionFailTry 的趋势",
+  "Show the distribution of query kind from the `system.query_log` in the last 12 hours in pie chart":
+    "用饼图展示过去 12 小时 `system.query_log` 中查询类型的分布",
+  "Help me optimize a query": "帮我优化一条查询",
+  "Find the top 1 slowest query in the last 1 day and optimize it":
+    "找出过去 1 天最慢的查询并进行优化",
+  "Generate a SELECT query to get the slowest query from the query log in the last 1 hour":
+    "生成一条 SELECT 语句，从查询日志中找出过去 1 小时最慢的查询",
+  "How does async_insert work from the source code? Will data be lost if the server is restarted when this setting is enabled?":
+    "从源码看 async_insert 是如何工作的？启用该设置后重启服务器会丢失数据吗？",
+  "What are the best practices for partitioning?": "数据分区有哪些最佳实践？",
+};
+
+function localizeQuestion(group: string, text: string): string {
+  if (group === "SQL Explanation") {
+    return text.replace(
+      "Explain what the following query does, and show the execution plan in a flowchart.",
+      "解释下面的查询，并用流程图展示执行计划。"
+    );
+  }
+  return ZH_CN_QUESTIONS[text] ?? text;
+}
+
 const DESKTOP_GRID_CLASS_NAME = "md:grid-cols-[240px_minmax(0,1fr)]";
 
 function SampleQuestionsShell({ greeting, children }: { greeting: string; children: ReactNode }) {
@@ -161,11 +215,28 @@ export function SampleQuestions({
   onQuestionClick: (question: Question) => void;
 }) {
   const { commands, loading } = useAgentCommands();
+  const { locale } = useUiPreferences();
   const isMobile = useIsMobile();
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
-  const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
+  const [greetingIndex] = useState(() => Math.floor(Math.random() * GREETINGS.length));
+  const greeting = (locale === "zh-CN" ? ZH_CN_GREETINGS : GREETINGS)[greetingIndex];
+
+  const localizedGroups = useMemo(
+    () =>
+      Object.entries(DEFAULT_CHAT_QUESTION_GROUPS).map(([group, data]) => [
+        locale === "zh-CN" ? (ZH_CN_GROUP_NAMES[group] ?? group) : group,
+        {
+          ...data,
+          questions: data.questions.map((question) => ({
+            ...question,
+            text: locale === "zh-CN" ? localizeQuestion(group, question.text) : question.text,
+          })),
+        },
+      ]) as Array<[string, QuestionGroupData]>,
+    [locale]
+  );
 
   const availableSkillIds = useMemo(
     () => new Set(commands.map((command) => command.skillId)),
@@ -173,7 +244,7 @@ export function SampleQuestions({
   );
 
   const filteredGroups = useMemo(() => {
-    return Object.entries(DEFAULT_CHAT_QUESTION_GROUPS)
+    return localizedGroups
       .map(([group, data]) => {
         const questions = data.questions.filter(
           (question) => !question.requiredSkillId || availableSkillIds.has(question.requiredSkillId)
@@ -181,7 +252,7 @@ export function SampleQuestions({
         return [group, { ...data, questions }] as const;
       })
       .filter(([, data]) => data.questions.length > 0);
-  }, [availableSkillIds]);
+  }, [availableSkillIds, localizedGroups]);
 
   useEffect(() => {
     setActiveGroup(filteredGroups[0]?.[0] ?? null);

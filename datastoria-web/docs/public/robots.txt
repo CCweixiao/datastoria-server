@@ -1,5 +1,5 @@
 # robots.txt for DataStoria Documentation
-# https://docs.datastoria.app/robots.txt
+# https://ccweixiao.github.io/datastoria-server/robots.txt
 
 User-agent: *
 Allow: /
@@ -9,7 +9,7 @@ Disallow: /dev/
 Disallow: /plan/
 
 # Sitemap location
-Sitemap: https://docs.datastoria.app/sitemap.xml
+Sitemap: https://ccweixiao.github.io/datastoria-server/sitemap.xml
 
 # Crawl-delay for polite crawling
 Crawl-delay: 1

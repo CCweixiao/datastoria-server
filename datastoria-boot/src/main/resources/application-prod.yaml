@@ -13,7 +13,7 @@ datastoria:
       secret: ${DATASTORIA_JWT_SECRET}
       ttl-minutes: ${DATASTORIA_JWT_TTL_MINUTES:480}
     bootstrap-admin:
-      username: ${DATASTORIA_BOOTSTRAP_ADMIN_USERNAME:admin}
+      username: ${DATASTORIA_BOOTSTRAP_ADMIN_USERNAME:datastoria}
       password: ${DATASTORIA_BOOTSTRAP_ADMIN_PASSWORD}
       role: ${DATASTORIA_BOOTSTRAP_ADMIN_ROLE:ADMIN}
       tenant: ${DATASTORIA_DEFAULT_TENANT:default}

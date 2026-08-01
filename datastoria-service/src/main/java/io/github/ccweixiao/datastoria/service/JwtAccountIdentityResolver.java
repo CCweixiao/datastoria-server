@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
-import io.github.ccweixiao.datastoria.common.domain.UserAccount;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.common.identity.JwtTokenService;
 import io.github.ccweixiao.datastoria.common.identity.TokenAccountResolver;
@@ -33,15 +32,12 @@ public class JwtAccountIdentityResolver implements TokenAccountResolver {
   public Mono<Identity> resolve(JwtTokenService.VerifiedToken token) {
     return Mono.fromCallable(() -> users.findByUserId(token.userId()).orElse(null))
         .subscribeOn(jdbcScheduler)
-        .filter(
-            account -> account.enabled() && account.tokenVersion() == token.tokenVersion())
+        .filter(account -> account.enabled() && account.tokenVersion() == token.tokenVersion())
         .map(
             account ->
                 new Identity(
                     account.tenantId(),
                     account.userId(),
-                    account.isAdmin()
-                        ? Set.of("ROLE_ADMIN", "ROLE_USER")
-                        : Set.of("ROLE_USER")));
+                    account.isAdmin() ? Set.of("ROLE_ADMIN", "ROLE_USER") : Set.of("ROLE_USER")));
   }
 }

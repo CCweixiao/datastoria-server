@@ -47,7 +47,9 @@ public class SecurityProperties {
     private String secret = "";
     @NotBlank private String issuer = "datastoria";
     @NotBlank private String audience = "datastoria-api";
-    @Min(1) private long ttlMinutes = 480L;
+
+    @Min(1)
+    private long ttlMinutes = 480L;
 
     public String getSecret() {
       return secret;
@@ -84,9 +86,12 @@ public class SecurityProperties {
 
   /** Credentials for the idempotent administrator created on first startup. */
   public static class BootstrapAdmin {
-    @NotBlank private String username = "admin";
+    @NotBlank private String username = "datastoria";
     private String password = "";
-    @Pattern(regexp = "USER|ADMIN") private String role = "ADMIN";
+
+    @Pattern(regexp = "USER|ADMIN")
+    private String role = "ADMIN";
+
     private String tenant;
     private String email;
 

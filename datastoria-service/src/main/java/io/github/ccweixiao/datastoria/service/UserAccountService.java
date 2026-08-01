@@ -12,8 +12,8 @@ import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.domain.UserAccount;
 import io.github.ccweixiao.datastoria.common.dto.CreateUserRequest;
 import io.github.ccweixiao.datastoria.common.dto.UpdateUserRequest;
-import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
+import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.dao.repository.UserAccountRepository;
 
