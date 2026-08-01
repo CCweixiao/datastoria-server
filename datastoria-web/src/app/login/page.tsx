@@ -2,6 +2,7 @@
 
 import { AgreementDialog, PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/app/login/agreement-dialog";
 import { AppLogo } from "@/components/app-logo";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,7 @@ function ProviderIcon({ id }: { id: string }) {
 }
 
 function LoginPageContent() {
+  const { t } = useUiPreferences();
   const searchParams = useSearchParams();
   const [providers, setProviders] = useState<AuthProvider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,10 +53,12 @@ function LoginPageContent() {
     loadAuthProviders()
       .then((result) => setProviders(Object.values(result)))
       .catch((reason: unknown) =>
-        setLoadError(reason instanceof Error ? reason.message : "Authentication is unavailable")
+        setLoadError(
+          reason instanceof Error ? reason.message : t("login.authenticationUnavailable")
+        )
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -64,18 +68,15 @@ function LoginPageContent() {
             <AppLogo width={64} height={64} />
             <CardTitle className="text-2xl">DataStoria</CardTitle>
           </div>
-          <CardDescription className="text-sm">
-            The AI-native ClickHouse console for cluster diagnostics, query generation,
-            evidence-based optimization, and intelligent visualization.
-          </CardDescription>
+          <CardDescription className="text-sm">{t("login.tagline")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {authError ? (
             <Alert variant="destructive">
               <AlertDescription>
                 {authError === "OAuthCallback"
-                  ? "Authentication failed. Please try again."
-                  : "An error occurred during authentication."}
+                  ? t("login.authenticationFailed")
+                  : t("login.authenticationError")}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -95,19 +96,20 @@ function LoginPageContent() {
                 >
                   <span className="inline-grid min-w-48 grid-cols-[1.25rem_1fr] items-center gap-2">
                     <ProviderIcon id={provider.id} />
-                    <span className="text-left">Sign in with {provider.name}</span>
+                    <span className="text-left">
+                      {t("login.signInWith", { provider: provider.name })}
+                    </span>
                   </span>
                 </Button>
               ))}
             </div>
           ) : loading ? (
-            <p className="text-center text-sm text-muted-foreground">Loading providers…</p>
+            <p className="text-center text-sm text-muted-foreground">
+              {t("login.loadingProviders")}
+            </p>
           ) : (
             <Alert variant="warning">
-              <AlertDescription>
-                Authentication is not configured. Configure at least one OAuth provider on the Java
-                server.
-              </AlertDescription>
+              <AlertDescription>{t("login.notConfigured")}</AlertDescription>
             </Alert>
           )}
 
@@ -128,25 +130,25 @@ function LoginPageContent() {
                 rel="noopener noreferrer"
                 className="underline underline-offset-4 transition-colors hover:text-primary"
               >
-                Docs
+                {t("login.docs")}
               </a>
             </p>
             <p>
-              By signing in, you agree to the{" "}
+              {t("login.consentPrefix")}{" "}
               <button
                 type="button"
                 className="underline underline-offset-4 transition-colors hover:text-primary"
                 onClick={() => setAgreement(TERMS_OF_SERVICE)}
               >
-                Terms of Service
+                {t("login.terms")}
               </button>{" "}
-              and{" "}
+              {t("login.and")}{" "}
               <button
                 type="button"
                 className="underline underline-offset-4 transition-colors hover:text-primary"
                 onClick={() => setAgreement(PRIVACY_POLICY)}
               >
-                Privacy Policy
+                {t("login.privacy")}
               </button>
               .
             </p>
@@ -169,11 +171,16 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-background">
-          <p className="text-sm text-muted-foreground">Loading sign-in options…</p>
+          <LoginFallback />
         </main>
       }
     >
       <LoginPageContent />
     </Suspense>
   );
+}
+
+function LoginFallback() {
+  const { t } = useUiPreferences();
+  return <p className="text-sm text-muted-foreground">{t("login.loadingOptions")}</p>;
 }
