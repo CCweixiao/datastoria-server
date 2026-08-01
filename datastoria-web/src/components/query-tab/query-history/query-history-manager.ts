@@ -46,6 +46,7 @@ export type AddQueryHistoryInput = {
 export class QueryHistoryManager {
   private entries: QueryHistoryEntry[] = [];
   private activeConnectionId: string | null = null;
+  private loadGeneration = 0;
 
   list(): QueryHistoryEntry[] {
     return [...this.entries];
@@ -53,12 +54,25 @@ export class QueryHistoryManager {
 
   /** Fetches the connection-scoped history (optionally keyword-filtered) and updates the cache. */
   async load(connectionId: string, keyword?: string): Promise<QueryHistoryEntry[]> {
+    const generation = ++this.loadGeneration;
+    const connectionChanged = this.activeConnectionId !== connectionId;
     this.activeConnectionId = connectionId;
+    if (connectionChanged) {
+      // Never render the previous cluster's history while the new request is in flight.
+      this.entries = [];
+      notifyQueryHistoryUpdated();
+    }
     try {
       const dtos = await listQueryHistory(connectionId, keyword);
+      if (generation !== this.loadGeneration || this.activeConnectionId !== connectionId) {
+        return this.list();
+      }
       this.entries = dtos.map(toEntry);
     } catch (error) {
       console.error("Failed to load query history:", error);
+      if (generation !== this.loadGeneration || this.activeConnectionId !== connectionId) {
+        return this.list();
+      }
       this.entries = [];
     }
     notifyQueryHistoryUpdated();

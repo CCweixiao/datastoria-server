@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
@@ -29,10 +30,11 @@ public class MyBatisCkQueryHistoryRepository implements CkQueryHistoryRepository
       CkQueryHistoryMapper mapper,
       @Value("${datastoria.query-history.max-size:100}") int maxHistorySize) {
     this.mapper = mapper;
-    this.maxHistorySize = maxHistorySize;
+    this.maxHistorySize = Math.max(1, maxHistorySize);
   }
 
   @Override
+  @Transactional
   public CkQueryHistory save(CkQueryHistory entry) {
     mapper.deleteByUserConnectionSql(
         entry.tenantId(), entry.userId(), entry.connectionId(), entry.rawSql());

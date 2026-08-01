@@ -13,7 +13,7 @@ CREATE TABLE ds_ck_query_history (
     user_id         varchar(255)  NOT NULL,
     connection_id   varchar(255)  NOT NULL,
     connection_name varchar(255)  NULL,
-    raw_sql         text          NOT NULL,
+    raw_sql         mediumtext    NOT NULL,
     executed_at     datetime(6)   NOT NULL,
     created_at      datetime(6)   NOT NULL,
     UNIQUE KEY uk_ck_query_history_tenant_id (tenant_id, id)

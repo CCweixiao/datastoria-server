@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryHistoryManager } from "./query-history-manager";
 
 const listQueryHistory = vi.fn();
 const addQueryHistory = vi.fn();
@@ -12,8 +13,6 @@ vi.mock("@/lib/query-history-client", () => ({
   clearQueryHistory: (...args: unknown[]) => clearQueryHistory(...args),
 }));
 
-import { QueryHistoryManager } from "./query-history-manager";
-
 function dto(id: string, sql: string, executedAt: string) {
   return {
     id,
@@ -22,6 +21,14 @@ function dto(id: string, sql: string, executedAt: string) {
     rawSql: sql,
     executedAt,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
 }
 
 describe("QueryHistoryManager", () => {
@@ -88,6 +95,37 @@ describe("QueryHistoryManager", () => {
     });
 
     expect(listQueryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears cached entries immediately when switching connections", async () => {
+    listQueryHistory.mockResolvedValue([dto("a", "SELECT 1", "2026-08-01T00:00:00Z")]);
+    await manager.load("conn-1");
+
+    const nextLoad = deferred<ReturnType<typeof dto>[]>();
+    listQueryHistory.mockReturnValue(nextLoad.promise);
+    const loading = manager.load("conn-2");
+
+    expect(manager.list()).toEqual([]);
+    nextLoad.resolve([{ ...dto("b", "SELECT 2", "2026-08-02T00:00:00Z"), connectionId: "conn-2" }]);
+    await loading;
+    expect(manager.list().map((entry) => entry.id)).toEqual(["b"]);
+  });
+
+  it("ignores a stale response after the active connection changes", async () => {
+    const firstLoad = deferred<ReturnType<typeof dto>[]>();
+    const secondLoad = deferred<ReturnType<typeof dto>[]>();
+    listQueryHistory.mockReturnValueOnce(firstLoad.promise).mockReturnValueOnce(secondLoad.promise);
+
+    const loadingFirst = manager.load("conn-1");
+    const loadingSecond = manager.load("conn-2");
+    secondLoad.resolve([
+      { ...dto("new", "SELECT 2", "2026-08-02T00:00:00Z"), connectionId: "conn-2" },
+    ]);
+    await loadingSecond;
+    firstLoad.resolve([dto("stale", "SELECT 1", "2026-08-01T00:00:00Z")]);
+    await loadingFirst;
+
+    expect(manager.list().map((entry) => entry.id)).toEqual(["new"]);
   });
 
   it("removes an entry by id after the backend confirms deletion", async () => {
