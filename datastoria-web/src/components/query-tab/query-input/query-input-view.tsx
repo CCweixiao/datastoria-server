@@ -50,14 +50,15 @@ const AceEditor = dynamic(
     const { initAce } = await import("./ace-setup");
     await initAce();
 
-    await import("ace-builds/src-noconflict/ext-language_tools");
-    await import("ace-builds/src-noconflict/ext-searchbox");
-    await import("ace-builds/src-noconflict/mode-sql");
-    await import("ace-builds/src-noconflict/theme-xcode");
-    await import("ace-builds/src-noconflict/theme-solarized_dark");
-    await import("./completion/clickhouse-sql");
-
-    const ReactAce = await import("react-ace");
+    const [, , , , , , ReactAce] = await Promise.all([
+      import("ace-builds/src-noconflict/ext-language_tools"),
+      import("ace-builds/src-noconflict/ext-searchbox"),
+      import("ace-builds/src-noconflict/mode-sql"),
+      import("ace-builds/src-noconflict/theme-xcode"),
+      import("ace-builds/src-noconflict/theme-solarized_dark"),
+      import("./completion/clickhouse-sql"),
+      import("react-ace"),
+    ]);
     return ReactAce.default;
   },
   { ssr: false }

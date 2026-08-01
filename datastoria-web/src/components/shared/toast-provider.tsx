@@ -3,7 +3,7 @@ import { toastManager } from "@/lib/toast";
 import { useEffect, useState } from "react";
 
 export function ToastProvider() {
-  const [toasts, setToasts] = useState(toastManager.getToasts());
+  const [toasts, setToasts] = useState(() => toastManager.getToasts());
 
   useEffect(() => {
     const unsubscribe = toastManager.subscribe((newToasts) => {

@@ -97,6 +97,102 @@ export interface TableVisualizationRef extends VisualizationRef {
   resetPagination: () => void; // Override to make it required for table
 }
 
+interface ShowColumnsMenuProps {
+  dataTableRef: React.RefObject<DataTableRef | null>;
+}
+
+function ShowColumnsMenu({ dataTableRef }: ShowColumnsMenuProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showTopArrow, setShowTopArrow] = useState(false);
+  const [showBottomArrow, setShowBottomArrow] = useState(false);
+  const [localColumns, setLocalColumns] = useState<
+    Array<{ name: string; title: string; isVisible: boolean }>
+  >(() => dataTableRef.current?.getAllColumns() || []);
+
+  const checkScrollPosition = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = element;
+    setShowTopArrow(scrollTop > 5);
+    setShowBottomArrow(scrollTop < scrollHeight - clientHeight - 5);
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    checkScrollPosition();
+    element.addEventListener("scroll", checkScrollPosition, { passive: true });
+
+    const resizeObserver = new ResizeObserver(checkScrollPosition);
+    resizeObserver.observe(element);
+
+    return () => {
+      element.removeEventListener("scroll", checkScrollPosition);
+      resizeObserver.disconnect();
+    };
+  }, [checkScrollPosition]);
+
+  const handleToggleColumn = useCallback(
+    (columnName: string) => {
+      dataTableRef.current?.toggleColumnVisibility(columnName);
+      setLocalColumns((previousColumns) =>
+        previousColumns.map((column) =>
+          column.name === columnName ? { ...column, isVisible: !column.isVisible } : column
+        )
+      );
+    },
+    [dataTableRef]
+  );
+
+  return (
+    <div
+      className="relative"
+      onClick={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+      }}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+      }}
+    >
+      {showTopArrow ? (
+        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center bg-gradient-to-b from-popover to-transparent h-6 items-start">
+          <ArrowUp className="h-3 w-3 text-muted-foreground mt-1" />
+        </div>
+      ) : null}
+
+      <div
+        ref={scrollRef}
+        className="max-h-[60vh] overflow-y-auto"
+        style={{ scrollbarGutter: "stable" }}
+      >
+        {localColumns.map((column) => (
+          <DashboardDropdownMenuItem
+            key={column.name}
+            onClick={(event) => {
+              handleToggleColumn(column.name);
+              event.stopPropagation();
+              event.preventDefault();
+            }}
+          >
+            <Check className={cn("!h-3 !w-3", column.isVisible ? "opacity-100" : "opacity-0")} />
+            {column.title}
+          </DashboardDropdownMenuItem>
+        ))}
+      </div>
+
+      {showBottomArrow ? (
+        <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-center bg-gradient-to-t from-popover to-transparent h-6 items-end">
+          <ArrowDown className="h-3 w-3 text-muted-foreground mb-1" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * Pure table visualization component.
  * Receives data as props and handles only rendering and UI interactions.
@@ -246,114 +342,6 @@ export const TableVisualization = React.forwardRef<TableVisualizationRef, TableV
       ]
     );
 
-    // Component for rendering show/hide columns submenu
-    const RenderShowColumns = () => {
-      const scrollRef = useRef<HTMLDivElement>(null);
-      const [showTopArrow, setShowTopArrow] = useState(false);
-      const [showBottomArrow, setShowBottomArrow] = useState(false);
-
-      // Track column visibility state locally for immediate UI updates
-      const [localColumns, setLocalColumns] = useState<
-        Array<{ name: string; title: string; isVisible: boolean }>
-      >(dataTableRef.current?.getAllColumns() || []);
-
-      const checkScrollPosition = useCallback(() => {
-        const element = scrollRef.current;
-        if (!element) return;
-
-        const { scrollTop, scrollHeight, clientHeight } = element;
-
-        // Show top arrow if we can scroll up
-        setShowTopArrow(scrollTop > 5);
-
-        // Show bottom arrow if we can scroll down
-        setShowBottomArrow(scrollTop < scrollHeight - clientHeight - 5);
-      }, []);
-
-      useEffect(() => {
-        const element = scrollRef.current;
-        if (!element) return;
-
-        // Check initial state
-        checkScrollPosition();
-
-        // Add scroll listener
-        element.addEventListener("scroll", checkScrollPosition);
-
-        // Also check when content changes (ResizeObserver)
-        const resizeObserver = new ResizeObserver(checkScrollPosition);
-        resizeObserver.observe(element);
-
-        return () => {
-          element.removeEventListener("scroll", checkScrollPosition);
-          resizeObserver.disconnect();
-        };
-      }, [checkScrollPosition]);
-
-      const handleToggleColumn = useCallback((columnName: string) => {
-        // Update DataTable visibility
-        dataTableRef.current?.toggleColumnVisibility(columnName);
-
-        // Update local state for immediate UI feedback
-        setLocalColumns((prev) =>
-          prev.map((col) => (col.name === columnName ? { ...col, isVisible: !col.isVisible } : col))
-        );
-      }, []);
-
-      return (
-        <div
-          className="relative"
-          // Suppress event propagation to parent that causes the header to be clicked
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-          }}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-          }}
-        >
-          {showTopArrow && (
-            <div className="absolute top-0 left-0 right-0 z-10 flex justify-center bg-gradient-to-b from-popover to-transparent h-6 items-start">
-              <ArrowUp className="h-3 w-3 text-muted-foreground mt-1" />
-            </div>
-          )}
-
-          <div
-            ref={scrollRef}
-            className="max-h-[60vh] overflow-y-auto"
-            style={{ scrollbarGutter: "stable" }}
-          >
-            {localColumns.map((col, index) => {
-              return (
-                <DashboardDropdownMenuItem
-                  key={index}
-                  onClick={(e) => {
-                    handleToggleColumn(col.name);
-
-                    // Stop progress to the parent element which triggers the collapse/expand
-                    e.stopPropagation();
-
-                    // No need to close the popup as we may want to show/hide multiple columns
-                    e.preventDefault();
-                  }}
-                >
-                  <Check className={cn("!h-3 !w-3", col.isVisible ? "opacity-100" : "opacity-0")} />
-                  {col.title}
-                </DashboardDropdownMenuItem>
-              );
-            })}
-          </div>
-
-          {showBottomArrow && (
-            <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-center bg-gradient-to-t from-popover to-transparent h-6 items-end">
-              <ArrowDown className="h-3 w-3 text-muted-foreground mb-1" />
-            </div>
-          )}
-        </div>
-      );
-    };
-
     // Reset pagination state
     const resetPagination = useCallback(() => {
       currentPageRef.current = 0;
@@ -408,7 +396,7 @@ export const TableVisualization = React.forwardRef<TableVisualizationRef, TableV
               </DashboardDropdownMenuSubTrigger>
               <DropdownMenuPortal>
                 <DropdownMenuSubContent>
-                  <RenderShowColumns />
+                  <ShowColumnsMenu dataTableRef={dataTableRef} />
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>

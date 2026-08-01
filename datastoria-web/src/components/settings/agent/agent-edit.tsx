@@ -180,7 +180,7 @@ function BlacklistCodesTable({
 
 export function AgentEdit() {
   const { t } = useUiPreferences();
-  const [configuration, setConfiguration] = useState<AgentConfiguration>(
+  const [configuration, setConfiguration] = useState<AgentConfiguration>(() =>
     AgentConfigurationManager.getConfiguration()
   );
   const [isBlacklistDialogOpen, setIsBlacklistDialogOpen] = useState(false);

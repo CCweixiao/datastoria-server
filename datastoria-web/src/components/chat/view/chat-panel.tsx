@@ -539,8 +539,10 @@ export function ChatPanel({ currentDatabase, onClose }: ChatPanelProps) {
     }
 
     const shareCode = getSessionShareCode(chat.id);
-    const storedSession = await SessionManager.getSession(chat.id, { shareCode });
-    const storedMessages = await SessionManager.getMessages(chat.id, { shareCode });
+    const [storedSession, storedMessages] = await Promise.all([
+      SessionManager.getSession(chat.id, { shareCode }),
+      SessionManager.getMessages(chat.id, { shareCode }),
+    ]);
     const title =
       (storedSession?.title?.trim() || chatTitle?.trim() || "New Chat").trim() || "New Chat";
     const userLabel = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL?.trim() || "You";
