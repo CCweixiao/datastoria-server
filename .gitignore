@@ -38,8 +38,7 @@ application-local.yaml
 application-local.yml
 application-prod.yaml
 application-prod.yml
-!bin/package/conf/application-local.yaml
-!bin/package/conf/application-prod.yaml
+!datastoria-boot/src/main/resources/application-prod.yaml
 .env
 .env.*
 !.env.example

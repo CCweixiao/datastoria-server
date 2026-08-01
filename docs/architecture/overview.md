@@ -10,7 +10,7 @@ flowchart LR
     U["浏览器"]
     F["Next.js 管理平台<br/>:3000"]
     J["Spring Boot WebFlux<br/>:8080"]
-    DB[("SQLite / MySQL")]
+    DB[("MySQL 5.7")]
     CK[("ClickHouse 单节点/集群")]
     LLM["模型供应商 API"]
 
@@ -40,7 +40,7 @@ Route Handler 转发到内部 Java 地址；前后端分离部署时，构建阶
 `datastoria-boot` 生成可执行
 Spring Boot JAR，其余模块生成普通依赖 JAR。
 
-Controller 不直接拼装 SQL 持久化语句；Repository 通过同一套 Mapper XML 访问 SQLite 或 MySQL。
+Controller 不直接拼装 SQL 持久化语句；Repository 通过统一 Mapper XML 访问 MySQL。
 双方言的结构变化保持相同 Flyway 版本号。
 
 ## 关键数据流
@@ -92,8 +92,9 @@ Java 重启后从安全 Checkpoint 与会话消息重建运行上下文。Checkp
 
 ## 数据与租户边界
 
-- 本地 `local` profile：SQLite 文件，单连接池；
-- 生产 `prod` profile：MySQL 8，启动时拒绝 SQLite URL；
+- `dev` 与 `prod` profile 都使用 MySQL 5.7、同一套 Mapper、Flyway migration 和
+  `MysqlAgentStateStore`；
+- Profile 只区分开发身份与生产 OAuth，以及各自的连接参数；
 - 业务表通过 `tenant_id`、用户标识和显式 Repository 条件隔离；
 - 供应商、ClickHouse 等凭据使用 AES-256-GCM 加密后存入 Secret 表；
 - Flyway 是运行时唯一 Schema 所有者，`db/schema/` 仅作为人工快照。
@@ -105,14 +106,12 @@ flowchart TB
     subgraph Host["DataStoria 主机"]
       F["Next.js"]
       J["Java"]
-      D[("SQLite（开发）")]
+      D[("MySQL 5.7")]
       F --> J
       J --> D
     end
-    M[("MySQL（生产）")]
     C[("ClickHouse 集群")]
     P["模型供应商"]
-    J --> M
     J --> C
     J --> P
 ```

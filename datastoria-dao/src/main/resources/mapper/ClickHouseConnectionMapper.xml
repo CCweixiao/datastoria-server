@@ -3,7 +3,7 @@
 <mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ClickHouseConnectionMapper">
 
   <resultMap id="ChMap" type="io.github.ccweixiao.datastoria.dao.persistence.entity.ClickHouseConnectionEntity" autoMapping="true">
-    <!-- SQLite JDBC does not implement getBlob(); force getBytes() for the BLOB columns. -->
+    <!-- Read encrypted binary columns as byte arrays. -->
     <result property="passwordCipher" column="password_cipher"
             typeHandler="org.apache.ibatis.type.ByteArrayTypeHandler"/>
     <result property="passwordNonce" column="password_nonce"

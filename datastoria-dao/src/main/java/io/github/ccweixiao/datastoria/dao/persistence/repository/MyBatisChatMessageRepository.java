@@ -18,9 +18,9 @@ import io.github.ccweixiao.datastoria.dao.repository.ChatMessageRepository;
  * MyBatis-Plus adapter for {@code ds_chat_message}.
  *
  * <p>Uses a manual lookup-then-upsert and catches {@link RuntimeException} (not {@code
- * DuplicateKeyException}) on the insert path: Xerial SQLite does not reliably map {@code
- * SQLITE_CONSTRAINT} to Spring's {@code DataIntegrityViolationException}. On a concurrent insert of
- * the same id the row is re-read and updated; a genuine failure is rethrown.
+ * DuplicateKeyException}) on the insert path because exception translation can vary by execution
+ * path. On a concurrent insert of the same id the row is re-read and updated; a genuine failure is
+ * rethrown.
  */
 @Repository
 public class MyBatisChatMessageRepository implements ChatMessageRepository {

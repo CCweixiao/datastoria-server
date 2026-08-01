@@ -1,78 +1,71 @@
-# SQLite / MySQL 双方言数据模型
+# MySQL 5.7 数据模型
 
 ## 1. 设计目标
 
-- 开发和测试环境使用 SQLite 3，生产环境使用 MySQL 8.0+。
-- 两种数据库承载同一套模型、Agent、Skill、会话、运行状态和系统配置语义。
+- 开发、测试和生产统一使用 MySQL 5.7。
+- 所有环境使用同一套模型、Agent、Skill、会话、运行状态和系统配置语义。
 - 多租户字段显式存在，默认单租户也不能省略隔离边界。
 - 密钥不以明文写库；API 永不回传密钥。
 - 配置可版本化、可审计、可回滚。
 - 产品消息与 Agent checkpoint 分离。
-- 使用 Flyway 管理两套独立 DDL，表名统一 `ds_` 前缀，应用层时间统一 UTC。
+- 使用 Flyway 管理唯一 DDL，表名统一 `ds_` 前缀，应用层时间统一 UTC。
 
-## 2. 双方言原则
+## 2. 单一数据库原则
 
 ### 2.1 脚本目录
 
 ```text
 datastoria-dao/src/main/resources/db/migration/
-├── sqlite/
-│   ├── V1__identity_config_and_audit.sql
-│   ├── V2__model_provider_and_secret.sql
-│   └── ...
 └── mysql/
-    ├── V1__identity_config_and_audit.sql
-    ├── V2__model_provider_and_secret.sql
-    └── ...
+    ├── ddl.sql                         # 用户手工新建空库
+    ├── dml.sql                         # 用户手工执行静态初始化数据
+    └── versioned/                      # Flyway 内部升级链
+        ├── V1__identity_config_and_audit.sql
+        ├── V2__model_provider_and_secret.sql
+        └── ...
 ```
 
-- 两个目录必须拥有相同的版本号、描述和业务变更；只允许 SQL 方言不同。
-- `local`/`dev` profile 只加载 `classpath:db/migration/sqlite`。
-- `prod` profile 只加载 `classpath:db/migration/mysql`。
-- 禁止同时加载多个目录，也禁止把 SQLite 脚本用于生产。生产 profile 必须校验 JDBC
-  URL 方言并 fail fast，不能自动回落到 SQLite。
+- `dev` 和 `prod` 都只加载 `classpath:db/migration/mysql/versioned`。
+- 应用启动统一校验 JDBC URL 必须以 `jdbc:mysql:` 开头，不提供其他方言回退。
+- DDL/DML 直接以 MySQL 5.7 为基线，不在 SQL 中增加数据库版本分支。
 
 建议配置拆分：
 
 ```text
-application.yaml          通用配置，不提供生产数据库默认值
-application-local.yaml    SQLite 文件库，例如 ./data/datastoria.db
-application-test.yaml     SQLite 临时库
-application-prod.yaml     MySQL datasource，缺少必需环境变量即启动失败
+application.yaml          通用 MySQL/Flyway/MyBatis 配置
+application-dev.yaml      本机 MySQL 5.7 默认连接与开发身份
+application-prod.yaml     生产连接与认证，缺少必需环境变量即启动失败
 ```
 
-任何 ORM 的自动 DDL 功能必须关闭，Flyway 是 schema 的唯一来源。SQLite 数据文件和
-`-wal`/`-shm` 文件不提交 Git。
+任何 ORM 的自动 DDL 功能必须关闭，Flyway 是 schema 的唯一来源。
 
-`db/schema/{sqlite,mysql}/schema.sql` 是从 migration 生成的当前版本建库快照，仅供人工
-检查或新建空库；`seed.sql` 是静态初始化数据入口。应用通过
-`spring.sql.init.mode=never` 禁止自动执行快照，已有数据库只能通过 Flyway 增量升级。
-修改 migration 后运行 `node bin/dev/generate-schema-snapshots.mjs` 并提交同步后的快照。
+`db/migration/mysql/ddl.sql` 是从全部 migration 生成的当前版本建库脚本，
+`dml.sql` 是静态初始化数据入口。它们用于禁用 Flyway 的手工部署场景，用户只需依次复制执行
+这两个文件。默认部署应让空库由 Flyway 的 `V*` 文件自动创建；不要先手工执行 `ddl.sql` 再让
+Flyway 接管同一个库。应用通过 `spring.sql.init.mode=never` 禁止自动执行便捷脚本，已有数据库
+只能通过 Flyway 增量升级。修改 migration 后运行
+`node bin/dev/generate-schema-snapshots.mjs` 并提交同步后的两个文件。
 
 ### 2.2 类型映射
 
-| 逻辑类型 | SQLite DDL | MySQL DDL | 应用约束 |
-|---|---|---|---|
-| ID/枚举/短文本 | `TEXT` | `varchar(n)` | 长度、枚举用 Bean Validation + CHECK |
-| 长文本 | `TEXT` | `longtext` | 设置业务大小上限 |
-| JSON | `TEXT` + `json_valid()` CHECK | `json` | Jackson 序列化；契约测试比较语义 |
-| boolean | `INTEGER` CHECK 0/1 | `boolean` | Java `boolean/Boolean` |
-| UTC 时间 | `TEXT` ISO-8601 | `datetime(6)`/`timestamp(6)` | repository 统一 `Instant` |
-| binary/密文 | `BLOB` | `mediumblob/varbinary` | 不做字符编码转换 |
-| 自增审计序号 | `INTEGER PRIMARY KEY` | `bigint auto_increment` | 不作为外部资源 ID |
+| 逻辑类型 | MySQL 5.7 DDL | 应用约束 |
+|---|---|---|
+| ID/枚举/短文本 | `varchar(n)` | 长度和枚举由 Bean Validation/领域模型保证 |
+| 长文本 | `longtext` | 设置业务大小上限 |
+| JSON | `json` | Jackson 序列化；契约测试比较 JSON 语义而非空白/键序 |
+| boolean | `boolean` | Java `boolean/Boolean` |
+| UTC 时间 | `datetime(6)` | repository 统一 `Instant` 与 UTC Calendar |
+| binary/密文 | `mediumblob/varbinary` | 不做字符编码转换 |
+| 自增审计序号 | `bigint auto_increment` | 不作为外部资源 ID |
 
-SQLite 连接初始化必须执行 `PRAGMA foreign_keys=ON`、合理的 `busy_timeout`，开发并发需要时
-使用 WAL。不能依赖 SQLite 宽松类型：所有重要枚举、非空、唯一性和引用约束必须在 DDL
-或 repository 测试中证明。
+MySQL 5.7 接受但不执行 `CHECK`，因此枚举、范围等领域约束必须由应用验证；非空、唯一、外键
+继续由数据库强制执行。
 
 ### 2.3 一致性门禁
 
-- 每次 schema 变更必须在同一提交中增加 SQLite、MySQL 两份 migration。
-- 建立 dialect parity test：分别迁移空库，读取 metadata，比较表、列的逻辑类型、非空、
-  主键、外键、唯一键和索引清单。
-- repository contract test 使用同一测试集运行 SQLite 和 MySQL Testcontainers。
-- SQLite 用于快速本地开发，不是生产行为的替代证明；生产发布门必须包含所选生产方言测试。
-- 方言确实无法等价时必须写 ADR，并在 application service 中统一可观察行为。
+- 每次 schema 变更只增加一份 MySQL migration，并同步生成 `ddl.sql`、`dml.sql`。
+- 测试在真实 MySQL 5.7 上从空库执行全部 migration 和 repository/API contract。
+- CI/本地测试数据库必须与开发、生产数据隔离，测试清理逻辑不得连接生产库。
 
 ## 3. 通用约定
 
@@ -82,8 +75,7 @@ SQLite 连接初始化必须执行 `PRAGMA foreign_keys=ON`、合理的 `busy_ti
 - JSON：仅用于真正开放的协议数据；需要索引/约束的字段独立成列。
 - 软删除：管理型配置保留 `deleted_at`；消息等受产品删除策略控制。
 - 审计：写操作记录 actor、resource、action、before/after 摘要和 request_id。
-- 时间在 Java 中统一为 `Instant`；SQLite 保存 ISO-8601 TEXT，MySQL 保存 UTC
-  `datetime(6)`。
+- 时间在 Java 中统一为 `Instant`，MySQL 保存 UTC `datetime(6)`。
 
 ## 4. 模型与凭据
 
@@ -309,9 +301,9 @@ AgentScope 状态格式通过 adapter 封装；业务代码不能依赖序列化
 - `ds_audit_log`：append-only，含 tenant、actor、action、resource、request_id、safe diff、
   result、时间。
 
-## 10. Flyway 双轨拆分
+## 10. Flyway 单轨迁移
 
-SQLite 和 MySQL 目录各自包含：
+MySQL migration 目录包含按版本递增的业务迁移：
 
 1. `V1__identity_config_and_audit.sql`
 2. `V2__model_provider_and_secret.sql`
@@ -322,9 +314,8 @@ SQLite 和 MySQL 目录各自包含：
 7. `V7__connection_and_rca_templates.sql`
 8. `V8__indexes_retention_and_constraints.sql`
 
-每个版本必须先通过 SQLite migration/repository test；MySQL 方言补充后还必须通过 MySQL
-Testcontainers、双方言 parity 和关键约束测试。每份 migration 都写 downgrade 说明；
-回滚采用备份恢复/前向修复，不编写破坏性自动 down migration。
+每个版本必须通过 MySQL 5.7 migration、repository 和关键约束测试。每份 migration 都写
+downgrade 说明；回滚采用备份恢复/前向修复，不编写破坏性自动 down migration。
 
 ## 11. 数据导入
 
@@ -334,5 +325,4 @@ Testcontainers、双方言 parity 和关键约束测试。每份 migration 都�
 - Skill 对账：bundle 数、resource 数、published/draft 指针、checksum。
 - 模型与 Agent 配置以服务端数据为准；浏览器 localStorage 不作为配置数据源。
 - 导入工具支持 dry-run、重复执行和按 tenant 回滚标记。
-- 导出格式必须与数据库方言无关，同一 JSONL fixture 可分别导入 SQLite 和 MySQL 并产生
-  相同业务 checksum。
+- 导出格式必须与数据库实现解耦，JSONL fixture 导入 MySQL 后产生稳定业务 checksum。

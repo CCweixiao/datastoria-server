@@ -32,7 +32,7 @@ import reactor.core.publisher.Flux;
 /** HTTP contract for P8 owner-scoped run, replay, resolution, and cancellation endpoints. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class AgentRunControllerTest {
 
   private static final String TENANT = "tenant-test";
@@ -242,7 +242,7 @@ class AgentRunControllerTest {
                 + " VALUES ('session-1',:tenant,:user,'ch','test',0,:now,:now)")
         .param("tenant", TENANT)
         .param("user", USER)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
     jdbc.sql(
             "INSERT INTO ds_agent_run"
@@ -252,7 +252,7 @@ class AgentRunControllerTest {
                 + " :now,:now)")
         .param("tenant", TENANT)
         .param("user", USER)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 }

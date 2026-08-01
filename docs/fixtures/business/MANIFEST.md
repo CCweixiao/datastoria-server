@@ -2,18 +2,17 @@
 
 本目录冻结一组与数据库方言无关的业务 fixture，用于：
 
-1. P3 起的 repository contract test（同一测试集分别跑在 SQLite 和 MySQL 上）。
-2. 旧数据导入校验：同一 JSONL 导入 SQLite 与 MySQL 后产生相同业务 checksum。
+1. P3 起的 MySQL 5.7 repository contract test。
+2. 旧数据导入 MySQL 后的业务 checksum 校验。
 3. Skill catalog 的历史兼容性和导入测试。
 4. P6 起 ClickHouse 工具的 Golden Test。
 
 ## 设计原则
 
-- **方言无关**：fixture 只用 JSON/JSONL，不含任何 SQLite 或 MySQL 方言语法。
+- **存储无关**：fixture 只用 JSON/JSONL，不含 SQL 语法。
 - **可脱敏**：所有邮箱、token、ClickHouse 主机均为合成值（`example.test`、
   `placeholder`、`ds_test`），不含任何真实凭据。
-- **可对账**：导入 SQLite 与 MySQL 后比较行数、sequence 和 parts checksum，结果必须
-  一致。
+- **可对账**：重复导入 MySQL 后比较行数、sequence 和 parts checksum，结果必须一致。
 
 ## 文件清单
 
@@ -32,7 +31,7 @@
 流程消费。HTTP wire-format 的请求/响应契约由 `docs/fixtures/api/p3/` 冻结，二者
 互补：
 
-- 本目录回答“不同数据库方言最终存储的逻辑内容是否一致”。
+- 本目录回答“MySQL 中最终存储的逻辑内容是否稳定”。
 - `docs/fixtures/api/p3/` 回答“Java HTTP 实现是否符合冻结的请求与响应契约”。
 
 修改任一目录时，必须同步审视另一目录，并按 `docs/api/p3-openapi-extensions.yaml`
@@ -77,13 +76,9 @@
 ## 导入/对账流程（P3 起启用）
 
 ```bash
-# 1. 导入到 SQLite（开发/测试）
+# 导入到 MySQL 5.7 测试库
 ./mvnw -Dtest=SessionImportContractTest test
-
-# 2. 导入到 MySQL（Testcontainers）
-./mvnw verify -Pmysql-it
-
-# 3. 业务 checksum 必须 equal
+# 业务 checksum 必须稳定
 #    - session 数 = 3
 #    - 每会话消息数与 sequence 一致
 #    - parts checksum（每条消息 parts_json 的 SHA-256）一致

@@ -16,8 +16,7 @@ import io.github.ccweixiao.datastoria.common.agent.UnsupportedCodecVersionExcept
 /**
  * JSON {@link CheckpointCodec}. Canonical form is the sorted-key, compact JSON serialization of
  * {@link CheckpointState}, so the checksum is stable regardless of how a database re-formats the
- * stored {@code json}/{@code TEXT} column (MySQL re-serializes JSON on read; SQLite stores
- * verbatim).
+ * stored {@code JSON} column because MySQL may re-serialize JSON on read.
  *
  * <p>Checksum is SHA-256 over {@code "<codecVersion>\n<canonicalStateJson>"} (hex), binding the
  * payload to its codec version. Decode rejects unknown versions and any checksum mismatch.

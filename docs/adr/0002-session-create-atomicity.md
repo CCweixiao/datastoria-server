@@ -48,7 +48,7 @@ impossible there too.
   on Java — the failed POST leaves nothing behind. This is the desired
   behaviour and the reason for the divergence.
 - **Connection pool sizing**: the transaction holds a single JDBC connection
-  for the duration of the loop. With SQLite (local/test, pool size 1) this is
+  for the duration of the loop. With MySQL 5.7 this is
   the same constraint P2 already lives with. With MySQL (prod) the bounded
   Hikari pool is unaffected because message counts per POST are small
   (typically 1–4).

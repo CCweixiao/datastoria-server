@@ -8,6 +8,7 @@
 | Node.js | 22（最低 20） |
 | npm | 与 `datastoria-web/package-lock.json` 兼容 |
 | Git | 支持 submodule |
+| MySQL | 5.7 |
 | ClickHouse | 可选；真实查询联调需要 |
 
 macOS：
@@ -21,12 +22,20 @@ git submodule update --init --recursive
 
 ## 后端
 
-仓库已提供本地 profile。不要把真实密钥写进 YAML：
+先创建开发数据库与账号（示例密码只用于本机开发）：
+
+```sql
+CREATE DATABASE datastoria CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'datastoria'@'%' IDENTIFIED BY 'datastoria';
+GRANT ALL PRIVILEGES ON datastoria.* TO 'datastoria'@'%';
+```
+
+仓库只提供 `dev` 与 `prod` 两个 Profile。不要把真实密钥写进 YAML：
 
 ```bash
 export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
 ./mvnw -pl datastoria-boot -am package -DskipTests
-SPRING_PROFILES_ACTIVE=local \
+SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
@@ -34,7 +43,7 @@ SPRING_PROFILES_ACTIVE=local \
 
 - API：`http://127.0.0.1:8080`
 - 健康检查：`http://127.0.0.1:8080/actuator/health`
-- SQLite：`data/datastoria.db`
+- MySQL：`jdbc:mysql://127.0.0.1:3306/datastoria`
 - 开发身份：`dev@example.com`
 
 检查 API：
@@ -46,7 +55,7 @@ curl -fsS \
   http://127.0.0.1:8080/api/connections
 ```
 
-IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `local`，环境变量中设置
+IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `dev`，环境变量中设置
 `DATASTORIA_MASTER_KEY`。
 
 ## 前端
@@ -93,7 +102,7 @@ curl -fsS http://127.0.0.1:18123/ping
 ### 后端
 
 - 对 API 使用 IDE 断点；WebFlux 链路避免在 Netty 线程执行 JDBC；
-- SQLite 可用 `sqlite3 data/datastoria.db` 只读检查；
+- MySQL 可用只读账号或数据库客户端检查，禁止手工修改 Flyway 历史；
 - Agent 问题优先查看 Run、Event、Checkpoint、Pending Action，而不是打印 Prompt/Key；
 - ClickHouse 查询错误保留 exception code，但日志中不得记录连接密码。
 
@@ -110,5 +119,6 @@ npm run lint
 npm test -- --run
 ```
 
-MySQL 方言集成测试依赖可用的 Docker/Testcontainers 或显式测试数据库；没有 Docker 时，
-`SchemaParityTest` 可能跳过，不能据此宣称 MySQL 已验证。
+测试默认连接本机 MySQL 5.7 的 `datastoria_test` 数据库，可通过
+`DATASTORIA_TEST_DB_URL/USERNAME/PASSWORD` 覆盖。测试会清理 `ds_*` 业务表，请勿指向开发或
+生产数据库。

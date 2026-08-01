@@ -188,18 +188,18 @@ export PATH="$JAVA_HOME/bin:$PATH"
 java -version
 ```
 
-启动本地 profile：
+启动开发环境：
 
 ```bash
 cd ~/OpenProjects/datastoria-server
-SPRING_PROFILES_ACTIVE=local \
+SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
 或者在 IntelliJ 的 Run Configuration 中设置：
 
 ```text
-Active profiles: local
+Active profiles: dev
 JDK: 17
 ```
 

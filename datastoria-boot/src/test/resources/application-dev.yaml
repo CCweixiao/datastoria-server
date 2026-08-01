@@ -1,0 +1,43 @@
+# Test overrides for the dev profile. Tests and local development use the same MySQL 5.7 dialect.
+
+spring:
+  main:
+    banner-mode: off
+    web-application-type: reactive
+
+  datasource:
+    url: ${DATASTORIA_TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/datastoria_test?useSSL=false&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${DATASTORIA_TEST_DB_USERNAME:datastoria}
+    password: ${DATASTORIA_TEST_DB_PASSWORD:datastoria}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 0
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/mysql/versioned
+    clean-disabled: false
+
+datastoria:
+  master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  agent:
+    repository-root: ${user.dir}
+  skills:
+    seed-enabled: false
+  identity:
+    default-tenant: tenant-test
+    default-user: dev@example.com
+    default-roles: ROLE_ADMIN,ROLE_USER
+    admin-users: dev@example.com,tenant-b@example.com
+  cors:
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never

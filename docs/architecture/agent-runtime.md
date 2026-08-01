@@ -32,7 +32,7 @@ flowchart LR
     MODEL["模型 Provider API"]
     TOOL["服务端 Toolkit"]
     SKILL["固定版本 Skill"]
-    DB[("SQLite / MySQL<br/>会话、Run、事件、Checkpoint")]
+    DB[("MySQL 5.7<br/>会话、Run、事件、Checkpoint")]
     CK[("ClickHouse<br/>单节点或集群")]
 
     UI -->|"POST /api/ai/agent"| API
@@ -275,7 +275,7 @@ Checkpoint 不保存 API Key，也不把完整 `HarnessAgent` Java 对象序列�
 sequenceDiagram
     participant AS as AgentScope
     participant Java as DataStoria Java
-    participant DB as SQLite/MySQL
+    participant DB as MySQL 5.7
     participant UI as datastoria-web
 
     AS-->>Java: RequireUserConfirmEvent
@@ -379,7 +379,7 @@ sequenceDiagram
     participant UI as datastoria-web
     participant API as AiAgentController
     participant CRS as ChatRunService
-    participant DB as SQLite/MySQL
+    participant DB as MySQL 5.7
     participant ARS as AgentRunService
     participant AS as HarnessAgent
     participant LLM as Model Provider

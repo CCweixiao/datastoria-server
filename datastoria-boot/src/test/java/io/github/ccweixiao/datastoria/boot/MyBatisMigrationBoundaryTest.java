@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
  *   <li>No production code injects {@code JdbcClient}/{@code JdbcTemplate} or references a {@code
  *       Jdbc*Repository}.
  *   <li>No PostgreSQL artifacts remain (driver, Flyway dialect, profile, migrations, IT).
- *   <li>SQLite and MySQL share exactly one mapper set — no dialect-specific mappers or XML.
+ *   <li>MySQL uses exactly one mapper set — no dormant dialect-specific mappers or XML.
  *   <li>No mapper XML uses forbidden dialect-specific upsert/returning syntax.
  * </ul>
  */
@@ -70,11 +70,11 @@ class MyBatisMigrationBoundaryTest {
   }
 
   @Test
-  void sqliteAndMysqlShareExactlyOneMapperSet() throws IOException {
+  void mysqlUsesExactlyOneMapperSet() throws IOException {
     assertThat(MAPPER_JAVA).isNotEmptyDirectory();
     assertThat(MAPPER_XML).isNotEmptyDirectory();
 
-    Pattern dialectInName = Pattern.compile("(?i)(sqlite|mysql|postgres)");
+    Pattern dialectInName = Pattern.compile("(?i)(sqlite|postgres)");
     try (Stream<Path> files = Stream.concat(javaFiles(MAPPER_JAVA), xmlFiles(MAPPER_XML))) {
       files.forEach(
           file -> {

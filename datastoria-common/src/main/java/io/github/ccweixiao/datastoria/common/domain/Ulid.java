@@ -5,8 +5,8 @@ import java.time.Instant;
 
 /**
  * Minimal Crockford-base32 ULID generator (26 chars). All externally-visible resource identifiers
- * are generated in application code so INSERTs never need database-generated keys (which differ
- * between SQLite and MySQL).
+ * are generated in application code so INSERTs never need database-generated keys (which differ in
+ * MySQL).
  */
 public final class Ulid {
 

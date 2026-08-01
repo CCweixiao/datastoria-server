@@ -9,7 +9,7 @@ import { RemoteChat } from "@/lib/ai/session/remote-chat";
 import { SESSION_SHARE_CODE_HEADER } from "@/lib/ai/session/session-share-constants";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { SERVER_TOOL_NAMES } from "@/lib/ai/tools/server/server-tool-names";
-import { backendApiFetch } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { Connection } from "@/lib/connection/connection";
 import { v7 as uuidv7 } from "uuid";
 import { ChatContext, type DatabaseContext } from "./chat-context";
@@ -189,12 +189,10 @@ function buildChatRequestHeaders(
         ? Object.fromEntries(headers)
         : (headers ?? {});
 
-  const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-  return {
+  return backendApiHeaders({
     ...normalizedHeaders,
-    ...(identity ? { "x-datastoria-user-email": identity } : {}),
     ...(shareCode ? { [SESSION_SHARE_CODE_HEADER]: shareCode } : {}),
-  };
+  });
 }
 
 export class ChatFactory {
@@ -206,9 +204,6 @@ export class ChatFactory {
     actionId: string,
     response: unknown
   ): Promise<void> {
-    const javaApiBase = (
-      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-    ).replace(/\/+$/, "");
     const headers = buildChatRequestHeaders(
       {
         "Content-Type": "application/json",
@@ -217,7 +212,9 @@ export class ChatFactory {
       undefined
     );
     const resolved = await backendApiFetch(
-      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond`,
+      backendApiUrl(
+        `/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond`
+      ),
       {
         method: "POST",
         headers,
@@ -243,11 +240,10 @@ export class ChatFactory {
     actionId: string,
     approved: boolean
   ): Promise<void> {
-    const javaApiBase = (
-      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-    ).replace(/\/+$/, "");
     const resolved = await backendApiFetch(
-      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:${approved ? "approve" : "deny"}`,
+      backendApiUrl(
+        `/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:${approved ? "approve" : "deny"}`
+      ),
       {
         method: "POST",
         headers: buildChatRequestHeaders(
@@ -264,7 +260,7 @@ export class ChatFactory {
       throw new Error((await resolved.text()) || "Failed to resolve approval.");
     }
     const snapshot = await backendApiFetch(
-      `${javaApiBase}/api/ai/runs/${encodeURIComponent(runId)}`,
+      backendApiUrl(`/api/ai/runs/${encodeURIComponent(runId)}`),
       {
         headers: buildChatRequestHeaders(undefined, undefined),
       }
@@ -396,9 +392,6 @@ export class ChatFactory {
     const connectionId = options.connectionId ?? getSessionRepositoryConnectionId(connection);
 
     let resumeRunId: string | undefined;
-    const javaApiBase = (
-      process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-    ).replace(/\/+$/, "");
     const prepareRequest = async (
       messages: AppUIMessage[],
       signal: AbortSignal
@@ -435,7 +428,7 @@ export class ChatFactory {
         agentContext,
         chatPersistenceMode: "remote",
       });
-      return backendApiFetch(`${javaApiBase}/api/ai/agent`, {
+      return backendApiFetch(backendApiUrl("/api/ai/agent"), {
         method: "POST",
         headers: buildChatRequestHeaders(
           {
@@ -458,7 +451,7 @@ export class ChatFactory {
           throw new Error("No suspended run is selected.");
         }
         return backendApiFetch(
-          `${javaApiBase}/api/ai/runs/${encodeURIComponent(resumeRunId)}:resume`,
+          backendApiUrl(`/api/ai/runs/${encodeURIComponent(resumeRunId)}:resume`),
           {
             method: "POST",
             headers: buildChatRequestHeaders(headers, options.shareCode),

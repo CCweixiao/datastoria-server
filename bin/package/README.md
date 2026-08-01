@@ -32,13 +32,12 @@ bin/datastoria logs 200
 
 Set `DATASTORIA_PROFILE` in `conf/datastoria.env`:
 
-- `local`: SQLite at `./data/datastoria.db`; Flyway initializes/upgrades it automatically.
-- `prod`: MySQL; set `DATASTORIA_DB_URL`, `DATASTORIA_DB_USERNAME`,
-  `DATASTORIA_DB_PASSWORD`, and `DATASTORIA_MASTER_KEY`.
+- `dev`: MySQL 5.7 with local identity headers and convenient connection defaults.
+- `prod`: MySQL 5.7 with OAuth; set the database, master-key, tenant, CORS and auth URL variables
+  documented in `conf/datastoria.env.example`.
 
-Profile overrides belong in `conf/application-<profile>.yaml`. The launcher passes the profile and
-external `conf/` directory to Spring Boot. Database creation and upgrades always use the packaged
-Flyway migrations.
+Deployment values belong in `conf/datastoria.env`. Database upgrades always use the single packaged
+MySQL Flyway migration set.
 
 ## Separate deployment compatibility
 

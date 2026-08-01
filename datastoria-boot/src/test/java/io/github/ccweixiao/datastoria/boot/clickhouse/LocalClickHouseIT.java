@@ -63,7 +63,7 @@ import reactor.core.scheduler.Scheduler;
  * </pre>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 @EnabledIfEnvironmentVariable(named = "DATASTORIA_LOCAL_CLICKHOUSE", matches = "true")
 @Import(LocalClickHouseIT.FakeModelConfig.class)
 class LocalClickHouseIT {

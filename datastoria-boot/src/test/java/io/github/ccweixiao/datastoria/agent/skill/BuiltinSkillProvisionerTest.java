@@ -13,7 +13,7 @@ import io.github.ccweixiao.datastoria.common.domain.AgentSkill;
 import io.github.ccweixiao.datastoria.dao.repository.AgentSkillRepository;
 
 @SpringBootTest(properties = "datastoria.skills.seed-enabled=true")
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class BuiltinSkillProvisionerTest {
 
   @Autowired TestDbHelper dbHelper;

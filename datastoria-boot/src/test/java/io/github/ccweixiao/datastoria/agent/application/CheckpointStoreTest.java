@@ -12,6 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.state.AgentState;
@@ -23,12 +25,14 @@ import io.github.ccweixiao.datastoria.common.agent.CheckpointType;
 
 /**
  * Wires the {@link AgentScopeCheckpointAdapter} output through {@link CheckpointStore} into the
- * SQLite {@code ds_agent_checkpoint} table and back: round-trip integrity, and tenant isolation on
+ * MySQL {@code ds_agent_checkpoint} table and back: round-trip integrity, and tenant isolation on
  * reads. Verifies the stored blob carries no prompt/secret even when the source state did.
  */
 @SpringBootTest
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class CheckpointStoreTest {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   private static final String TENANT = "tenant-test";
   private static final String USER = "dev@example.com";
@@ -49,14 +53,14 @@ class CheckpointStoreTest {
   }
 
   @Test
-  void savedCheckpointRoundTripsThroughRepo() {
+  void savedCheckpointRoundTripsThroughRepo() throws Exception {
     AgentState state = sensitiveState();
     CheckpointContent content = adapter.checkpoint(state);
 
     store.save(TENANT, "run_main", 1, CheckpointType.RUN_STATE, content);
 
     CheckpointContent loaded = store.loadLatest(TENANT, "run_main").orElseThrow();
-    assertThat(loaded.stateJson()).isEqualTo(content.stateJson());
+    assertThat(JSON.readTree(loaded.stateJson())).isEqualTo(JSON.readTree(content.stateJson()));
     assertThat(loaded.codecVersion()).isEqualTo(content.codecVersion());
     assertThat(loaded.checksum()).isEqualTo(content.checksum());
 
@@ -68,16 +72,16 @@ class CheckpointStoreTest {
   }
 
   @Test
-  void overwriteAtSameSequenceReplacesState() {
+  void overwriteAtSameSequenceReplacesState() throws Exception {
     CheckpointContent first = adapter.checkpoint(agentState("sess_main", "secret-summary-1", 1));
     CheckpointContent second = adapter.checkpoint(agentState("sess_main", "secret-summary-2", 2));
     store.save(TENANT, "run_main", 1, CheckpointType.RUN_STATE, first);
     store.save(TENANT, "run_main", 1, CheckpointType.RUN_STATE, second); // overwrite seq 1
 
     CheckpointContent loaded = store.loadLatest(TENANT, "run_main").orElseThrow();
-    assertThat(loaded.stateJson()).isEqualTo(second.stateJson());
+    assertThat(JSON.readTree(loaded.stateJson())).isEqualTo(JSON.readTree(second.stateJson()));
+    assertThat(JSON.readTree(loaded.stateJson()).path("currentIteration").asInt()).isEqualTo(2);
     assertThat(loaded.stateJson())
-        .contains("\"currentIteration\":2")
         .doesNotContain("secret-summary-1", "secret-summary-2", "summary");
   }
 
@@ -139,7 +143,7 @@ class CheckpointStoreTest {
         .param("id", id)
         .param("t", tenant)
         .param("u", user)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 
@@ -154,7 +158,7 @@ class CheckpointStoreTest {
         .param("u", user)
         .param("s", session)
         .param("idem", "idem-" + id)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 }

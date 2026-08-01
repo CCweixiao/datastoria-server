@@ -25,8 +25,7 @@ public class ProductionSecurityConfig {
 
   @Bean
   SecurityWebFilterChain productionSecurityFilterChain(
-      ServerHttpSecurity http,
-      @Value("${datastoria.auth.success-url:http://localhost:3000}") String successUrl) {
+      ServerHttpSecurity http, @Value("${datastoria.auth.success-url}") String successUrl) {
     return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
         .cors(org.springframework.security.config.Customizer.withDefaults())
         .authorizeExchange(

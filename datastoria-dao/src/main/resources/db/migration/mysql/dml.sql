@@ -1,0 +1,5 @@
+-- GENERATED FILE. DO NOT EDIT DIRECTLY.
+-- Regenerate with: node bin/dev/generate-schema-snapshots.mjs
+-- Copyable static DML for a NEW MYSQL database at Flyway V16.
+-- Intentionally empty: tenant-owned Skills and RCA templates are provisioned by the application;
+-- providers, models, API keys and other secrets must be configured by an administrator.

@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class UserPreferenceApiTest {
 
   @Autowired WebTestClient web;
@@ -156,9 +156,9 @@ class UserPreferenceApiTest {
         .jsonPath("$.entries['settings.ai.agent']")
         .exists()
         .jsonPath("$.entries['settings.query-context']")
-        .isEqualTo("{\"max_execution_time\":60}")
+        .isEqualTo("{\"max_execution_time\": 60}")
         .jsonPath("$.entries['settings.ui']")
-        .isEqualTo("{\"theme\":\"dark\"}")
+        .isEqualTo("{\"theme\": \"dark\"}")
         .jsonPath("$.revision")
         .isEqualTo(0);
   }

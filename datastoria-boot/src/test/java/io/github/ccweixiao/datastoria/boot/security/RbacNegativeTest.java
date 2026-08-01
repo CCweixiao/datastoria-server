@@ -15,7 +15,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
  * allowed on user and compat endpoints.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class RbacNegativeTest {
 
   @Autowired WebTestClient web;

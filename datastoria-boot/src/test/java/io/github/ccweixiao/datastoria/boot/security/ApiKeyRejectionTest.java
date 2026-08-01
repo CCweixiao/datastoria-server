@@ -14,7 +14,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 
 /** Verifies that apiKey in request bodies is rejected on all relevant endpoints. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class ApiKeyRejectionTest {
 
   @Autowired WebTestClient web;

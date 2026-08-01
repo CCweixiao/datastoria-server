@@ -50,7 +50,7 @@ class HarnessAgentFactoryTest {
   @Test
   void producedRunnableStreamsEventsAndExposesNoTools() {
     FakeStreamModel model = FakeStreamModel.builder().text("ok").finish(1, 1).build();
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
 
     RunnableAgent agent =
         factory.create(
@@ -72,7 +72,7 @@ class HarnessAgentFactoryTest {
   void sendsCurrentAndHistoricalImagesToAgentScopeModel() {
     CapturingMessageModel model = new CapturingMessageModel();
 
-    new HarnessAgentFactory()
+    TestHarnessAgentFactories.create()
         .create(
             ctx("run-images"),
             new FakeModelAdapter(model),
@@ -102,7 +102,7 @@ class HarnessAgentFactoryTest {
   void appliesReasoningEffortToAgentScopeGenerateOptions() {
     CapturingMessageModel model = new CapturingMessageModel();
 
-    new HarnessAgentFactory()
+    TestHarnessAgentFactories.create()
         .create(
             ctx("run-reasoning"),
             new FakeModelAdapter(model),
@@ -118,7 +118,7 @@ class HarnessAgentFactoryTest {
   @Test
   void eachRunIsIndependentAndScopedByRunId() {
     FakeStreamModel model = FakeStreamModel.builder().text("x").finish(1, 1).build();
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
 
     RunnableAgent a =
         factory.create(
@@ -147,7 +147,7 @@ class HarnessAgentFactoryTest {
     }
 
     List<AgentRunEvent> events =
-        new HarnessAgentFactory()
+        TestHarnessAgentFactories.create()
             .create(
                 ctx("run-compaction"),
                 new FakeModelAdapter(model),
@@ -166,7 +166,7 @@ class HarnessAgentFactoryTest {
   @Test
   void exposesDatabaseSkillsAndServerToolsAtTheModelBoundary() {
     FakeStreamModel model = FakeStreamModel.builder().text("ok").finish(1, 1).build();
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
     AgentSkill skill =
         AgentSkill.builder()
             .name("diagnose")
@@ -194,7 +194,7 @@ class HarnessAgentFactoryTest {
   @Test
   void interruptAndCloseDoNotThrow() {
     FakeStreamModel model = FakeStreamModel.builder().text("x").finish(1, 1).build();
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
     RunnableAgent agent =
         factory.create(
             ctx("run-c"), new FakeModelAdapter(model), AgentRuntimeConfig.minimal("sys"), "hi");
@@ -214,7 +214,7 @@ class HarnessAgentFactoryTest {
                 new PermissionRule(
                     "server_test_tool", null, PermissionBehavior.ASK, "datastoria-test-policy"))
             .build();
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
     RunnableAgent agent =
         factory.create(
             ctx("run-ask-" + UUID.randomUUID()),
@@ -245,7 +245,7 @@ class HarnessAgentFactoryTest {
   void agentScopeAllowAndDenyPoliciesControlRealToolExecution() {
     TestTools allowedTools = new TestTools();
     List<AgentRunEvent> allowed =
-        new HarnessAgentFactory()
+        TestHarnessAgentFactories.create()
             .create(
                 ctx("run-allow-" + UUID.randomUUID()),
                 new FakeModelAdapter(new ToolCallingModel()),
@@ -270,7 +270,7 @@ class HarnessAgentFactoryTest {
                     "server_test_tool", null, PermissionBehavior.DENY, "datastoria-test-policy"))
             .build();
     List<AgentRunEvent> deniedEvents =
-        new HarnessAgentFactory()
+        TestHarnessAgentFactories.create()
             .create(
                 ctx("run-deny-" + UUID.randomUUID()),
                 new FakeModelAdapter(new ToolCallingModel()),
@@ -294,7 +294,7 @@ class HarnessAgentFactoryTest {
   void approvalResumeUsesConfirmResultAndContinuesSequence() {
     String runId = "run-resume-" + UUID.randomUUID();
     RunContext context = ctx(runId);
-    HarnessAgentFactory factory = new HarnessAgentFactory();
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
     ToolCallingModel model = new ToolCallingModel();
     TestTools tools = new TestTools();
     AgentRunCapabilities capabilities = askCapabilities(tools);
@@ -351,7 +351,7 @@ class HarnessAgentFactoryTest {
     ToolCallingModel model = new ToolCallingModel();
     TestTools tools = new TestTools();
     AgentRunCapabilities capabilities = askCapabilities(tools);
-    HarnessAgentFactory beforeRestart = new HarnessAgentFactory();
+    HarnessAgentFactory beforeRestart = TestHarnessAgentFactories.create();
     List<AgentRunEvent> paused =
         beforeRestart
             .create(
@@ -371,7 +371,7 @@ class HarnessAgentFactoryTest {
                 .findFirst()
                 .orElseThrow();
 
-    HarnessAgentFactory afterRestart = new HarnessAgentFactory();
+    HarnessAgentFactory afterRestart = TestHarnessAgentFactories.create();
     List<AgentRunEvent> resumed =
         afterRestart
             .resumeApprovals(
@@ -404,7 +404,7 @@ class HarnessAgentFactoryTest {
     AgentRunCapabilities capabilities =
         new AgentRunCapabilities(List.of(), List.of(new HumanInteractionAgentTools()));
     List<AgentRunEvent> paused =
-        new HarnessAgentFactory()
+        TestHarnessAgentFactories.create()
             .create(
                 context,
                 new FakeModelAdapter(model),
@@ -423,7 +423,7 @@ class HarnessAgentFactoryTest {
                 .orElseThrow();
 
     List<AgentRunEvent> resumed =
-        new HarnessAgentFactory()
+        TestHarnessAgentFactories.create()
             .resumeQuestion(
                 context,
                 new FakeModelAdapter(model),

@@ -34,7 +34,7 @@ import reactor.core.publisher.Mono;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "datastoria.oauth.github.client-id=test-github-client")
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class OAuthCompatibilityApiTest {
 
   private static final String IDENTITY_HEADER = "x-datastoria-user-email";

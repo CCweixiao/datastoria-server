@@ -72,8 +72,6 @@ cp "$BACKEND_JAR" "$STAGE_DIR/app/backend/datastoria-server.jar"
 tar -C "$STAGE_DIR/app/frontend" -xzf "$WEB_ARCHIVE"
 cp "$PROJECT_DIR/bin/datastoria.sh" "$STAGE_DIR/bin/datastoria"
 cp "$PROJECT_DIR/bin/package/conf/datastoria.env.example" "$STAGE_DIR/conf/datastoria.env.example"
-cp "$PROJECT_DIR/bin/package/conf/application-local.yaml" "$STAGE_DIR/conf/application-local.yaml"
-cp "$PROJECT_DIR/bin/package/conf/application-prod.yaml" "$STAGE_DIR/conf/application-prod.yaml"
 cp "$PROJECT_DIR/bin/package/README.md" "$STAGE_DIR/README.md"
 chmod +x "$STAGE_DIR/bin/datastoria"
 

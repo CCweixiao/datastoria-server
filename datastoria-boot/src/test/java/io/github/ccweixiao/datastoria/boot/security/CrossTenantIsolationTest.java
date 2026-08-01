@@ -19,7 +19,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
  * from the server-resolved Identity, never from the request body.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class CrossTenantIsolationTest {
 
   @Autowired WebTestClient web;

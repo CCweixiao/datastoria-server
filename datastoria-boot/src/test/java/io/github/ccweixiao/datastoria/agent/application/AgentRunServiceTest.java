@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.ccweixiao.datastoria.agent.runtime.AgentRuntimeConfig;
 import io.github.ccweixiao.datastoria.agent.runtime.CancellationRegistry;
-import io.github.ccweixiao.datastoria.agent.runtime.HarnessAgentFactory;
+import io.github.ccweixiao.datastoria.agent.runtime.TestHarnessAgentFactories;
 import io.github.ccweixiao.datastoria.agent.testing.FakeModelAdapter;
 import io.github.ccweixiao.datastoria.agent.testing.FakeStreamModel;
 import io.github.ccweixiao.datastoria.common.agent.AgentRunEvent;
@@ -44,7 +44,7 @@ class AgentRunServiceTest {
   private static AgentRunService newService() {
     // Synchronous cleanup executor so unregister/close happen deterministically at termination.
     return new AgentRunService(
-        new HarnessAgentFactory(), new CancellationRegistry(), Runnable::run);
+        TestHarnessAgentFactories.create(), new CancellationRegistry(), Runnable::run);
   }
 
   private static List<AgentRunEvent> startAndCollect(
@@ -111,7 +111,8 @@ class AgentRunServiceTest {
   @Test
   void agentCreationErrorBecomesSanitizedRunFailed() {
     AgentRunService service =
-        new AgentRunService(new HarnessAgentFactory(), new CancellationRegistry(), Runnable::run);
+        new AgentRunService(
+            TestHarnessAgentFactories.create(), new CancellationRegistry(), Runnable::run);
 
     List<AgentRunEvent> events =
         service
@@ -255,7 +256,7 @@ class AgentRunServiceTest {
     CopyOnWriteArrayList<AgentRunEvent.RunCancelled> cancellations = new CopyOnWriteArrayList<>();
     AgentRunService service =
         new AgentRunService(
-            new HarnessAgentFactory(),
+            TestHarnessAgentFactories.create(),
             new CancellationRegistry(),
             Runnable::run,
             cancellations::add);

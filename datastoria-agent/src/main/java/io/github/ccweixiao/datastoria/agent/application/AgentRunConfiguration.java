@@ -1,5 +1,6 @@
 package io.github.ccweixiao.datastoria.agent.application;
 
+import java.time.Clock;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -8,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import io.agentscope.core.state.AgentStateStore;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentToolRegistry;
 import io.github.ccweixiao.datastoria.agent.runtime.CancellationRegistry;
 import io.github.ccweixiao.datastoria.agent.runtime.HarnessAgentFactory;
@@ -27,8 +29,10 @@ import reactor.core.scheduler.Scheduler;
 public class AgentRunConfiguration {
 
   @Bean
-  HarnessAgentFactory harnessAgentFactory(AgentToolRegistry toolRegistry) {
-    return new HarnessAgentFactory(toolRegistry);
+  HarnessAgentFactory harnessAgentFactory(
+      AgentToolRegistry toolRegistry, AgentStateStore stateStore) {
+    // AgentStateStoreConfig always supplies the MySQL-backed store.
+    return new HarnessAgentFactory(Clock.systemUTC(), toolRegistry, stateStore);
   }
 
   @Bean

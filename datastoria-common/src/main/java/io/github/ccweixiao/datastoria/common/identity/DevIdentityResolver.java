@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  * P10 will replace this entirely with OAuth.
  */
 @Component
-@Profile({"local", "test"})
+@Profile("dev")
 public class DevIdentityResolver {
 
   private final String defaultTenant;

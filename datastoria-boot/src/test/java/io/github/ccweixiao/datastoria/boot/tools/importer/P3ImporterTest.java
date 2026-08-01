@@ -30,13 +30,13 @@ import io.github.ccweixiao.datastoria.dao.persistence.mapper.P3ImportMapper;
 
 /**
  * Integration tests for {@link P3Importer}. Each test writes a JSONL bundle to a temp dir, runs the
- * importer against the test SQLite context, and verifies the persisted rows + checksum.
+ * importer against the test MySQL context, and verifies the persisted rows + checksum.
  *
  * <p>Covers the P3 acceptance criterion "导入重复执行" (idempotent import): running the same bundle twice
  * must yield identical row counts and identical checksums, with no duplicate primary keys.
  */
 @SpringBootTest
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class P3ImporterTest {
 
   @Autowired private JdbcClient jdbc;
@@ -345,7 +345,7 @@ class P3ImporterTest {
         new P3ImportManifest(
             P3ImportManifest.CURRENT_VERSION,
             Instant.parse("2026-07-25T00:00:00Z"),
-            "sqlite",
+            "mysql",
             orderedCounts,
             Map.of(tenant, (long) sessions.size()));
     Files.writeString(dir.resolve("manifest.json"), mapper.writeValueAsString(manifest) + "\n");

@@ -1,6 +1,11 @@
 import type { DependencyTableInfo } from "@/components/dependency-view/dependency-types";
 import { QueryContextManager } from "@/components/settings/query-context/query-context-manager";
-import { backendApiFetch, readBackendError } from "@/lib/backend-api";
+import {
+  backendApiFetch,
+  backendApiHeaders,
+  backendApiUrl,
+  readBackendError,
+} from "@/lib/backend-api";
 import type { ClickHouseSetting } from "@/lib/clickhouse/clickhouse-setting-loader";
 import type { ConnectionConfig } from "./connection-config";
 
@@ -325,16 +330,11 @@ export class Connection {
         if (!this.id) {
           throw new QueryError("Connection must be saved before executing a query");
         }
-        const apiBase = (
-          process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-        ).replace(/\/+$/, "");
-        const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-        const response = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
+        const response = await backendApiFetch(backendApiUrl(`/api/connections/${this.id}/query`), {
           method: "POST",
-          headers: {
+          headers: backendApiHeaders({
             "Content-Type": "application/json",
-            ...(identity ? { "x-datastoria-user-email": identity } : {}),
-          },
+          }),
           body: JSON.stringify({ query: sql, parameters: queryParameters }),
           signal: abortController.signal,
         });
@@ -428,16 +428,11 @@ export class Connection {
       if (!this.id) {
         throw new QueryError("Connection must be saved before executing a query");
       }
-      const apiBase = (
-        process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-      ).replace(/\/+$/, "");
-      const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-      const res = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
+      const res = await backendApiFetch(backendApiUrl(`/api/connections/${this.id}/query`), {
         method: "POST",
-        headers: {
+        headers: backendApiHeaders({
           "Content-Type": "application/json",
-          ...(identity ? { "x-datastoria-user-email": identity } : {}),
-        },
+        }),
         body: JSON.stringify({ query: sql, parameters: queryParameters }),
         signal: abortController.signal,
       });
@@ -536,16 +531,11 @@ export class Connection {
       if (!this.id) {
         throw new QueryError("Connection must be saved before executing a query");
       }
-      const apiBase = (
-        process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-      ).replace(/\/+$/, "");
-      const identity = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-      const res = await backendApiFetch(`${apiBase}/api/connections/${this.id}/query`, {
+      const res = await backendApiFetch(backendApiUrl(`/api/connections/${this.id}/query`), {
         method: "POST",
-        headers: {
+        headers: backendApiHeaders({
           "Content-Type": "application/json",
-          ...(identity ? { "x-datastoria-user-email": identity } : {}),
-        },
+        }),
         body: JSON.stringify({ query: sql, parameters: queryParameters, targetNode, targetUser }),
         signal: abortController.signal,
       });

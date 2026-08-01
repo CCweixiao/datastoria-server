@@ -44,7 +44,7 @@ class AgentEventMapperTest {
   }
 
   private static List<AgentRunEvent> stream(FakeStreamModel model, String runId) {
-    HarnessAgentFactory factory = new HarnessAgentFactory(FIXED_CLOCK);
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create(FIXED_CLOCK);
     RunnableAgent agent =
         factory.create(
             ctx(runId), new FakeModelAdapter(model), AgentRuntimeConfig.minimal("sys"), "hi");

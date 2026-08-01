@@ -34,16 +34,19 @@ public class SkillReviewController {
   private final ModelRepository models;
   private final ModelAdapterProvider adapters;
   private final ObjectMapper mapper;
+  private final HarnessAgentFactory agentFactory;
 
   public SkillReviewController(
       UserModelPreferenceRepository preferences,
       ModelRepository models,
       ModelAdapterProvider adapters,
-      ObjectMapper mapper) {
+      ObjectMapper mapper,
+      HarnessAgentFactory agentFactory) {
     this.preferences = preferences;
     this.models = models;
     this.adapters = adapters;
     this.mapper = mapper;
+    this.agentFactory = agentFactory;
   }
 
   @PostMapping
@@ -88,13 +91,12 @@ public class SkillReviewController {
                       model.id(),
                       Instant.now());
               RunnableAgent agent =
-                  new HarnessAgentFactory()
-                      .create(
-                          context,
-                          adapters.adapterFor(model, identity),
-                          AgentRuntimeConfig.minimal(
-                              "Review the supplied AI skill file. Return valid JSON only."),
-                          prompt(skillId, path, content));
+                  agentFactory.create(
+                      context,
+                      adapters.adapterFor(model, identity),
+                      AgentRuntimeConfig.minimal(
+                          "Review the supplied AI skill file. Return valid JSON only."),
+                      prompt(skillId, path, content));
               return agent
                   .streamEvents()
                   .ofType(AgentRunEvent.TextDelta.class)

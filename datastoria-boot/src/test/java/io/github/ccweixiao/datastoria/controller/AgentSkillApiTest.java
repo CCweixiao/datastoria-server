@@ -14,7 +14,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class AgentSkillApiTest {
 
   @Autowired WebTestClient web;

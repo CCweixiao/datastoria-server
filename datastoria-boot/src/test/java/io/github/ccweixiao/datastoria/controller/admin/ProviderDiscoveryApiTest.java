@@ -22,7 +22,7 @@ import io.github.ccweixiao.datastoria.common.dto.DiscoveredModelResponse;
 import io.github.ccweixiao.datastoria.service.ProviderRemoteClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class ProviderDiscoveryApiTest {
 
   @Autowired WebTestClient web;

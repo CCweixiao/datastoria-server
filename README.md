@@ -24,18 +24,21 @@ AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与�
 - 配置 OpenAI 兼容模型供应商，发现和管理多个模型；
 - 基于 AgentScope Java 的流式 AI 会话、只读 SQL 工具、审批/提问和断点恢复；
 - Skill、Agent、会话、反馈和用户偏好的服务端持久化；
-- 开发环境 SQLite、生产环境 MySQL，使用同一套 MyBatis-Plus Mapper。
+- 开发、测试和生产统一使用 MySQL 5.7 与同一套 Flyway/MyBatis-Plus 结构。
 
 ## 5 分钟本地启动
 
-前置要求：JDK 17、Node.js 22、npm，以及已初始化的 Git submodule。
+前置要求：JDK 17、Node.js 22、npm、MySQL 5.7，以及已初始化的 Git submodule。开发库默认
+使用 `datastoria/datastoria` 账号连接本机 `datastoria` 数据库，也可通过 `DATASTORIA_DB_*`
+覆盖。
 
 ```bash
 git submodule update --init --recursive
 
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
 ./mvnw -pl datastoria-boot -am package -DskipTests
-SPRING_PROFILES_ACTIVE=local \
+SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 

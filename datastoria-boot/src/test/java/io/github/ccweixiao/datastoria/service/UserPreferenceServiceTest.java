@@ -25,7 +25,7 @@ import io.github.ccweixiao.datastoria.dao.repository.ModelProviderRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ModelRepository;
 
 @SpringBootTest
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class UserPreferenceServiceTest {
 
   @Autowired UserPreferenceService service;

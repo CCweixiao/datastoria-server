@@ -1,6 +1,6 @@
 import type { AvailableModelsResponse } from "@/lib/ai/llm/available-models-client";
 import type { ModelProps } from "@/lib/ai/llm/llm-provider-factory";
-import { backendApiFetch } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 
 export type ServerModelProps = ModelProps & { configId?: string };
 export interface ServerProvider {
@@ -84,16 +84,10 @@ export interface AiConfigurationGateway {
   discoverModels(providerId: string): Promise<DiscoveredModel[]>;
 }
 
-function javaUrl(path: string): string {
-  const base = (
-    process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-  ).replace(/\/+$/, "");
-  return `${base}${path}`;
-}
+const javaUrl = backendApiUrl;
 
 function identityHeaders(): HeadersInit {
-  const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-  return email ? { "x-datastoria-user-email": email } : {};
+  return backendApiHeaders();
 }
 
 async function checkedJson<T>(response: Response, operation: string): Promise<T> {
@@ -114,7 +108,9 @@ class SpringConfigurationGateway implements AiConfigurationGateway {
   private async findOrCreateProvider(provider: string): Promise<{ id: string }> {
     const providerKey = this.providerKey(provider);
     const providers = await checkedJson<Array<{ id: string; providerKey: string }>>(
-      await backendApiFetch(javaUrl("/api/admin/ai/providers"), { headers: identityHeaders() }),
+      await backendApiFetch(backendApiUrl("/api/admin/ai/providers"), {
+        headers: identityHeaders(),
+      }),
       "Load providers"
     );
     const existing = providers.find((candidate) => candidate.providerKey === providerKey);

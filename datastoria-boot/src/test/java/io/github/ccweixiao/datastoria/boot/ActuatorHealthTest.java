@@ -13,7 +13,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * check from the migration plan.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class ActuatorHealthTest {
 
   @Autowired WebTestClient webTestClient;

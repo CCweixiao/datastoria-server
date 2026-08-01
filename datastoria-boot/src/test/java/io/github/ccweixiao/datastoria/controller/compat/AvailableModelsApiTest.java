@@ -15,7 +15,7 @@ import io.github.ccweixiao.datastoria.service.OAuthRemoteClient;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "datastoria.oauth.github.client-id=test-client")
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class AvailableModelsApiTest {
 
   @Autowired WebTestClient web;

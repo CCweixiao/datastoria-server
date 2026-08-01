@@ -27,7 +27,7 @@ import reactor.util.context.Context;
  */
 @Component
 @Order(-200)
-@Profile({"local", "test"})
+@Profile("dev")
 public class IdentityWebFilter implements WebFilter {
 
   static final String CONTEXT_KEY = "datastoria.identity";

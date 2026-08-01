@@ -21,7 +21,7 @@ import io.github.ccweixiao.datastoria.dao.persistence.mapper.P3ImportMapper;
  *
  * <pre>{@code
  * java -jar datastoria-server.jar \
- *   --spring.profiles.active=local \
+ *   --spring.profiles.active=dev \
  *   --p3.import.path=./data \
  *   --p3.import.dry-run=true
  * }</pre>

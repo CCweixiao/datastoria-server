@@ -23,7 +23,7 @@ import io.github.ccweixiao.datastoria.dao.repository.AgentRunRepository;
  * idempotently, without touching the reactive stream.
  */
 @SpringBootTest
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class RunCancellationPersisterTest {
 
   private static final String TENANT = "tenant-test";
@@ -43,7 +43,7 @@ class RunCancellationPersisterTest {
                 + "VALUES ('sess_p',:t,:u,'ch','t',0,:now,:now)")
         .param("t", TENANT)
         .param("u", USER)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
     repo.create(
         new AgentRun(

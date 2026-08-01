@@ -13,7 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class ModelAdminApiTest {
 
   @Autowired WebTestClient web;

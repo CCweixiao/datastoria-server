@@ -18,7 +18,7 @@ info:
                                  intentionally diverge from. Anything tagged
                                  `divergence` is justified in the cited ADR.
 
-    Auth model: in `local`/`test`, the `IdentityWebFilter` reads
+    Auth model: in `dev`, the `IdentityWebFilter` reads
     `x-datastoria-user-email` (mirroring the Next.js proxy behaviour in
     `src/proxy.ts`); production will switch to OAuth in P10. Session share
     visitors authenticate with the `X-Session-Share-Code` header.
@@ -57,7 +57,7 @@ paths:
       x-datastoria-auth: |
         Authenticated. `x-datastoria-user-email` resolved by IdentityWebFilter.
         Anonymous requests return 401 before reaching the handler in production;
-        in `local`/`test` an absent header resolves to the configured default
+        in `dev` an absent header resolves to the configured default
         user so the route still receives a non-null identity.
       x-datastoria-node-baseline: |
         - Sessions are scoped to the authenticated user_id; share codes are NOT
@@ -415,7 +415,7 @@ components:
       required: false
       description: |
         Resolved by the `IdentityWebFilter` after authentication. In
-        `local`/`test` an absent header resolves to the configured default
+        `dev` an absent header resolves to the configured default
         user. In `prod` (post-P10) the header is ignored and identity comes
         from the authenticated session.
       schema: { type: string, format: email }

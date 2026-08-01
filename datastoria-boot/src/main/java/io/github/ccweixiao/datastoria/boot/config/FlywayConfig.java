@@ -3,28 +3,23 @@ package io.github.ccweixiao.datastoria.boot.config;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 /**
- * Guards Flyway migration location selection.
- *
- * <p>Production database profiles must load only their matching migrations and fail fast when the
- * datasource URL uses another dialect. There is no automatic fallback to SQLite.
+ * Fails fast unless the configured datasource is MySQL. MySQL 5.7 is the project's single database
+ * baseline, so there is no dialect fallback.
  */
 @Configuration
 public class FlywayConfig {
 
   @Bean
-  @Profile("prod")
-  ProdDatasourceGuard prodDatasourceGuard(DataSourceProperties properties) {
+  MysqlDatasourceGuard mysqlDatasourceGuard(DataSourceProperties properties) {
     String url = properties.getUrl();
     if (url == null || !url.startsWith("jdbc:mysql:")) {
       throw new IllegalStateException(
-          "Production profile requires a MySQL datasource URL starting with"
-              + " 'jdbc:mysql:'. Refusing to start to avoid SQLite fallback.");
+          "DataStoria requires a MySQL datasource URL starting with 'jdbc:mysql:'.");
     }
-    return new ProdDatasourceGuard(url);
+    return new MysqlDatasourceGuard(url);
   }
 
-  record ProdDatasourceGuard(String url) {}
+  record MysqlDatasourceGuard(String url) {}
 }

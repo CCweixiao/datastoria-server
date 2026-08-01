@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -13,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
+import io.github.ccweixiao.datastoria.common.config.OAuthProperties;
 import io.github.ccweixiao.datastoria.common.domain.OAuthCredential;
 import io.github.ccweixiao.datastoria.common.domain.Secret;
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
@@ -29,20 +29,13 @@ import reactor.core.scheduler.Scheduler;
 @Service
 public class OAuthCredentialService {
 
-  private static final String CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
-
   private final OAuthCredentialRepository credentials;
   private final SecretService secrets;
   private final OAuthRemoteClient remote;
   private final ObjectMapper mapper;
   private final TransactionTemplate transactions;
   private final Scheduler jdbcScheduler;
-
-  @Value("${datastoria.oauth.codex.client-id:app_EMoamEEZ73f0CkXaXp7hrann}")
-  private String codexClientId;
-
-  @Value("${datastoria.oauth.github.client-id:}")
-  private String githubClientId;
+  private final OAuthProperties oauth;
 
   public OAuthCredentialService(
       OAuthCredentialRepository credentials,
@@ -50,82 +43,86 @@ public class OAuthCredentialService {
       OAuthRemoteClient remote,
       ObjectMapper mapper,
       TransactionTemplate transactions,
-      @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
+      @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler,
+      OAuthProperties oauth) {
     this.credentials = credentials;
     this.secrets = secrets;
     this.remote = remote;
     this.mapper = mapper;
     this.transactions = transactions;
     this.jdbcScheduler = jdbcScheduler;
+    this.oauth = oauth;
   }
 
   public Mono<OAuthCredentialResponse> exchangeCodex(
-      String code,
-      String verifier,
-      String redirectUri,
-      String clientId,
-      String tokenUrl,
-      Identity identity) {
+      String code, String verifier, String redirectUri, Identity identity) {
     return remote
         .postForm(
-            tokenUrl,
+            oauth.getCodex().getTokenUrl().toString(),
             Map.of(
                 "grant_type", "authorization_code",
-                "client_id", clientId,
+                "client_id", oauth.getCodex().getClientId(),
                 "code", code,
                 "code_verifier", verifier,
                 "redirect_uri", redirectUri))
         .flatMap(payload -> persist("codex", payload, identity));
   }
 
-  public Mono<OAuthCredentialResponse> refreshCodex(
-      String clientId, String tokenUrl, Identity identity) {
+  public Mono<OAuthCredentialResponse> refreshCodex(Identity identity) {
     return loadBundle("codex", identity)
         .flatMap(
             existing -> {
               String refreshToken = text(existing.payload(), "refresh_token");
               return remote
                   .postForm(
-                      tokenUrl,
+                      oauth.getCodex().getTokenUrl().toString(),
                       Map.of(
-                          "grant_type", "refresh_token",
-                          "client_id", clientId,
-                          "refresh_token", refreshToken))
+                          "grant_type",
+                          "refresh_token",
+                          "client_id",
+                          oauth.getCodex().getClientId(),
+                          "refresh_token",
+                          refreshToken))
                   .map(payload -> mergeRefresh(payload, refreshToken));
             })
         .flatMap(payload -> persist("codex", payload, identity));
   }
 
-  public Mono<JsonNode> startGitHubDeviceFlow(String clientId) {
+  public Mono<JsonNode> startGitHubDeviceFlow() {
     return remote.postJson(
-        "https://github.com/login/device/code",
-        Map.of("client_id", clientId, "scope", "read:user"));
+        oauth.getGithub().getDeviceCodeUrl().toString(),
+        Map.of("client_id", githubClientId(), "scope", "read:user"));
   }
 
-  public Mono<OAuthCredentialResponse> pollGitHubDeviceFlow(
-      String clientId, String deviceCode, Identity identity) {
+  public Mono<OAuthCredentialResponse> pollGitHubDeviceFlow(String deviceCode, Identity identity) {
     return remote
         .postJson(
-            "https://github.com/login/oauth/access_token",
+            oauth.getGithub().getTokenUrl().toString(),
             Map.of(
-                "client_id", clientId,
-                "device_code", deviceCode,
-                "grant_type", "urn:ietf:params:oauth:grant-type:device_code"))
+                "client_id",
+                githubClientId(),
+                "device_code",
+                deviceCode,
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:device_code"))
         .flatMap(payload -> persist("github", payload, identity));
   }
 
-  public Mono<OAuthCredentialResponse> refreshGitHub(String clientId, Identity identity) {
+  public Mono<OAuthCredentialResponse> refreshGitHub(Identity identity) {
     return loadBundle("github", identity)
         .flatMap(
             existing -> {
               String refreshToken = text(existing.payload(), "refresh_token");
               return remote
                   .postJson(
-                      "https://github.com/login/oauth/access_token",
+                      oauth.getGithub().getTokenUrl().toString(),
                       Map.of(
-                          "client_id", clientId,
-                          "refresh_token", refreshToken,
-                          "grant_type", "refresh_token"))
+                          "client_id",
+                          githubClientId(),
+                          "refresh_token",
+                          refreshToken,
+                          "grant_type",
+                          "refresh_token"))
                   .map(payload -> mergeRefresh(payload, refreshToken));
             })
         .flatMap(payload -> persist("github", payload, identity));
@@ -166,15 +163,24 @@ public class OAuthCredentialService {
 
   private void refreshForRuntime(String provider, Identity identity) {
     if ("codex".equals(provider)) {
-      refreshCodex(codexClientId, CODEX_TOKEN_URL, identity).block(Duration.ofSeconds(15));
+      refreshCodex(identity).block(Duration.ofSeconds(15));
       return;
     }
-    if ("github".equals(provider) && githubClientId != null && !githubClientId.isBlank()) {
-      refreshGitHub(githubClientId, identity).block(Duration.ofSeconds(15));
+    if ("github".equals(provider)) {
+      refreshGitHub(identity).block(Duration.ofSeconds(15));
       return;
     }
     throw new ProviderOperationException(
         "OAUTH_REFRESH_UNAVAILABLE", 503, "OAuth credential refresh is unavailable");
+  }
+
+  private String githubClientId() {
+    String clientId = oauth.getGithub().getClientId();
+    if (clientId == null || clientId.isBlank()) {
+      throw new ProviderOperationException(
+          "GITHUB_CLIENT_ID_NOT_CONFIGURED", 503, "GitHub Client ID is not configured");
+    }
+    return clientId;
   }
 
   private Mono<OAuthCredentialResponse> persist(

@@ -28,7 +28,6 @@ import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.core.state.AgentStateStore;
-import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
@@ -63,22 +62,6 @@ public final class HarnessAgentFactory {
   private final Clock clock;
   private final AgentToolRegistry toolRegistry;
   private final AgentStateStore stateStore;
-
-  public HarnessAgentFactory() {
-    this(Clock.systemUTC(), new AgentToolRegistry());
-  }
-
-  public HarnessAgentFactory(Clock clock) {
-    this(clock, new AgentToolRegistry());
-  }
-
-  public HarnessAgentFactory(AgentToolRegistry toolRegistry) {
-    this(Clock.systemUTC(), toolRegistry);
-  }
-
-  public HarnessAgentFactory(Clock clock, AgentToolRegistry toolRegistry) {
-    this(clock, toolRegistry, new InMemoryAgentStateStore());
-  }
 
   public HarnessAgentFactory(
       Clock clock, AgentToolRegistry toolRegistry, AgentStateStore stateStore) {

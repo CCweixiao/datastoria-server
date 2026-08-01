@@ -5,13 +5,14 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
 const checkOnly = process.argv.includes("--check");
-const dialects = ["sqlite", "mysql"];
+const dialects = ["mysql"];
 
 for (const dialect of dialects) {
   const migrationDir = resolve(
     root,
     "datastoria-dao/src/main/resources/db/migration",
     dialect,
+    "versioned",
   );
   const files = (await readdir(migrationDir))
     .filter((name) => /^V\d+__.+\.sql$/.test(name))
@@ -32,27 +33,38 @@ for (const dialect of dialects) {
     }
   }
 
-  const output =
+  const ddlOutput =
     `-- GENERATED FILE. DO NOT EDIT DIRECTLY.\n` +
     `-- Regenerate with: node bin/dev/generate-schema-snapshots.mjs\n` +
-    `-- Deployment helper for a NEW ${dialect.toUpperCase()} database at Flyway V${version(files.at(-1))}.\n` +
-    `-- Application startup continues to use db/migration/${dialect}; this file is not auto-run.\n\n` +
+    `-- Copyable DDL for a NEW ${dialect.toUpperCase()} database at Flyway V${version(files.at(-1))}.\n` +
+    `-- Manual deployment helper; do not execute before Flyway manages the same database.\n\n` +
     ddl.join("\n\n") +
     "\n";
-  const outputPath = resolve(
+  const dmlOutput =
+    `-- GENERATED FILE. DO NOT EDIT DIRECTLY.\n` +
+    `-- Regenerate with: node bin/dev/generate-schema-snapshots.mjs\n` +
+    `-- Copyable static DML for a NEW ${dialect.toUpperCase()} database at Flyway V${version(files.at(-1))}.\n` +
+    `-- Intentionally empty: tenant-owned Skills and RCA templates are provisioned by the application;\n` +
+    `-- providers, models, API keys and other secrets must be configured by an administrator.\n`;
+  const outputDir = resolve(
     root,
-    "datastoria-dao/src/main/resources/db/schema",
+    "datastoria-dao/src/main/resources/db/migration",
     dialect,
-    "schema.sql",
   );
+  const outputs = [
+    [resolve(outputDir, "ddl.sql"), ddlOutput],
+    [resolve(outputDir, "dml.sql"), dmlOutput],
+  ];
 
-  if (checkOnly) {
-    const current = await readFile(outputPath, "utf8");
-    if (current !== output) {
-      throw new Error(`${outputPath} is stale; regenerate schema snapshots`);
+  for (const [outputPath, output] of outputs) {
+    if (checkOnly) {
+      const current = await readFile(outputPath, "utf8");
+      if (current !== output) {
+        throw new Error(`${outputPath} is stale; regenerate schema helpers`);
+      }
+    } else {
+      await writeFile(outputPath, output);
     }
-  } else {
-    await writeFile(outputPath, output);
   }
 }
 

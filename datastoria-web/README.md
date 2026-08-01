@@ -5,7 +5,7 @@ connections, credentials, models, sessions and Agent runs are owned by the Sprin
 
 ## Development
 
-From the repository root, start Java with the `local` profile. Then:
+From the repository root, start Java with the `dev` profile. Then:
 
 ```bash
 git submodule update --init --recursive

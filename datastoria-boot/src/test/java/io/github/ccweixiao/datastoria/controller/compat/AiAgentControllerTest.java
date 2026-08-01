@@ -68,12 +68,12 @@ import reactor.core.publisher.Mono;
 
 /**
  * Integration test for {@link AiAgentController} ({@code POST /api/ai/agent}) with a fake model and
- * SQLite: SSE stream + fixed headers, client-secret rejection, idempotency, tenant/session/model
+ * MySQL: SSE stream + fixed headers, client-secret rejection, idempotency, tenant/session/model
  * validation, provider-error sanitization, and run lifecycle persistence. No real provider.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient(timeout = "PT30S")
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 @Import(AiAgentControllerTest.FakeModelConfig.class)
 class AiAgentControllerTest {
 
@@ -189,7 +189,7 @@ class AiAgentControllerTest {
             """)
         .param("tenant", TENANT)
         .param("user", USER)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
     messageRepository.save(
         new ChatMessage(
@@ -280,7 +280,7 @@ class AiAgentControllerTest {
             """)
         .param("tenant", TENANT)
         .param("user", USER)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
     messageRepository.save(
         new ChatMessage(
@@ -768,14 +768,15 @@ class AiAgentControllerTest {
   }
 
   @Test
-  void completedRunWithUsagePersistedAfterStream() {
+  void completedRunWithUsagePersistedAfterStream() throws Exception {
     fakeProvider.setModel(FakeStreamModel.builder().text("Hi").finish(7, 9).build());
     postStream(streamBody("sess-1", "mdl-1", "hi"), "idem-persist");
 
     AgentRun run = awaitRun("idem-persist", AgentRunStatus.SUCCEEDED);
     assertThat(run).isNotNull();
     assertThat(run.status()).isEqualTo(AgentRunStatus.SUCCEEDED);
-    assertThat(run.usageJson()).contains("\"inputTokens\":7").contains("\"totalTokens\":16");
+    assertThat(MAPPER.readTree(run.usageJson()).path("inputTokens").asInt()).isEqualTo(7);
+    assertThat(MAPPER.readTree(run.usageJson()).path("totalTokens").asInt()).isEqualTo(16);
     assertThat(run.errorCode()).isNull();
     assertThat(run.safeMessage()).isNull();
   }
@@ -917,10 +918,10 @@ class AiAgentControllerTest {
     assertThat(run.messageId()).isNotEqualTo("msg-1");
     assertThat(assistant).isNotNull();
     assertThat(assistant.role()).isEqualTo("assistant");
-    assertThat(messageRepository.findById("msg-1", TENANT, "sess-1"))
-        .get()
-        .extracting(ChatMessage::role, ChatMessage::partsJson)
-        .containsExactly("user", "[{\"type\":\"text\",\"text\":\"original user text\"}]");
+    ChatMessage original = messageRepository.findById("msg-1", TENANT, "sess-1").orElseThrow();
+    assertThat(original.role()).isEqualTo("user");
+    assertThat(MAPPER.readTree(original.partsJson()))
+        .isEqualTo(MAPPER.readTree("[{\"type\":\"text\",\"text\":\"original user text\"}]"));
   }
 
   @Test
@@ -1154,7 +1155,7 @@ class AiAgentControllerTest {
                 + " VALUES (:id,:t,'openai','OpenAI','api_key',1,'admin','admin',:now,:now)")
         .param("id", id)
         .param("t", TENANT)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 
@@ -1168,7 +1169,7 @@ class AiAgentControllerTest {
         .param("t", TENANT)
         .param("p", providerId)
         .param("k", modelKey)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 
@@ -1184,7 +1185,7 @@ class AiAgentControllerTest {
         .param("id", id)
         .param("t", tenant)
         .param("u", user)
-        .param("now", NOW.toString())
+        .param("now", java.sql.Timestamp.from(NOW))
         .update();
   }
 

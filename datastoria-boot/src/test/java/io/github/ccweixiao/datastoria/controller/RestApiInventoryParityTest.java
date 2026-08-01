@@ -28,7 +28,7 @@ import org.yaml.snakeyaml.Yaml;
  * is covered separately.
  */
 @SpringBootTest
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class RestApiInventoryParityTest {
 
   private static final Pattern API_LITERAL = Pattern.compile("/api/[A-Za-z0-9_./:${}-]+");

@@ -22,7 +22,8 @@ bin/datastoria start
 bin/datastoria status
 ```
 
-Open `http://localhost:3000`. The default `local` profile uses SQLite and is intended for
+Open `http://localhost:3000`. The `dev` profile uses the same MySQL 5.7 schema as production and is
+intended for
 development/evaluation. Production uses MySQL and OAuth2/OIDC.
 
 ## Build from source

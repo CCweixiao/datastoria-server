@@ -20,7 +20,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
  * secret entirely.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class SecretRedactionTest {
 
   @Autowired WebTestClient web;

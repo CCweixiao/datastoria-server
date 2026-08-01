@@ -14,7 +14,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 
 /** Verifies that stale If-Match headers cause 409 REVISION_CONFLICT across resources. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 class OptimisticLockTest {
 
   @Autowired WebTestClient web;

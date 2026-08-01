@@ -76,7 +76,7 @@ Spring domain 不直接暴露 AgentScope 类型给 controller 和 JPA/MyBatis ma
 
 ### 发现
 
-实现数据库无关的 `DatabaseSkillRepositoryAdapter`，开发连接 SQLite、生产连接 MySQL：
+实现 `DatabaseSkillRepositoryAdapter`，开发和生产都连接 MySQL 5.7：
 
 - 根据 tenant/user 查询 global published + owner self published。
 - 过滤 disabled/invalid 和 requiredTools 不满足的 Skill。
@@ -228,7 +228,7 @@ trace 关联 requestId、runId、sessionId、toolCallId；禁止把 prompt、密
 1. JDK 17/Spring Boot 3.5.x 编译启动。
 2. 一个模型的流式 text/reasoning/usage。
 3. 一个假工具的 schema、调用、输出。
-4. 一个数据库 Skill 的 catalog + 按需正文加载，并在 SQLite/MySQL contract 中验证。
+4. 一个数据库 Skill 的 catalog + 按需正文加载，并在 MySQL 5.7 contract 中验证。
 5. ask/approve 的暂停、服务重启、恢复。
 6. AgentScope 事件到 AI SDK fixture 的兼容测试。
 

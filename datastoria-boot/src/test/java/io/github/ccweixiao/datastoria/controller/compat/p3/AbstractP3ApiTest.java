@@ -22,7 +22,7 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
  * <p>Subclasses opt into alternate configurations ({@code allow-anonymous=false}, {@code
  * store-enabled=false}) via their own {@code @TestPropertySource}/{@code DynamicPropertyRegistry}.
  */
-@ActiveProfiles("test")
+@ActiveProfiles("dev")
 public abstract class AbstractP3ApiTest {
 
   protected static final String OWNER_EMAIL = "dev@example.com";

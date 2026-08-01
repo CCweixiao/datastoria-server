@@ -93,7 +93,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
 
 ./mvnw -pl datastoria-boot -am package -DskipTests
-SPRING_PROFILES_ACTIVE=local \
+SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
 ```
 
@@ -105,7 +105,7 @@ curl -fsS http://127.0.0.1:8080/actuator/health
 
 日常断点调试可以直接在 IDE 中运行
 `io.github.ccweixiao.datastoria.DatastoriaServerApplication`，JDK 选择 17，Active Profile
-设置为 `local`，并配置 `DATASTORIA_MASTER_KEY`。
+设置为 `dev`，并配置 `DATASTORIA_MASTER_KEY`。
 
 ## 4. 推荐方式：npm 启动前端
 
@@ -287,7 +287,7 @@ curl -fsS http://127.0.0.1:8080/actuator/health
 - 修改环境变量后是否重启了 Next.js；
 - 浏览器 Network 中是否出现 401、403、404 或 CORS 错误；
 - 本地身份是否为 `dev@example.com`；
-- 后端是否使用 `local` Profile。
+- 后端是否使用 `dev` Profile。
 
 ### `CLIENT_SECRET_NOT_ALLOWED`
 

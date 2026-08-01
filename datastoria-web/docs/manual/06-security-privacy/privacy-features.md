@@ -8,7 +8,7 @@ description: DataStoria credential, query and AI data boundaries.
 ## Stored data
 
 Spring Boot stores application configuration, users, ClickHouse connections, model providers,
-sessions, messages, feedback and Agent Run state in SQLite (development) or MySQL (production).
+sessions, messages, feedback and Agent Run state in MySQL 5.7 in both development and production.
 ClickHouse passwords and model API keys are encrypted with AES-256-GCM and are never returned to
 the browser after saving.
 

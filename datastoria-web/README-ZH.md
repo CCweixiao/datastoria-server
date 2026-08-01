@@ -6,7 +6,7 @@
 
 ## 启动
 
-先在仓库根目录以 `local` profile 启动 Java，然后执行：
+先在仓库根目录以 `dev` profile 启动 Java，然后执行：
 
 ```bash
 git submodule update --init --recursive

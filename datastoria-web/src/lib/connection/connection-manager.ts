@@ -1,4 +1,4 @@
-import { backendApiFetch } from "@/lib/backend-api";
+import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { listUserState, putUserState } from "@/lib/user-state-client";
 import type { ConnectionConfig } from "./connection-config";
 
@@ -17,6 +17,8 @@ export interface ConnectionChangeEventArgs {
   afterChange: ConnectionConfig | null;
 }
 
+const apiUrl = backendApiUrl;
+
 type ServerConnection = {
   id: string;
   name: string;
@@ -27,19 +29,8 @@ type ServerConnection = {
   revision: number;
 };
 
-function apiUrl(path: string): string {
-  const base = (
-    process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "http://127.0.0.1:8080"
-  ).replace(/\/+$/, "");
-  return `${base}${path}`;
-}
-
 function headers(extra?: HeadersInit): HeadersInit {
-  const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
-  return {
-    ...(email ? { "x-datastoria-user-email": email } : {}),
-    ...(extra ?? {}),
-  };
+  return backendApiHeaders(extra);
 }
 
 function fromServer(connection: ServerConnection): ConnectionConfig {

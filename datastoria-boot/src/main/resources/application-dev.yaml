@@ -1,0 +1,20 @@
+# Local development profile. MySQL 5.7 is the only supported database.
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/datastoria?useSSL=false&serverTimezone=UTC&characterEncoding=utf8
+    username: datastoria
+    password: "Datastoria@123456"
+
+datastoria:
+  master-key: ${DATASTORIA_MASTER_KEY}
+  agent:
+    repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
+  skills:
+    seed-enabled: true
+  identity:
+    default-tenant: tenant-dev
+    default-user: dev@example.com
+    default-roles: ROLE_ADMIN,ROLE_USER
+    admin-users: dev@example.com
+  cors:
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000

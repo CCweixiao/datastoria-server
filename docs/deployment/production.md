@@ -2,7 +2,7 @@
 
 ## 推荐拓扑
 
-生产环境推荐使用统一安装包运行 Next.js 与 Java，并使用外部 MySQL 8。入口负载均衡器负责
+生产环境推荐使用统一安装包运行 Next.js 与 Java，并使用外部 MySQL 5.7。入口负载均衡器负责
 TLS、域名、访问日志和限流；Java 只允许 Next.js/受信网络访问。ClickHouse 与模型供应商通过
 受控出站网络访问。
 
@@ -12,7 +12,7 @@ TLS、域名、访问日志和限流；Java 只允许 Next.js/受信网络访问
 占位符：
 
 ```sql
-CREATE DATABASE datastoria CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE DATABASE datastoria CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'datastoria'@'10.%' IDENTIFIED BY '<由密钥系统生成>';
 GRANT ALL PRIVILEGES ON datastoria.* TO 'datastoria'@'10.%';
 ```
@@ -43,6 +43,7 @@ DATASTORIA_DB_PASSWORD=<从密钥系统注入>
 DATASTORIA_MASTER_KEY=<base64 编码的 32 字节随机值>
 DATASTORIA_CORS_ALLOWED_ORIGINS=https://datastoria.example.com
 DATASTORIA_AUTH_SUCCESS_URL=https://datastoria.example.com
+DATASTORIA_DEFAULT_TENANT=tenant-default
 
 SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID=<由身份平台提供>
 SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET=<从密钥系统注入>
@@ -98,7 +99,7 @@ Schema；否则恢复升级前备份。
 - MySQL `datastoria` 数据库；
 - `conf/datastoria.env`（加密保管）；
 - 主密钥（独立密钥系统，多副本）；
-- 自定义 `application-prod.yaml`。
+- 受控的环境变量配置清单。
 
 监控至少覆盖 Java/Next.js 进程、`/actuator/health`、HTTP 5xx、SSE 断开、MySQL 连接池、
 磁盘和证书到期。不要采集请求体中的 Prompt、SQL 结果或 Authorization Header 到普通日志。

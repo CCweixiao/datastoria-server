@@ -1,10 +1,19 @@
 spring:
   application:
     name: datastoria-server
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/mysql/versioned
+    baseline-on-migrate: false
   sql:
     init:
-      # Flyway is the only runtime schema owner. db/schema/** files are manual deployment
-      # snapshots and must never be auto-executed alongside migrations.
+      # Flyway is the only runtime schema owner. ddl.sql/dml.sql are manual deployment helpers
+      # and must never be auto-executed alongside migrations.
       mode: never
 
 server:
@@ -28,17 +37,15 @@ info:
     name: DataStoria Server
     description: Spring Boot backend for DataStoria
 
-# A Spring profile must always be active to wire the datasource:
-#   local  -> SQLite file (./data/datastoria.db)
-#   test   -> SQLite in-memory
-#   prod   -> MySQL (fail-fast on missing env vars)
-# Running without a profile intentionally has no datasource.
+# Exactly one runtime profile is supported:
+#   dev  -> MySQL 5.7 with convenient local defaults and development identity headers
+#   prod -> MySQL 5.7 with environment-owned credentials and OAuth2 authentication
+# Both profiles use the same Flyway migrations, MyBatis mappers and MysqlAgentStateStore.
+# Running without a profile intentionally fails because no datasource URL is configured.
 
-# MyBatis-Plus configuration shared by every datasource profile. SQLite and MySQL load the
-# SAME mapper XML, type handlers and camelCase mapping; only the datasource (Flyway location +
-# JDBC driver) changes per profile. No global TenantLine/LogicDelete/OptimisticLocker plugins
-# are enabled here: tenant_id, deleted_at and revision semantics are implemented explicitly
-# by the repository adapters and custom mapper XML.
+# MyBatis-Plus configuration shared by dev and prod. No global
+# TenantLine/LogicDelete/OptimisticLocker plugins are enabled here: tenant_id, deleted_at and
+# revision semantics are implemented explicitly by repository adapters and mapper XML.
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   type-handlers-package: io.github.ccweixiao.datastoria.dao.persistence.typehandler
