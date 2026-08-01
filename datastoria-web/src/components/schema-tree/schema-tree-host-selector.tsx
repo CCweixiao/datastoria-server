@@ -1,5 +1,6 @@
 import { useConnection } from "@/components/connection/connection-context";
 import { HighlightableCommandItem } from "@/components/shared/cmdk/cmdk-extension";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import {
   Command,
   CommandEmpty,
@@ -35,6 +36,7 @@ interface SchemaTreeHostSelectorProps {
 }
 
 export const CommandItemTableHeader: React.FC = () => {
+  const { t } = useUiPreferences();
   const filterCount = useCommandState(
     (state: { filtered: { count: number } }) => state.filtered.count
   );
@@ -43,10 +45,10 @@ export const CommandItemTableHeader: React.FC = () => {
     <div className="grid grid-cols-[32px_28px_minmax(auto,200px)_100px_40px_40px] gap-1 px-2 py-2 text-[10px] font-medium text-muted-foreground bg-muted/30 border-b sticky top-0 z-10">
       <div className="flex items-center justify-center"></div>
       <div className="text-center">#</div>
-      <div>{filterCount} Host(s)</div>
-      <div>IP Address</div>
-      <div className="text-center">Shard</div>
-      <div className="text-center">Replica</div>
+      <div>{t("schema.hostCount", { count: filterCount })}</div>
+      <div>{t("schema.ipAddress")}</div>
+      <div className="text-center">{t("schema.shard")}</div>
+      <div className="text-center">{t("schema.replica")}</div>
     </div>
   );
 };
@@ -56,6 +58,7 @@ export function SchemaTreeHostSelector({
   nodeName,
   onHostChange,
 }: SchemaTreeHostSelectorProps) {
+  const { t } = useUiPreferences();
   const { connection } = useConnection();
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<HostInfo[]>([]);
@@ -127,11 +130,11 @@ ORDER BY shard, replica`,
             }
             setError(null);
           } catch {
-            setError("Failed to parse response");
+            setError(t("schema.parseFailed"));
           }
         })
         .catch((err) => {
-          setError(err.message || "Failed to load cluster info");
+          setError(err.message || t("schema.clusterLoadFailed"));
         })
         .finally(() => {
           setLoading(false);
@@ -162,7 +165,7 @@ ORDER BY shard, replica`,
         {loading ? (
           <div className="p-4 text-sm items-center flex gap-2 justify-center text-center text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            Loading...
+            {t("schema.loading")}
           </div>
         ) : (
           <Command
@@ -173,14 +176,16 @@ ORDER BY shard, replica`,
             }}
             className="[&_[cmdk-input]]:h-10"
           >
-            <CommandInput placeholder="Search hosts..." className="!h-10" />
+            <CommandInput placeholder={t("schema.searchHosts")} className="!h-10" />
 
             <CommandItemTableHeader />
             <CommandList className="max-h-[400px] overflow-y-auto overflow-x-hidden">
               {error && <CommandEmpty className="p-3 text-center">{error}</CommandEmpty>}
               {data.length > 0 && (
                 <>
-                  <CommandEmpty className="p-2 text-xs text-center">No hosts found.</CommandEmpty>
+                  <CommandEmpty className="p-2 text-xs text-center">
+                    {t("schema.noHosts")}
+                  </CommandEmpty>
                   {data.map((node, idx) => {
                     const isSelected =
                       node.shortName === initialSelectedHost || node.address === nodeName;

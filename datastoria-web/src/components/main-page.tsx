@@ -7,6 +7,7 @@ import {
   SchemaTreeLoader,
   type SchemaLoadResult,
 } from "@/components/schema-tree/schema-tree-loader";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { SidebarPanel } from "@/components/sidebar-panel/sidebar-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -643,6 +644,7 @@ function NewReleaseBanner() {
 }
 
 export function MainPage() {
+  const { t } = useUiPreferences();
   const { connection, pendingConfig, commitConnection, isInitialized, isConnectionAvailable } =
     useConnection();
 
@@ -744,10 +746,10 @@ export function MainPage() {
                     variant="outline"
                     size="sm"
                     className="gap-2"
-                    aria-label="Open schema browser"
+                    aria-label={t("schema.open")}
                   >
                     <Database className="h-4 w-4" />
-                    Schema
+                    {t("schema.title")}
                   </Button>
                 </SheetTrigger>
                 <SheetPortal>
@@ -762,9 +764,9 @@ export function MainPage() {
                       "w-[min(320px,85vw)] p-0 flex flex-col overflow-hidden"
                     )}
                   >
-                    <SheetTitle className="sr-only">Schema Browser</SheetTitle>
+                    <SheetTitle className="sr-only">{t("schema.browser")}</SheetTitle>
                     <SheetDescription className="sr-only">
-                      Browse databases, tables, and columns. Use the search field to filter by name.
+                      {t("schema.browserHelp")}
                     </SheetDescription>
                     <div className="flex-1 min-h-0 overflow-auto p-2">
                       <SchemaTreeView initialSchemaData={loadedSchemaData} />
