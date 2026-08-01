@@ -23,6 +23,7 @@ import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.FeedbackTargetNotFoundException;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
+import io.github.ccweixiao.datastoria.common.error.ProtectedAdminAccountException;
 import io.github.ccweixiao.datastoria.common.error.ProviderOperationException;
 import io.github.ccweixiao.datastoria.common.error.ResourceInUseException;
 import io.github.ccweixiao.datastoria.common.error.RevisionConflictException;
@@ -63,6 +64,13 @@ public class GlobalExceptionHandler {
       AdminAccessRequiredException ex) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
         .body(problems.forError(ApiErrorCode.ADMIN_ACCESS_REQUIRED));
+  }
+
+  @ExceptionHandler(ProtectedAdminAccountException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleProtectedAdminAccount(
+      ProtectedAdminAccountException ex) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(problems.forError(ApiErrorCode.ADMIN_ACCOUNT_PROTECTED));
   }
 
   @ExceptionHandler(ConflictException.class)

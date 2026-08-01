@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.github.ccweixiao.datastoria.common.dto.CreateModelRequest;
 import io.github.ccweixiao.datastoria.common.dto.ModelResponse;
 import io.github.ccweixiao.datastoria.common.dto.UpdateModelRequest;
+import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.controller.RevisionHeader;
 import io.github.ccweixiao.datastoria.service.ModelService;
@@ -28,6 +29,7 @@ import reactor.core.publisher.Mono;
 /** Admin API for model catalog management. */
 @RestController
 @RequestMapping("/api/admin/ai/models")
+@AdminAccess
 public class ModelAdminController {
 
   private static final Logger log = LoggerFactory.getLogger(ModelAdminController.class);

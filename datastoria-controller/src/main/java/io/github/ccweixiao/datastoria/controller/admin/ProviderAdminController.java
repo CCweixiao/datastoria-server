@@ -22,6 +22,7 @@ import io.github.ccweixiao.datastoria.common.dto.DiscoveredModelResponse;
 import io.github.ccweixiao.datastoria.common.dto.ProviderResponse;
 import io.github.ccweixiao.datastoria.common.dto.ProviderTestResponse;
 import io.github.ccweixiao.datastoria.common.dto.UpdateProviderRequest;
+import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.controller.RevisionHeader;
 import io.github.ccweixiao.datastoria.service.ProviderService;
@@ -35,6 +36,7 @@ import reactor.core.publisher.Mono;
  */
 @RestController
 @RequestMapping("/api/admin/ai/providers")
+@AdminAccess
 public class ProviderAdminController {
 
   private static final Logger log = LoggerFactory.getLogger(ProviderAdminController.class);

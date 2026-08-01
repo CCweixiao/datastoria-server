@@ -21,5 +21,7 @@ public interface UserAccountRepository {
   /** Updates mutable fields (role, status, email, passwordHash); bumps {@code updated_at}. */
   UserAccount update(UserAccount account);
 
+  void delete(String tenantId, String userId);
+
   boolean existsByUsername(String username);
 }

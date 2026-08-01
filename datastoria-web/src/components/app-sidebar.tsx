@@ -1,4 +1,5 @@
 import { AppLogo } from "@/components/app-logo";
+import { PermissionGuard, useAuthSession } from "@/components/auth-session-provider";
 import { useChatPanel } from "@/components/chat/view/use-chat-panel";
 import { useConnection } from "@/components/connection/connection-context";
 import { showConnectionEditDialog } from "@/components/connection/connection-edit-component";
@@ -33,7 +34,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { UserProfileImage } from "@/components/user-profile-image";
-import { loadAuthSession, signOut, type AuthSession } from "@/lib/auth-client";
+import { signOut, type AuthSession } from "@/lib/auth-client";
 import {
   BookOpen,
   ChevronRight,
@@ -46,11 +47,13 @@ import {
   Settings,
   Sparkles,
   Terminal,
+  Users,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { DashboardList } from "./dashboard-tab/dashboard-list";
 import { showSettingsDialog } from "./settings/settings-dialog";
 import { TabManager, type TabType } from "./tab-manager";
+import { UserManagementDialog } from "./users/user-management-dialog";
 
 function HoverCardSidebarMenuItem({
   icon,
@@ -305,26 +308,13 @@ export function AppSidebar() {
   const { t } = useUiPreferences();
   const { open: openChatPanel, setActiveSidebarTab, setDisplayMode } = useChatPanel();
   const [activeTabType, setActiveTabType] = useState<TabType | null>(null);
-  const [authUser, setAuthUser] = useState<NonNullable<AuthSession["user"]>>();
+  const { user: authUser } = useAuthSession();
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
 
   useEffect(() => {
     return TabManager.onActiveTabChange((event) => {
       setActiveTabType(event.detail.tabInfo?.type ?? null);
     });
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    loadAuthSession()
-      .then((session) => {
-        if (active) setAuthUser(session.user);
-      })
-      .catch(() => {
-        // AuthGate owns authentication failures; the sidebar simply omits account UI.
-      });
-    return () => {
-      active = false;
-    };
   }, []);
 
   return (
@@ -384,6 +374,18 @@ export function AppSidebar() {
             {isConnectionAvailable && <SystemTableIntrospectionSidebarMenuItem />}
 
             <SettingsSidebarMenuItem />
+            <PermissionGuard roles={["ADMIN"]}>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="default"
+                  tooltip={t("sidebar.userManagement")}
+                  onClick={() => setUserManagementOpen(true)}
+                >
+                  <Users className="h-5 w-5" />
+                  <span>{t("sidebar.userManagement")}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </PermissionGuard>
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
@@ -400,6 +402,9 @@ export function AppSidebar() {
           ) : null}
         </SidebarMenu>
       </SidebarFooter>
+      <PermissionGuard roles={["ADMIN"]}>
+        <UserManagementDialog open={userManagementOpen} onOpenChange={setUserManagementOpen} />
+      </PermissionGuard>
     </Sidebar>
   );
 }

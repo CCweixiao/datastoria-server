@@ -78,6 +78,18 @@ public class MyBatisUserAccountRepository implements UserAccountRepository {
   }
 
   @Override
+  public void delete(String tenantId, String userId) {
+    int affected =
+        mapper.delete(
+            Wrappers.<UserAccountEntity>lambdaQuery()
+                .eq(UserAccountEntity::getTenantId, tenantId)
+                .eq(UserAccountEntity::getUserId, userId));
+    if (affected == 0) {
+      throw new NotFoundException("UserAccount", userId);
+    }
+  }
+
+  @Override
   public boolean existsByUsername(String username) {
     Long count =
         mapper.selectCount(

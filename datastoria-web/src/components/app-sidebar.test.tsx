@@ -2,10 +2,12 @@
  * @vitest-environment jsdom
  */
 
+import type { AuthSession } from "@/lib/auth-client";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppSidebar } from "./app-sidebar";
+import { AuthSessionProvider } from "./auth-session-provider";
 
 const {
   openMock,
@@ -14,7 +16,6 @@ const {
   switchConnectionMock,
   showConnectionEditDialogMock,
   savedConnectionsMock,
-  loadAuthSessionMock,
   signOutMock,
 } = vi.hoisted(() => ({
   openMock: vi.fn(),
@@ -23,12 +24,10 @@ const {
   switchConnectionMock: vi.fn(),
   showConnectionEditDialogMock: vi.fn(),
   savedConnectionsMock: vi.fn((): unknown[] => []),
-  loadAuthSessionMock: vi.fn(),
   signOutMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-client", () => ({
-  loadAuthSession: loadAuthSessionMock,
   signOut: signOutMock,
 }));
 
@@ -39,6 +38,7 @@ vi.mock("@/components/shared/ui-preferences-provider", () => ({
         "sidebar.workWithAi": "Work with AI",
         "sidebar.querySql": "Query Data with SQL",
         "sidebar.settings": "Settings",
+        "sidebar.userManagement": "User Management",
         "sidebar.account": "Account",
         "sidebar.logout": "Log out",
         "sidebar.help": "Help & Resources",
@@ -127,6 +127,10 @@ vi.mock("./settings/settings-dialog", () => ({
   showSettingsDialog: vi.fn(),
 }));
 
+vi.mock("./users/user-management-dialog", () => ({
+  UserManagementDialog: () => <div>UserManagementDialog</div>,
+}));
+
 vi.mock("@/components/user-profile-image", () => ({
   UserProfileImage: () => <div>UserProfileImage</div>,
 }));
@@ -177,8 +181,6 @@ describe("AppSidebar", () => {
     showConnectionEditDialogMock.mockReset();
     savedConnectionsMock.mockReset();
     savedConnectionsMock.mockReturnValue([]);
-    loadAuthSessionMock.mockReset();
-    loadAuthSessionMock.mockResolvedValue({});
     signOutMock.mockReset();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -186,11 +188,15 @@ describe("AppSidebar", () => {
   });
 
   it("shows the authenticated account and signs out through the Java API wrapper", async () => {
-    loadAuthSessionMock.mockResolvedValue({
-      user: { id: "user-1", name: "Example User", email: "user@example.com" },
-    });
     await act(async () => {
-      root.render(<AppSidebar />);
+      renderSidebar({
+        user: {
+          id: "user-1",
+          name: "Example User",
+          email: "user@example.com",
+          role: "USER",
+        },
+      });
     });
 
     expect(container.textContent).toContain("Example User");
@@ -204,6 +210,18 @@ describe("AppSidebar", () => {
     expect(signOutMock).toHaveBeenCalledWith("/login");
   });
 
+  it("shows user management only to administrators", async () => {
+    await act(async () => {
+      renderSidebar({ user: { id: "admin-1", name: "Admin", role: "ADMIN" } });
+    });
+    expect(container.textContent).toContain("User Management");
+
+    await act(async () => {
+      renderSidebar({ user: { id: "user-1", name: "User", role: "USER" } });
+    });
+    expect(container.textContent).not.toContain("User Management");
+  });
+
   afterEach(() => {
     act(() => {
       root.unmount();
@@ -213,7 +231,7 @@ describe("AppSidebar", () => {
 
   it("opens the AI sidebar in panel mode when the active tab is the query editor", async () => {
     await act(async () => {
-      root.render(<AppSidebar />);
+      renderSidebar();
     });
 
     await act(async () => {
@@ -242,7 +260,7 @@ describe("AppSidebar", () => {
 
   it("uses the default chat open behavior when the active tab is not the query editor", async () => {
     await act(async () => {
-      root.render(<AppSidebar />);
+      renderSidebar();
     });
 
     await act(async () => {
@@ -271,7 +289,7 @@ describe("AppSidebar", () => {
 
   it("opens the create connection dialog from the connection button when no connection exists", async () => {
     await act(async () => {
-      root.render(<AppSidebar />);
+      renderSidebar();
     });
 
     const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
@@ -292,7 +310,7 @@ describe("AppSidebar", () => {
     savedConnectionsMock.mockReturnValue([{ name: "existing" }]);
 
     await act(async () => {
-      root.render(<AppSidebar />);
+      renderSidebar();
     });
 
     const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
@@ -308,4 +326,12 @@ describe("AppSidebar", () => {
       onSave: switchConnectionMock,
     });
   });
+
+  function renderSidebar(session: AuthSession = {}) {
+    root.render(
+      <AuthSessionProvider session={session}>
+        <AppSidebar />
+      </AuthSessionProvider>
+    );
+  }
 });

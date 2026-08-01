@@ -22,6 +22,7 @@ import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionRequest;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionTestResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseQueryRequest;
+import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 
@@ -51,6 +52,7 @@ public class ClickHouseConnectionController {
   }
 
   @PostMapping
+  @AdminAccess
   public Mono<ResponseEntity<ClickHouseConnectionResponse>> create(
       @RequestBody @Valid ClickHouseConnectionRequest request) {
     return IdentityContext.current()
@@ -66,6 +68,7 @@ public class ClickHouseConnectionController {
   }
 
   @PutMapping("/{id}")
+  @AdminAccess
   public Mono<ResponseEntity<ClickHouseConnectionResponse>> update(
       @PathVariable String id,
       @RequestHeader(value = "If-Match", required = false) String ifMatchHeader,
@@ -77,6 +80,7 @@ public class ClickHouseConnectionController {
   }
 
   @DeleteMapping("/{id}")
+  @AdminAccess
   public Mono<ResponseEntity<Void>> delete(
       @PathVariable String id,
       @RequestHeader(value = "If-Match", required = false) String ifMatchHeader) {
@@ -94,6 +98,7 @@ public class ClickHouseConnectionController {
   }
 
   @PostMapping("/test")
+  @AdminAccess
   public Mono<ResponseEntity<ClickHouseConnectionTestResponse>> testTransient(
       @RequestBody @Valid ClickHouseConnectionRequest request) {
     return IdentityContext.current()

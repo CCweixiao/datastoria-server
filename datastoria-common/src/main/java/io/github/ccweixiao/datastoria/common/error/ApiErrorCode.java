@@ -110,6 +110,12 @@ public enum ApiErrorCode {
       "Administrator access is required.",
       "需要管理员权限",
       "需要管理员权限才能执行此操作。"),
+  ADMIN_ACCOUNT_PROTECTED(
+      403,
+      "Administrator account is protected",
+      "This API can manage ordinary users only.",
+      "管理员账户受保护",
+      "此接口仅允许管理普通用户。"),
   USERNAME_ALREADY_EXISTS(
       409, "Username already exists", "The username is already in use.", "用户名已存在", "该用户名已被使用。"),
   INVALID_SHARE_CODE(403, "Invalid share code", "Invalid session share code.", "共享码无效", "会话共享码无效。"),

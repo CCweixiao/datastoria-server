@@ -38,14 +38,12 @@ import reactor.util.context.Context;
  *   <li>Any other path without a valid token (and without a pre-resolved identity) is rejected with
  *       {@code text/plain} 401 (written directly because filter-thrown exceptions bypass
  *       {@code @RestControllerAdvice}).
- *   <li>Paths under {@code /api/admin/} additionally require {@code ROLE_ADMIN}.
  * </ul>
  */
 @Component
 @Order(-200)
 public class JwtIdentityWebFilter implements WebFilter {
 
-  static final String ADMIN_PREFIX = "/api/admin/";
   private final JwtTokenService tokenService;
   private final TokenAccountResolver accountResolver;
 
@@ -62,7 +60,7 @@ public class JwtIdentityWebFilter implements WebFilter {
     }
     Identity preResolved = exchange.getAttribute(IdentityContext.PRE_RESOLVED_KEY);
     if (preResolved != null) {
-      return enforce(preResolved, path, exchange, chain);
+      return publish(preResolved, exchange, chain);
     }
     Optional<JwtTokenService.VerifiedToken> verified =
         tokenService.parseAndVerify(extractBearer(exchange));
@@ -83,15 +81,12 @@ public class JwtIdentityWebFilter implements WebFilter {
               if (maybeIdentity.isEmpty()) {
                 return writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED);
               }
-              return enforce(maybeIdentity.get(), path, exchange, chain);
+              return publish(maybeIdentity.get(), exchange, chain);
             });
   }
 
-  private static Mono<Void> enforce(
-      Identity identity, String path, ServerWebExchange exchange, WebFilterChain chain) {
-    if (path.startsWith(ADMIN_PREFIX) && !identity.isAdmin()) {
-      return writeError(exchange, ApiErrorCode.ADMIN_ACCESS_REQUIRED);
-    }
+  private static Mono<Void> publish(
+      Identity identity, ServerWebExchange exchange, WebFilterChain chain) {
     return chain.filter(exchange).contextWrite(Context.of(IdentityContext.CONTEXT_KEY, identity));
   }
 

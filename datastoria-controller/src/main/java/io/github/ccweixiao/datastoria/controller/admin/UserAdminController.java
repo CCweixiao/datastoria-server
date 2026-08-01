@@ -3,6 +3,7 @@ package io.github.ccweixiao.datastoria.controller.admin;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,18 +16,17 @@ import io.github.ccweixiao.datastoria.common.dto.CreateUserRequest;
 import io.github.ccweixiao.datastoria.common.dto.ResetPasswordRequest;
 import io.github.ccweixiao.datastoria.common.dto.UpdateUserRequest;
 import io.github.ccweixiao.datastoria.common.dto.UserResponse;
+import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.service.UserAccountService;
 
 import jakarta.validation.Valid;
 import reactor.core.publisher.Mono;
 
-/**
- * Admin user-account management. The {@code /api/admin/} prefix is gated to {@code ROLE_ADMIN} by
- * {@code JwtIdentityWebFilter}.
- */
+/** Administrator-only management of ordinary user accounts. */
 @RestController
 @RequestMapping("/api/admin/users")
+@AdminAccess
 public class UserAdminController {
 
   private final UserAccountService userAccountService;
@@ -77,5 +77,12 @@ public class UserAdminController {
                 userAccountService.resetPassword(identity.tenantId(), userId, req.password()))
         .map(UserResponse::from)
         .map(ResponseEntity::ok);
+  }
+
+  @DeleteMapping("/{userId}")
+  public Mono<ResponseEntity<Void>> delete(@PathVariable String userId) {
+    return IdentityContext.current()
+        .flatMap(identity -> userAccountService.delete(identity.tenantId(), userId))
+        .thenReturn(ResponseEntity.noContent().build());
   }
 }

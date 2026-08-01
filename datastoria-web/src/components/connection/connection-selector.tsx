@@ -1,3 +1,4 @@
+import { useAuthSession } from "@/components/auth-session-provider";
 import { useConnection } from "@/components/connection/connection-context";
 import { ConnectionDetailPanel } from "@/components/connection/connection-detail-panel";
 import { HighlightableCommandItem } from "@/components/shared/cmdk/cmdk-extension";
@@ -11,7 +12,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { loadAuthSession } from "@/lib/auth-client";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,8 @@ export function ConnectionSelector({
   const isMobile = useIsMobile();
   const { connection, pendingConfig, isConnectionAvailable, switchConnection } = useConnection();
   const [connections, setConnections] = useState<ConnectionConfig[]>([]);
-  const [canManageConnections, setCanManageConnections] = useState(false);
+  const { user } = useAuthSession();
+  const canManageConnections = user?.role === "ADMIN";
   const inputRef = useRef<HTMLInputElement>(null);
   const resolvedDefault =
     defaultConnectionNameProp ??
@@ -69,17 +70,6 @@ export function ConnectionSelector({
 
   useEffect(() => {
     reloadConnections();
-    let active = true;
-    void loadAuthSession()
-      .then((session) => {
-        if (active) setCanManageConnections(session.user?.role === "ADMIN");
-      })
-      .catch(() => {
-        if (active) setCanManageConnections(false);
-      });
-    return () => {
-      active = false;
-    };
   }, []); // Load connections on mount
 
   // Reload connections when selector opens and focus input

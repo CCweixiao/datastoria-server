@@ -15,6 +15,7 @@ import io.github.ccweixiao.datastoria.common.dto.UpdateUserRequest;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
+import io.github.ccweixiao.datastoria.common.error.ProtectedAdminAccountException;
 import io.github.ccweixiao.datastoria.dao.repository.UserAccountRepository;
 
 import reactor.core.publisher.Mono;
@@ -42,15 +43,13 @@ public class UserAccountService {
   }
 
   public Mono<List<UserAccount>> findAll(String tenantId) {
-    return Mono.fromCallable(() -> users.findAll(tenantId)).subscribeOn(jdbcScheduler);
+    return Mono.fromCallable(
+            () -> users.findAll(tenantId).stream().filter(account -> !account.isAdmin()).toList())
+        .subscribeOn(jdbcScheduler);
   }
 
   public Mono<UserAccount> findByUserId(String tenantId, String userId) {
-    return Mono.fromCallable(
-            () ->
-                users
-                    .findByTenantIdAndUserId(tenantId, userId)
-                    .orElseThrow(() -> new NotFoundException("UserAccount", userId)))
+    return Mono.fromCallable(() -> requireOrdinaryUser(tenantId, userId))
         .subscribeOn(jdbcScheduler);
   }
 
@@ -61,7 +60,7 @@ public class UserAccountService {
   public Mono<UserAccount> resetPassword(String tenantId, String userId, String newPassword) {
     return Mono.fromCallable(
             () -> {
-              UserAccount account = load(tenantId, userId);
+              UserAccount account = requireOrdinaryUser(tenantId, userId);
               return users.save(
                   new UserAccount(
                       account.userId(),
@@ -78,7 +77,19 @@ public class UserAccountService {
         .subscribeOn(jdbcScheduler);
   }
 
+  public Mono<Void> delete(String tenantId, String userId) {
+    return Mono.<Void>fromRunnable(
+            () -> {
+              requireOrdinaryUser(tenantId, userId);
+              users.delete(tenantId, userId);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
   private UserAccount doCreate(String tenantId, CreateUserRequest req) {
+    if (UserAccount.ROLE_ADMIN.equals(req.role())) {
+      throw new ProtectedAdminAccountException();
+    }
     if (users.existsByUsername(req.username())) {
       throw new ConflictException(ApiErrorCode.USERNAME_ALREADY_EXISTS);
     }
@@ -100,7 +111,10 @@ public class UserAccountService {
   }
 
   private UserAccount doUpdate(String tenantId, String userId, UpdateUserRequest req) {
-    UserAccount account = load(tenantId, userId);
+    UserAccount account = requireOrdinaryUser(tenantId, userId);
+    if (UserAccount.ROLE_ADMIN.equals(req.role())) {
+      throw new ProtectedAdminAccountException();
+    }
     String role = req.role() != null ? req.role() : account.role();
     Integer status = req.status() != null ? Integer.valueOf(req.status()) : account.status();
     String email = req.email() != null ? req.email() : account.email();
@@ -123,5 +137,13 @@ public class UserAccountService {
     return users
         .findByTenantIdAndUserId(tenantId, userId)
         .orElseThrow(() -> new NotFoundException("UserAccount", userId));
+  }
+
+  private UserAccount requireOrdinaryUser(String tenantId, String userId) {
+    UserAccount account = load(tenantId, userId);
+    if (account.isAdmin()) {
+      throw new ProtectedAdminAccountException();
+    }
+    return account;
   }
 }

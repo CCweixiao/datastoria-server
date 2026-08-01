@@ -19,6 +19,7 @@ import io.github.ccweixiao.datastoria.common.dto.AgentRevisionResponse;
 import io.github.ccweixiao.datastoria.common.dto.CreateAgentRequest;
 import io.github.ccweixiao.datastoria.common.dto.CreateAgentRevisionRequest;
 import io.github.ccweixiao.datastoria.common.dto.UpdateAgentRequest;
+import io.github.ccweixiao.datastoria.common.identity.AdminAccess;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.controller.RevisionHeader;
 
@@ -28,6 +29,7 @@ import reactor.core.publisher.Mono;
 /** Admin API for agent definition and revision management. */
 @RestController
 @RequestMapping("/api/admin/ai/agents")
+@AdminAccess
 public class AgentAdminController {
 
   private final AgentDefinitionService agentService;

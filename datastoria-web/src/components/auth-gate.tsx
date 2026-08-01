@@ -1,19 +1,21 @@
 "use client";
 
-import { loadAuthSession } from "@/lib/auth-client";
+import { loadAuthSession, type AuthSession } from "@/lib/auth-client";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AuthSessionProvider } from "./auth-session-provider";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(pathname === "/login");
+  const [session, setSession] = useState<AuthSession | null>(pathname === "/login" ? {} : null);
 
   useEffect(() => {
     if (pathname === "/login") {
-      setReady(true);
+      setSession({});
       return;
     }
+    setSession(null);
     let active = true;
     loadAuthSession()
       .then((session) => {
@@ -22,10 +24,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
           return;
         }
-        setReady(true);
+        setSession(session);
       })
       .catch(() => {
         if (active) {
+          setSession(null);
           router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
         }
       });
@@ -34,5 +37,5 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
-  return ready ? children : null;
+  return session ? <AuthSessionProvider session={session}>{children}</AuthSessionProvider> : null;
 }
