@@ -53,6 +53,11 @@ public class UserAccountService {
         .subscribeOn(jdbcScheduler);
   }
 
+  /** Loads the authenticated user's own account, including the protected administrator account. */
+  public Mono<UserAccount> findCurrentAccount(String tenantId, String userId) {
+    return Mono.fromCallable(() -> load(tenantId, userId)).subscribeOn(jdbcScheduler);
+  }
+
   public Mono<UserAccount> update(String tenantId, String userId, UpdateUserRequest req) {
     return Mono.fromCallable(() -> doUpdate(tenantId, userId, req)).subscribeOn(jdbcScheduler);
   }

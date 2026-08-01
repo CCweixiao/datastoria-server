@@ -103,6 +103,7 @@ class UserPreferenceServiceTest {
         new ModelProvider(
             Ulid.next(),
             TENANT,
+            null,
             "p-" + Ulid.next(),
             "P",
             null,
@@ -121,6 +122,7 @@ class UserPreferenceServiceTest {
         new Model(
             Ulid.next(),
             TENANT,
+            null,
             provider.id(),
             "m-" + Ulid.next(),
             "M",

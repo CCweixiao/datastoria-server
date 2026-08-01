@@ -6,6 +6,9 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { ModelConfigBootstrap } from "./model-config-bootstrap";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
+
 const { fetchAvailableModels, setSystemModels, setProviderSettings, setServerSelectedModel } =
   vi.hoisted(() => ({
     fetchAvailableModels: vi.fn().mockResolvedValue({
@@ -24,16 +27,6 @@ vi.mock("@/components/settings/agent/agent-manager", () => ({
 }));
 vi.mock("@/lib/ai/configuration/configuration-gateway", () => ({
   getAiConfigurationGateway: () => ({
-    listProviders: vi.fn().mockResolvedValue([
-      {
-        id: "provider-1",
-        providerKey: "OpenAI",
-        displayName: "OpenAI",
-        authType: "api_key",
-        credentialConfigured: true,
-        maskedHint: "sk-…test",
-      },
-    ]),
     getModelPreference: vi.fn().mockResolvedValue("model-config-1"),
   }),
 }));
@@ -66,9 +59,8 @@ it("loads only the Spring model catalog and server-side preference", async () =>
   expect(setProviderSettings).toHaveBeenCalledWith([
     {
       provider: "OpenAI",
-      providerId: "provider-1",
+      providerId: "",
       credentialConfigured: true,
-      maskedHint: "sk-…test",
     },
   ]);
   expect(setServerSelectedModel).toHaveBeenCalledWith("model-config-1");

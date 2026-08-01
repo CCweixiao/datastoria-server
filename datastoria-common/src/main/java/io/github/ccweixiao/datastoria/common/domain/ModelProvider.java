@@ -6,6 +6,7 @@ import java.time.Instant;
 public record ModelProvider(
     String id,
     String tenantId,
+    String ownerUserId,
     String providerKey,
     String displayName,
     String baseUrl,

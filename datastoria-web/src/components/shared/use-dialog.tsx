@@ -123,6 +123,7 @@ const AlertDialogComponent = (dialogProps: InternalDialogProps) => {
       <DialogContent
         // We set it to 10001 to make sure it's on top of the settings dialog (z-[9999]).
         className={cn("flex flex-col gap-1 p-5 justify-between z-[10001]", dialogProps.className)}
+        {...(!dialogProps.description ? { "aria-describedby": undefined } : {})}
         closeButtonClassName={dialogProps.closeButtonClassName}
         overlayClassName={cn("z-[10001]", dialogProps.overlayClassName)}
         disableBackdrop={dialogProps.disableBackdrop}

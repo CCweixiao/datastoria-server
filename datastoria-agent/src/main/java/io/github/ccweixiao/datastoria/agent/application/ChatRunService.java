@@ -240,7 +240,7 @@ public class ChatRunService {
               if (userMessages > 0 || hasAssistant) {
                 return null;
               }
-              Model model = resolveModel(req, identity.tenantId());
+              Model model = resolveModel(req, identity);
               ModelAdapter adapter = modelAdapterProvider.adapterFor(model, identity);
               RunContext titleContext =
                   new RunContext(
@@ -344,7 +344,7 @@ public class ChatRunService {
 
     Model model =
         modelRepository
-            .findById(run.modelId(), identity.tenantId())
+            .findAccessibleById(run.modelId(), identity.tenantId(), identity.userId())
             .orElseThrow(() -> new NotFoundException("Model", run.modelId()));
     ModelAdapter adapter;
     try {
@@ -573,7 +573,7 @@ public class ChatRunService {
       throw PlainTextException.badRequest("message.parts must contain text or an image");
     }
 
-    Model modelConfig = resolveModel(req, tenant);
+    Model modelConfig = resolveModel(req, identity);
     if (!modelConfig.enabled()) {
       throw PlainTextException.badRequest(ApiErrorCode.MODEL_DISABLED);
     }
@@ -950,10 +950,11 @@ public class ChatRunService {
     throw new ResourceInUseException("AgentRun", runId);
   }
 
-  private Model resolveModel(AgentChatRequest req, String tenant) {
+  private Model resolveModel(AgentChatRequest req, Identity identity) {
+    String tenant = identity.tenantId();
     if (req.modelConfigId() != null && !req.modelConfigId().isBlank()) {
       return modelRepository
-          .findById(req.modelConfigId(), tenant)
+          .findAccessibleById(req.modelConfigId(), tenant, identity.userId())
           .orElseThrow(() -> new NotFoundException("Model", req.modelConfigId()));
     }
     String modelKey = req.modelId();
@@ -961,7 +962,7 @@ public class ChatRunService {
       throw PlainTextException.badRequest(ApiErrorCode.MODEL_SELECTION_REQUIRED);
     }
     // Best-effort legacy {provider,modelId} resolution by model key; modelConfigId is preferred.
-    return modelRepository.findEnabled(tenant).stream()
+    return modelRepository.findEnabledAccessible(tenant, identity.userId()).stream()
         .filter(m -> modelKey.equals(m.modelKey()))
         .findFirst()
         .orElseThrow(() -> new NotFoundException("Model", modelKey));

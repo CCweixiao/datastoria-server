@@ -12,6 +12,7 @@ import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
 import io.github.ccweixiao.datastoria.common.domain.Model;
 import io.github.ccweixiao.datastoria.common.domain.ModelProvider;
 import io.github.ccweixiao.datastoria.common.dto.AvailableModelsResponse;
+import io.github.ccweixiao.datastoria.common.dto.AvailableProviderResponse;
 import io.github.ccweixiao.datastoria.common.dto.ModelProps;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ModelProviderRepository;
@@ -49,9 +50,21 @@ public class AvailableModelsService {
         .subscribeOn(jdbcScheduler);
   }
 
+  public Mono<List<AvailableProviderResponse>> getAvailableProviders(Identity identity) {
+    return Mono.fromCallable(
+            () ->
+                providerRepo.findSystemProviders(identity.tenantId()).stream()
+                    .filter(ModelProvider::enabled)
+                    .filter(provider -> !"oauth".equalsIgnoreCase(provider.authType()))
+                    .map(AvailableProviderResponse::from)
+                    .toList())
+        .subscribeOn(jdbcScheduler);
+  }
+
   private List<ModelProps> buildSystemModels(Identity identity) {
-    List<ModelProvider> providers = providerRepo.findAll(identity.tenantId());
-    return modelRepo.findEnabled(identity.tenantId()).stream()
+    List<ModelProvider> providers =
+        providerRepo.findAccessibleProviders(identity.tenantId(), identity.userId());
+    return modelRepo.findEnabledAccessible(identity.tenantId(), identity.userId()).stream()
         .filter(
             model ->
                 providers.stream()
@@ -59,6 +72,7 @@ public class AvailableModelsService {
                         provider ->
                             provider.id().equals(model.providerId())
                                 && provider.enabled()
+                                && (model.secretId() != null || provider.secretId() != null)
                                 && !"oauth".equalsIgnoreCase(provider.authType())))
         .map(m -> toModelProps(m, providers))
         .toList();
@@ -84,7 +98,7 @@ public class AvailableModelsService {
         capabilities.path("supportsTemperature").asBoolean(true),
         capabilities.path("supportsReasoning").asBoolean(false),
         stringList(capabilities.path("reasoningLevels"), List.of()),
-        model.source(),
+        model.ownerUserId() == null ? "system" : "user",
         model.id());
   }
 

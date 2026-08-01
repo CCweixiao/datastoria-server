@@ -56,6 +56,7 @@ abstract class RelationalRepositoryContractIT {
         new ModelProvider(
             Ulid.next(),
             tenant,
+            null,
             "openai",
             "OpenAI",
             null,
@@ -229,6 +230,7 @@ abstract class RelationalRepositoryContractIT {
             new Model(
                 Ulid.next(),
                 tenant,
+                null,
                 providerId,
                 "model-contract",
                 "Model Contract",
@@ -280,6 +282,7 @@ abstract class RelationalRepositoryContractIT {
     return new ModelProvider(
         id,
         tenant,
+        null,
         "openai-" + id,
         "OpenAI",
         null,

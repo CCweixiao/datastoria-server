@@ -60,7 +60,7 @@ public class ProviderService {
   public Mono<List<ProviderResponse>> findAll(Identity identity) {
     return Mono.fromCallable(
             () ->
-                providerRepo.findAll(identity.tenantId()).stream()
+                providerRepo.findSystemProviders(identity.tenantId()).stream()
                     .map(
                         p -> {
                           Secret s =
@@ -80,7 +80,7 @@ public class ProviderService {
             () -> {
               ModelProvider p =
                   providerRepo
-                      .findById(id, identity.tenantId())
+                      .findSystemById(id, identity.tenantId())
                       .orElseThrow(() -> new NotFoundException("Provider", id));
               Secret s =
                   p.secretId() == null
@@ -101,6 +101,7 @@ public class ProviderService {
                   new ModelProvider(
                       Ulid.next(),
                       identity.tenantId(),
+                      null,
                       req.providerKey(),
                       req.displayName(),
                       req.baseUrl(),
@@ -128,13 +129,14 @@ public class ProviderService {
             () -> {
               ModelProvider existing =
                   providerRepo
-                      .findById(id, identity.tenantId())
+                      .findSystemById(id, identity.tenantId())
                       .orElseThrow(() -> new NotFoundException("Provider", id));
               long expected = ifMatch != null ? ifMatch : existing.revision();
               ModelProvider updated =
                   new ModelProvider(
                       existing.id(),
                       existing.tenantId(),
+                      null,
                       existing.providerKey(),
                       req.displayName(),
                       req.baseUrl(),
@@ -165,7 +167,7 @@ public class ProviderService {
             () -> {
               ModelProvider existing =
                   providerRepo
-                      .findById(id, identity.tenantId())
+                      .findSystemById(id, identity.tenantId())
                       .orElseThrow(() -> new NotFoundException("Provider", id));
               if (modelRepo.existsByProviderId(id, identity.tenantId())) {
                 throw new ResourceInUseException("Provider", id);
@@ -184,7 +186,7 @@ public class ProviderService {
                     status -> {
                       ModelProvider provider =
                           providerRepo
-                              .findById(providerId, identity.tenantId())
+                              .findSystemById(providerId, identity.tenantId())
                               .orElseThrow(() -> new NotFoundException("Provider", providerId));
                       Secret saved =
                           secretService.save(
@@ -209,7 +211,7 @@ public class ProviderService {
                     status -> {
                       ModelProvider provider =
                           providerRepo
-                              .findById(providerId, identity.tenantId())
+                              .findSystemById(providerId, identity.tenantId())
                               .orElseThrow(() -> new NotFoundException("Provider", providerId));
                       if (provider.secretId() != null) {
                         providerSecrets.updateSecretId(providerId, identity.tenantId(), null);
@@ -238,7 +240,7 @@ public class ProviderService {
   private List<DiscoveredModelResponse> discover(String providerId, Identity identity) {
     ModelProvider provider =
         providerRepo
-            .findById(providerId, identity.tenantId())
+            .findSystemById(providerId, identity.tenantId())
             .orElseThrow(() -> new NotFoundException("Provider", providerId));
     if (provider.secretId() == null) {
       throw new io.github.ccweixiao.datastoria.common.error.ProviderOperationException(

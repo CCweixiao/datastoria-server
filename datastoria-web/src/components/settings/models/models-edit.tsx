@@ -1,6 +1,8 @@
 "use client";
 
+import { useAuthSession } from "@/components/auth-session-provider";
 import { refreshModelCatalog } from "@/components/settings/models/model-config-bootstrap";
+import { UserModelsEdit } from "@/components/settings/models/user-models-edit";
 import { ProviderLogo } from "@/components/shared/provider-logo";
 import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +143,11 @@ function modelCapabilities(model: ServerModel) {
 }
 
 export function ModelsEdit() {
+  const { user } = useAuthSession();
+  return user?.role === "ADMIN" ? <AdminModelsEdit /> : <UserModelsEdit />;
+}
+
+function AdminModelsEdit() {
   const { t } = useUiPreferences();
   const gateway = getAiConfigurationGateway();
   const [providers, setProviders] = useState<ServerProvider[]>([]);

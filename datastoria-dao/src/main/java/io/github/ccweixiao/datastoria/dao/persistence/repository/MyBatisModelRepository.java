@@ -73,6 +73,92 @@ public class MyBatisModelRepository implements ModelRepository {
   }
 
   @Override
+  public List<Model> findSystemModels(String tenantId) {
+    return findByOwner(tenantId, null, false);
+  }
+
+  @Override
+  public List<Model> findUserModels(String tenantId, String userId) {
+    return findByOwner(tenantId, userId, false);
+  }
+
+  @Override
+  public List<Model> findEnabledAccessible(String tenantId, String userId) {
+    return mapper
+        .selectList(
+            new LambdaQueryWrapper<ModelEntity>()
+                .eq(ModelEntity::getTenantId, tenantId)
+                .and(
+                    scope ->
+                        scope
+                            .isNull(ModelEntity::getOwnerUserId)
+                            .or()
+                            .eq(ModelEntity::getOwnerUserId, userId))
+                .eq(ModelEntity::getEnabled, true)
+                .isNull(ModelEntity::getDeletedAt))
+        .stream()
+        .map(ModelEntity::toDomain)
+        .toList();
+  }
+
+  @Override
+  public Optional<Model> findSystemById(String id, String tenantId) {
+    return findOwnedById(id, tenantId, null);
+  }
+
+  @Override
+  public Optional<Model> findUserById(String id, String tenantId, String userId) {
+    return findOwnedById(id, tenantId, userId);
+  }
+
+  @Override
+  public Optional<Model> findAccessibleById(String id, String tenantId, String userId) {
+    ModelEntity entity =
+        mapper.selectOne(
+            new LambdaQueryWrapper<ModelEntity>()
+                .eq(ModelEntity::getId, id)
+                .eq(ModelEntity::getTenantId, tenantId)
+                .and(
+                    scope ->
+                        scope
+                            .isNull(ModelEntity::getOwnerUserId)
+                            .or()
+                            .eq(ModelEntity::getOwnerUserId, userId))
+                .isNull(ModelEntity::getDeletedAt));
+    return Optional.ofNullable(entity).map(ModelEntity::toDomain);
+  }
+
+  private Optional<Model> findOwnedById(String id, String tenantId, String userId) {
+    LambdaQueryWrapper<ModelEntity> query =
+        new LambdaQueryWrapper<ModelEntity>()
+            .eq(ModelEntity::getId, id)
+            .eq(ModelEntity::getTenantId, tenantId)
+            .isNull(ModelEntity::getDeletedAt);
+    if (userId == null) {
+      query.isNull(ModelEntity::getOwnerUserId);
+    } else {
+      query.eq(ModelEntity::getOwnerUserId, userId);
+    }
+    return Optional.ofNullable(mapper.selectOne(query)).map(ModelEntity::toDomain);
+  }
+
+  private List<Model> findByOwner(String tenantId, String userId, boolean enabledOnly) {
+    LambdaQueryWrapper<ModelEntity> query =
+        new LambdaQueryWrapper<ModelEntity>()
+            .eq(ModelEntity::getTenantId, tenantId)
+            .isNull(ModelEntity::getDeletedAt);
+    if (userId == null) {
+      query.isNull(ModelEntity::getOwnerUserId);
+    } else {
+      query.eq(ModelEntity::getOwnerUserId, userId);
+    }
+    if (enabledOnly) {
+      query.eq(ModelEntity::getEnabled, true);
+    }
+    return mapper.selectList(query).stream().map(ModelEntity::toDomain).toList();
+  }
+
+  @Override
   public boolean existsByProviderId(String providerId, String tenantId) {
     Long count =
         mapper.selectCount(

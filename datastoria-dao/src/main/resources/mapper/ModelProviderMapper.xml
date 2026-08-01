@@ -3,21 +3,23 @@
 <mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.ModelProviderMapper">
 
   <insert id="insertProvider" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ModelProviderEntity">
-    INSERT INTO ds_model_provider (id, tenant_id, provider_key, display_name,
+    INSERT INTO ds_model_provider (id, tenant_id, owner_user_id, provider_key, display_name,
         base_url, auth_type, enabled, config_json, secret_id, revision,
         created_by, updated_by, created_at, updated_at)
-    VALUES (#{id}, #{tenantId}, #{providerKey}, #{displayName}, #{baseUrl},
+    VALUES (#{id}, #{tenantId}, #{ownerUserId}, #{providerKey}, #{displayName}, #{baseUrl},
         #{authType}, #{enabled}, #{configJson}, #{secretId}, #{revision},
         #{createdBy}, #{updatedBy}, #{createdAt}, #{updatedAt})
   </insert>
 
   <update id="updateProviderCas">
     UPDATE ds_model_provider
-    SET display_name = #{entity.displayName},
+    SET provider_key = #{entity.providerKey},
+        display_name = #{entity.displayName},
         base_url = #{entity.baseUrl},
         auth_type = #{entity.authType},
         enabled = #{entity.enabled},
         config_json = #{entity.configJson},
+        secret_id = #{entity.secretId},
         updated_by = #{entity.updatedBy},
         updated_at = #{entity.updatedAt},
         revision = revision + 1

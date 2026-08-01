@@ -7,6 +7,9 @@
 CREATE TABLE ds_config_entry (
     id              varchar(64)  NOT NULL PRIMARY KEY,
     tenant_id       varchar(64)  NOT NULL,
+    owner_user_id   varchar(255) NULL,
+    owner_scope     varchar(255) GENERATED ALWAYS AS
+                    (COALESCE(owner_user_id, '__system__')) STORED,
     scope_type      varchar(32)  NOT NULL,
     scope_id        varchar(255) NOT NULL,
     config_key      varchar(128) NOT NULL,
@@ -69,13 +72,16 @@ CREATE TABLE ds_model_provider (
                     (CASE WHEN deleted_at IS NULL THEN 1 ELSE NULL END) STORED,
     CONSTRAINT chk_provider_auth CHECK (auth_type IN ('api_key','oauth','none')),
     CONSTRAINT chk_provider_revision CHECK (revision >= 0),
-    UNIQUE KEY uk_provider_active (tenant_id, provider_key, active_key),
+    UNIQUE KEY uk_provider_active (tenant_id, owner_scope, provider_key, active_key),
     UNIQUE KEY uk_provider_tenant_id (tenant_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Source: V2__model_provider_and_secret.sql
 CREATE INDEX idx_model_provider_tenant
     ON ds_model_provider (tenant_id, enabled, deleted_at);
+
+CREATE INDEX idx_provider_owner
+    ON ds_model_provider (tenant_id, owner_user_id, enabled, deleted_at);
 
 -- Source: V2__model_provider_and_secret.sql
 CREATE TABLE ds_secret (
@@ -103,6 +109,7 @@ CREATE INDEX idx_secret_owner
 CREATE TABLE ds_model (
     id                          varchar(64)  NOT NULL PRIMARY KEY,
     tenant_id                   varchar(64)  NOT NULL,
+    owner_user_id               varchar(255) NULL,
     provider_id                 varchar(64)  NOT NULL,
     model_key                   varchar(255) NOT NULL,
     display_name                varchar(255) NOT NULL,
@@ -117,6 +124,8 @@ CREATE TABLE ds_model (
     created_at                  datetime(6)  NOT NULL,
     updated_at                  datetime(6)  NOT NULL,
     deleted_at                  datetime(6)  NULL,
+    owner_scope                 varchar(255) GENERATED ALWAYS AS
+                                (COALESCE(owner_user_id, '__system__')) STORED,
     active_key                  tinyint GENERATED ALWAYS AS
                                 (CASE WHEN deleted_at IS NULL THEN 1 ELSE NULL END) STORED,
     CONSTRAINT chk_model_source CHECK (source IN ('system','discovered','custom')),
@@ -125,13 +134,18 @@ CREATE TABLE ds_model (
         REFERENCES ds_model_provider(tenant_id, id),
     CONSTRAINT fk_model_secret FOREIGN KEY (tenant_id, secret_id)
         REFERENCES ds_secret(tenant_id, id),
-    UNIQUE KEY uk_model_active (tenant_id, provider_id, model_key, active_key),
+    UNIQUE KEY uk_model_active
+        (tenant_id, provider_id, model_key, owner_scope, active_key),
     UNIQUE KEY uk_model_tenant_id (tenant_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Source: V2__model_provider_and_secret.sql
 CREATE INDEX idx_model_tenant_provider
     ON ds_model (tenant_id, provider_id, enabled, deleted_at);
+
+-- Source: V20__user_owned_models.sql
+CREATE INDEX idx_model_owner
+    ON ds_model (tenant_id, owner_user_id, enabled, deleted_at);
 
 -- Source: V2__model_provider_and_secret.sql
 CREATE TABLE ds_user_model_preference (

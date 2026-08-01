@@ -20,6 +20,7 @@ public class ModelEntity {
   private String id;
 
   private String tenantId;
+  private String ownerUserId;
   private String providerId;
   private String modelKey;
   private String displayName;
@@ -39,6 +40,7 @@ public class ModelEntity {
     ModelEntity e = new ModelEntity();
     e.id = m.id();
     e.tenantId = m.tenantId();
+    e.ownerUserId = m.ownerUserId();
     e.providerId = m.providerId();
     e.modelKey = m.modelKey();
     e.displayName = m.displayName();
@@ -60,6 +62,7 @@ public class ModelEntity {
     return new Model(
         id,
         tenantId,
+        ownerUserId,
         providerId,
         modelKey,
         displayName,
@@ -90,6 +93,14 @@ public class ModelEntity {
 
   public void setTenantId(String tenantId) {
     this.tenantId = tenantId;
+  }
+
+  public String getOwnerUserId() {
+    return ownerUserId;
+  }
+
+  public void setOwnerUserId(String ownerUserId) {
+    this.ownerUserId = ownerUserId;
   }
 
   public String getProviderId() {

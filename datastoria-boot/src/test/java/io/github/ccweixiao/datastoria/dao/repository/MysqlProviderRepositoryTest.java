@@ -65,6 +65,7 @@ class MysqlProviderRepositoryTest {
         new ModelProvider(
             saved.id(),
             saved.tenantId(),
+            saved.ownerUserId(),
             saved.providerKey(),
             "OpenAI Pro",
             saved.baseUrl(),
@@ -127,6 +128,7 @@ class MysqlProviderRepositoryTest {
     return new ModelProvider(
         Ulid.next(),
         tenant,
+        null,
         key,
         name,
         null,

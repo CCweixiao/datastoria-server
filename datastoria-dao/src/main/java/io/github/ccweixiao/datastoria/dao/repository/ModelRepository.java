@@ -16,6 +16,18 @@ public interface ModelRepository {
 
   List<Model> findEnabled(String tenantId);
 
+  List<Model> findSystemModels(String tenantId);
+
+  List<Model> findUserModels(String tenantId, String userId);
+
+  List<Model> findEnabledAccessible(String tenantId, String userId);
+
+  Optional<Model> findSystemById(String id, String tenantId);
+
+  Optional<Model> findUserById(String id, String tenantId, String userId);
+
+  Optional<Model> findAccessibleById(String id, String tenantId, String userId);
+
   boolean existsByProviderId(String providerId, String tenantId);
 
   Model update(Model model, long expectedRevision);

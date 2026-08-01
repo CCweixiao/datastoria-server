@@ -19,6 +19,7 @@ public class ModelProviderEntity {
   private String id;
 
   private String tenantId;
+  private String ownerUserId;
   private String providerKey;
   private String displayName;
   private String baseUrl;
@@ -37,6 +38,7 @@ public class ModelProviderEntity {
     ModelProviderEntity e = new ModelProviderEntity();
     e.id = p.id();
     e.tenantId = p.tenantId();
+    e.ownerUserId = p.ownerUserId();
     e.providerKey = p.providerKey();
     e.displayName = p.displayName();
     e.baseUrl = p.baseUrl();
@@ -57,6 +59,7 @@ public class ModelProviderEntity {
     return new ModelProvider(
         id,
         tenantId,
+        ownerUserId,
         providerKey,
         displayName,
         baseUrl,
@@ -86,6 +89,14 @@ public class ModelProviderEntity {
 
   public void setTenantId(String tenantId) {
     this.tenantId = tenantId;
+  }
+
+  public String getOwnerUserId() {
+    return ownerUserId;
+  }
+
+  public void setOwnerUserId(String ownerUserId) {
+    this.ownerUserId = ownerUserId;
   }
 
   public String getProviderKey() {

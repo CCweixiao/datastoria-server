@@ -79,6 +79,7 @@ class HttpProviderRemoteClientTest {
     return new ModelProvider(
         "provider-1",
         "tenant-1",
+        null,
         key,
         "Provider",
         baseUrl,

@@ -172,6 +172,7 @@ class ConfiguredModelAdapterProviderTest {
     return new Model(
         "model-1",
         "tenant-1",
+        null,
         "provider-1",
         "gpt-test",
         "GPT",
@@ -193,6 +194,7 @@ class ConfiguredModelAdapterProviderTest {
     return new ModelProvider(
         "provider-1",
         "tenant-1",
+        null,
         key,
         "Provider",
         baseUrl,

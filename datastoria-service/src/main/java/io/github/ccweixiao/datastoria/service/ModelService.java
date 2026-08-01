@@ -36,7 +36,10 @@ public class ModelService {
 
   public Mono<List<ModelResponse>> findAll(Identity identity) {
     return Mono.fromCallable(
-            () -> modelRepo.findAll(identity.tenantId()).stream().map(ModelResponse::from).toList())
+            () ->
+                modelRepo.findSystemModels(identity.tenantId()).stream()
+                    .map(ModelResponse::from)
+                    .toList())
         .subscribeOn(jdbcScheduler);
   }
 
@@ -45,7 +48,7 @@ public class ModelService {
             () ->
                 ModelResponse.from(
                     modelRepo
-                        .findById(id, identity.tenantId())
+                        .findSystemById(id, identity.tenantId())
                         .orElseThrow(() -> new NotFoundException("Model", id))))
         .subscribeOn(jdbcScheduler);
   }
@@ -61,11 +64,12 @@ public class ModelService {
                   new Model(
                       Ulid.next(),
                       identity.tenantId(),
+                      null,
                       req.providerId(),
                       req.modelKey(),
                       req.displayName(),
                       req.description(),
-                      req.source(),
+                      "system",
                       req.enabled() == null || req.enabled(),
                       req.isFree() != null && req.isFree(),
                       req.capabilitiesJson(),
@@ -89,18 +93,19 @@ public class ModelService {
             () -> {
               Model existing =
                   modelRepo
-                      .findById(id, identity.tenantId())
+                      .findSystemById(id, identity.tenantId())
                       .orElseThrow(() -> new NotFoundException("Model", id));
               long expected = ifMatch != null ? ifMatch : existing.revision();
               Model updated =
                   new Model(
                       existing.id(),
                       existing.tenantId(),
+                      existing.ownerUserId(),
                       existing.providerId(),
                       existing.modelKey(),
                       req.displayName(),
                       req.description(),
-                      req.source(),
+                      "system",
                       req.enabled() != null ? req.enabled() : existing.enabled(),
                       req.isFree() != null ? req.isFree() : existing.isFree(),
                       req.capabilitiesJson() != null
@@ -124,7 +129,7 @@ public class ModelService {
             () -> {
               Model existing =
                   modelRepo
-                      .findById(id, identity.tenantId())
+                      .findSystemById(id, identity.tenantId())
                       .orElseThrow(() -> new NotFoundException("Model", id));
               long expected = ifMatch != null ? ifMatch : existing.revision();
               modelRepo.softDelete(id, identity.tenantId(), expected);

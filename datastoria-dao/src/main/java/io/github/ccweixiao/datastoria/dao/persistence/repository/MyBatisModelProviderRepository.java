@@ -55,6 +55,16 @@ public class MyBatisModelProviderRepository
   }
 
   @Override
+  public Optional<ModelProvider> findSystemById(String id, String tenantId) {
+    return findMatching(id, tenantId, null);
+  }
+
+  @Override
+  public Optional<ModelProvider> findUserById(String id, String tenantId, String userId) {
+    return findMatching(id, tenantId, userId);
+  }
+
+  @Override
   public List<ModelProvider> findAll(String tenantId) {
     return mapper
         .selectList(
@@ -64,6 +74,61 @@ public class MyBatisModelProviderRepository
         .stream()
         .map(ModelProviderEntity::toDomain)
         .toList();
+  }
+
+  @Override
+  public List<ModelProvider> findSystemProviders(String tenantId) {
+    return findOwned(tenantId, null);
+  }
+
+  @Override
+  public List<ModelProvider> findUserProviders(String tenantId, String userId) {
+    return findOwned(tenantId, userId);
+  }
+
+  @Override
+  public List<ModelProvider> findAccessibleProviders(String tenantId, String userId) {
+    return mapper
+        .selectList(
+            new LambdaQueryWrapper<ModelProviderEntity>()
+                .eq(ModelProviderEntity::getTenantId, tenantId)
+                .and(
+                    wrapper ->
+                        wrapper
+                            .isNull(ModelProviderEntity::getOwnerUserId)
+                            .or()
+                            .eq(ModelProviderEntity::getOwnerUserId, userId))
+                .isNull(ModelProviderEntity::getDeletedAt))
+        .stream()
+        .map(ModelProviderEntity::toDomain)
+        .toList();
+  }
+
+  private Optional<ModelProvider> findMatching(String id, String tenantId, String ownerUserId) {
+    LambdaQueryWrapper<ModelProviderEntity> query =
+        new LambdaQueryWrapper<ModelProviderEntity>()
+            .eq(ModelProviderEntity::getId, id)
+            .eq(ModelProviderEntity::getTenantId, tenantId)
+            .isNull(ModelProviderEntity::getDeletedAt);
+    if (ownerUserId == null) {
+      query.isNull(ModelProviderEntity::getOwnerUserId);
+    } else {
+      query.eq(ModelProviderEntity::getOwnerUserId, ownerUserId);
+    }
+    return Optional.ofNullable(mapper.selectOne(query)).map(ModelProviderEntity::toDomain);
+  }
+
+  private List<ModelProvider> findOwned(String tenantId, String ownerUserId) {
+    LambdaQueryWrapper<ModelProviderEntity> query =
+        new LambdaQueryWrapper<ModelProviderEntity>()
+            .eq(ModelProviderEntity::getTenantId, tenantId)
+            .isNull(ModelProviderEntity::getDeletedAt);
+    if (ownerUserId == null) {
+      query.isNull(ModelProviderEntity::getOwnerUserId);
+    } else {
+      query.eq(ModelProviderEntity::getOwnerUserId, ownerUserId);
+    }
+    return mapper.selectList(query).stream().map(ModelProviderEntity::toDomain).toList();
   }
 
   @Override

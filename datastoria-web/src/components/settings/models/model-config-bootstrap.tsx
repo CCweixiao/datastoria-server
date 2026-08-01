@@ -30,19 +30,22 @@ async function bootstrapModelCatalog(): Promise<boolean> {
       fetchAvailableModels(),
       AgentConfigurationManager.hydrate(),
     ]);
-    const providers = await getAiConfigurationGateway().listProviders();
 
     manager.setSystemModels(systemModels, false);
-    manager.setProviderSettings([
-      ...providers
-        .filter((provider) => provider.authType !== "oauth")
-        .map((provider) => ({
-          provider: provider.displayName,
-          providerId: provider.id,
-          credentialConfigured: provider.credentialConfigured,
-          maskedHint: provider.maskedHint,
-        })),
-    ]);
+    manager.setProviderSettings(
+      Array.from(
+        new Map(
+          systemModels.map((model) => [
+            model.provider,
+            {
+              provider: model.provider,
+              providerId: "",
+              credentialConfigured: true,
+            },
+          ])
+        ).values()
+      )
+    );
     const selectedModelId = await getAiConfigurationGateway().getModelPreference();
     manager.setServerSelectedModel(selectedModelId);
     return true;

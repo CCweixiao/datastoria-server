@@ -35,6 +35,7 @@ class MysqlModelRepositoryTest {
         new ModelProvider(
             Ulid.next(),
             TENANT,
+            null,
             "openai",
             "OpenAI",
             null,
@@ -103,6 +104,24 @@ class MysqlModelRepositoryTest {
     assertThat(modelRepo.save(newModel("gpt-4", "Replacement")).modelKey()).isEqualTo("gpt-4");
   }
 
+  @Test
+  void privateModelsAreIsolatedAndMayReuseSystemModelKey() {
+    Model system = modelRepo.save(newModel("gpt-4", "System GPT-4"));
+    Model userA = modelRepo.save(privateModel("user-a", "gpt-4", "My GPT-4"));
+    Model userB = modelRepo.save(privateModel("user-b", "gpt-4", "Other GPT-4"));
+
+    assertThat(modelRepo.findSystemModels(TENANT))
+        .extracting(Model::id)
+        .containsExactly(system.id());
+    assertThat(modelRepo.findUserModels(TENANT, "user-a"))
+        .extracting(Model::id)
+        .containsExactly(userA.id());
+    assertThat(modelRepo.findAccessibleById(userB.id(), TENANT, "user-a")).isEmpty();
+    assertThat(modelRepo.findEnabledAccessible(TENANT, "user-a"))
+        .extracting(Model::id)
+        .containsExactlyInAnyOrder(system.id(), userA.id());
+  }
+
   private Model newModel(String key, String name) {
     return newModel(key, name, true);
   }
@@ -111,6 +130,7 @@ class MysqlModelRepositoryTest {
     return new Model(
         Ulid.next(),
         TENANT,
+        null,
         providerId,
         key,
         name,
@@ -131,6 +151,7 @@ class MysqlModelRepositoryTest {
     return new Model(
         m.id(),
         m.tenantId(),
+        m.ownerUserId(),
         m.providerId(),
         m.modelKey(),
         displayName,
@@ -145,5 +166,27 @@ class MysqlModelRepositoryTest {
         m.createdAt(),
         Instant.now(),
         null);
+  }
+
+  private Model privateModel(String owner, String key, String name) {
+    Model systemShape = newModel(key, name);
+    return new Model(
+        systemShape.id(),
+        systemShape.tenantId(),
+        owner,
+        systemShape.providerId(),
+        systemShape.modelKey(),
+        systemShape.displayName(),
+        systemShape.description(),
+        "custom",
+        systemShape.enabled(),
+        systemShape.isFree(),
+        systemShape.capabilitiesJson(),
+        systemShape.generationDefaultsJson(),
+        systemShape.secretId(),
+        systemShape.revision(),
+        systemShape.createdAt(),
+        systemShape.updatedAt(),
+        systemShape.deletedAt());
   }
 }

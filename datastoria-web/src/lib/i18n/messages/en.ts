@@ -78,6 +78,7 @@ export const en = {
   "chat.connectionUnavailable": "Connection for this conversation is no longer available",
   "common.cancel": "Cancel",
   "common.save": "Save",
+  "common.retry": "Retry",
   "common.error": "Error",
   "common.notAvailable": "N/A",
   "login.tagline":
@@ -269,6 +270,44 @@ export const en = {
   "models.modelAdded": "Model added",
   "models.confirmDeleteModel": "Delete model “{name}”?",
   "models.updateFailed": "Failed to update model",
+  "models.workspaceTitle": "AI model workspace",
+  "models.workspaceHelpV2":
+    "Use administrator-managed system models or configure your own provider, Base URL, key, and models.",
+  "models.workspaceHelp":
+    "Use administrator-managed system models, or connect a private model that only you can see.",
+  "models.systemModels": "System models",
+  "models.systemModelsHelp": "Managed by administrators and available for selection. Read-only.",
+  "models.systemModelsGroupedHelp":
+    "Read-only models managed by administrators, grouped by provider for easier browsing.",
+  "models.myProviders": "My providers",
+  "models.myProvidersHelp":
+    "Private endpoints, credentials, and model lists visible only to your account.",
+  "models.addProviderHelp":
+    "Choose a preset or configure any OpenAI-compatible endpoint with your own Base URL.",
+  "models.modelCount": "{count} model(s)",
+  "models.saveConfiguration": "Save configuration",
+  "models.modelsInProvider": "Models (managed inside this provider)",
+  "models.enabled": "Enabled",
+  "models.deleteProvider": "Remove provider",
+  "models.myModels": "My models",
+  "models.myModelsHelp":
+    "Private model credentials and configurations visible only to your account.",
+  "models.readOnly": "Read-only",
+  "models.privateBadge": "Private",
+  "models.addMyModel": "Connect my model",
+  "models.editMyModel": "Edit my model",
+  "models.createMyFirstModel": "Connect your first private model",
+  "models.myModelDialogHelp":
+    "Choose a system-supported provider and store a private API key encrypted on the server.",
+  "models.privateKeyHelp": "The key is encrypted and never displayed again or shared with admins.",
+  "models.noAvailableProviders":
+    "No provider is available. Ask an administrator to enable one first.",
+  "models.noAvailableProvidersOption": "No provider available",
+  "models.providerLoadFailed": "Could not load providers. Check that the backend has restarted.",
+  "models.provider": "Provider",
+  "models.apiKey": "API key",
+  "models.myModelAdded": "Private model connected",
+  "models.myModelUpdated": "Private model updated",
   "models.presetZhipu": "GLM series · OpenAI compatible",
   "models.presetKimi": "Moonshot and Kimi series",
   "models.presetMinimax": "MiniMax OpenAI-compatible API",

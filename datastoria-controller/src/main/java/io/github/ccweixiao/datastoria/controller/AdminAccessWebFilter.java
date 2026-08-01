@@ -3,6 +3,7 @@ package io.github.ccweixiao.datastoria.controller;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -29,7 +30,8 @@ public class AdminAccessWebFilter implements WebFilter {
 
   private final RequestMappingHandlerMapping handlerMapping;
 
-  public AdminAccessWebFilter(RequestMappingHandlerMapping handlerMapping) {
+  public AdminAccessWebFilter(
+      @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
     this.handlerMapping = handlerMapping;
   }
 

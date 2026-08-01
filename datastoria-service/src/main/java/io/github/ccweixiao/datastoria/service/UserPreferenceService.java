@@ -89,7 +89,7 @@ public class UserPreferenceService {
     return Mono.fromCallable(
             () -> {
               modelRepo
-                  .findById(req.modelConfigId(), identity.tenantId())
+                  .findAccessibleById(req.modelConfigId(), identity.tenantId(), identity.userId())
                   .orElseThrow(
                       () ->
                           new io.github.ccweixiao.datastoria.common.error.NotFoundException(

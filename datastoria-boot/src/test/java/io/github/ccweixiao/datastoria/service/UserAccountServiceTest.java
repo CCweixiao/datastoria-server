@@ -74,6 +74,16 @@ class UserAccountServiceTest {
   }
 
   @Test
+  void administratorCanLoadOwnAccount() {
+    UserAccount admin = account("admin", "ADMIN");
+    when(users.findByTenantIdAndUserId("tenant", admin.userId())).thenReturn(Optional.of(admin));
+
+    UserAccount result = service.findCurrentAccount("tenant", admin.userId()).block();
+
+    assertThat(result).isEqualTo(admin);
+  }
+
+  @Test
   void deletesOrdinaryUser() {
     UserAccount user = account("user", "USER");
     when(users.findByTenantIdAndUserId("tenant", user.userId())).thenReturn(Optional.of(user));

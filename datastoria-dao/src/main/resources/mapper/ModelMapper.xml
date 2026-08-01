@@ -4,17 +4,19 @@
 
   <!-- active_key is a GENERATED ALWAYS AS column: never appear in INSERT/UPDATE column lists. -->
   <insert id="insertModel" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ModelEntity">
-    INSERT INTO ds_model (id, tenant_id, provider_id, model_key, display_name,
+    INSERT INTO ds_model (id, tenant_id, owner_user_id, provider_id, model_key, display_name,
         description, source, enabled, is_free, capabilities_json,
         generation_defaults_json, secret_id, revision, created_at, updated_at)
-    VALUES (#{id}, #{tenantId}, #{providerId}, #{modelKey}, #{displayName},
+    VALUES (#{id}, #{tenantId}, #{ownerUserId}, #{providerId}, #{modelKey}, #{displayName},
         #{description}, #{source}, #{enabled}, #{isFree}, #{capabilitiesJson},
         #{generationDefaultsJson}, #{secretId}, #{revision}, #{createdAt}, #{updatedAt})
   </insert>
 
   <update id="updateModelCas">
     UPDATE ds_model
-    SET display_name = #{entity.displayName},
+    SET provider_id = #{entity.providerId},
+        model_key = #{entity.modelKey},
+        display_name = #{entity.displayName},
         description = #{entity.description},
         source = #{entity.source},
         enabled = #{entity.enabled},
