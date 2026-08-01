@@ -6,6 +6,7 @@ import {
   type AgentConfiguration,
   type AIResponseLanguage,
 } from "@/components/settings/agent/agent-manager";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -44,6 +45,7 @@ function AddBlacklistDialogContent({
   initialBlacklist: string[];
   onApply: (codes: string[]) => void;
 }) {
+  const { t } = useUiPreferences();
   const [pendingBlacklistSelection, setPendingBlacklistSelection] = useState<string[]>(() =>
     [...initialBlacklist].sort((a, b) => Number(a) - Number(b))
   );
@@ -79,16 +81,13 @@ function AddBlacklistDialogContent({
         className="z-[10010] max-w-3xl gap-0 border-0 bg-transparent p-0 shadow-none"
         overlayClassName="z-[10005] bg-black/60"
       >
-        <DialogTitle className="sr-only">Add Blacklisted Error Codes</DialogTitle>
-        <DialogDescription className="sr-only">
-          Search ClickHouse error codes by number or name and select multiple entries to skip
-          automatic explanation.
-        </DialogDescription>
+        <DialogTitle className="sr-only">{t("agent.addBlacklist")}</DialogTitle>
+        <DialogDescription className="sr-only">{t("agent.addBlacklistHelp")}</DialogDescription>
         <Command className="flex h-[640px] min-h-0 flex-col rounded-xl border shadow-2xl">
-          <CommandInput placeholder="Search by error code or name..." />
+          <CommandInput placeholder={t("agent.searchErrorCodes")} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <CommandList className="h-full max-h-none overflow-y-auto">
-              <CommandEmpty>No error codes found.</CommandEmpty>
+              <CommandEmpty>{t("agent.noErrorCodes")}</CommandEmpty>
               {addableErrorCodes.map(([code, name]) => {
                 const codeStr = String(code);
                 const isSelected = pendingBlacklistSelection.includes(codeStr);
@@ -110,13 +109,15 @@ function AddBlacklistDialogContent({
             </CommandList>
           </div>
           <div className="flex items-center justify-between gap-2 border-t px-4 py-2">
-            <div className="text-sm text-muted-foreground">{newlySelectedCount} selected</div>
+            <div className="text-sm text-muted-foreground">
+              {t("agent.selected", { count: newlySelectedCount })}
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" className="h-9" onClick={handleCancel}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button className="h-9" onClick={handleApply}>
-                Add selected
+                {t("agent.addSelected")}
               </Button>
             </div>
           </div>
@@ -133,6 +134,7 @@ function BlacklistCodesTable({
   entries: Array<[number | string, string]>;
   onRemove: (errorCode: string) => void;
 }) {
+  const { t } = useUiPreferences();
   // Native <table> so the scroll container wraps it directly; shared Table adds a div that breaks sticky header.
   return (
     <div className="max-h-[320px] overflow-auto rounded-md border [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-background [&_thead_th]:shadow-[0_1px_0_0_hsl(var(--border))]">
@@ -140,13 +142,13 @@ function BlacklistCodesTable({
         <thead className="[&_tr]:border-b">
           <tr className="border-b transition-colors">
             <th className="h-9 w-24 px-4 py-0 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-              Code
+              {t("common.code")}
             </th>
             <th className="h-9 px-4 py-0 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-              Name
+              {t("common.name")}
             </th>
             <th className="h-9 w-20 px-4 py-1 text-right align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-              Action
+              {t("common.action")}
             </th>
           </tr>
         </thead>
@@ -177,7 +179,8 @@ function BlacklistCodesTable({
 }
 
 export function AgentEdit() {
-  const [configuration, setConfiguration] = useState<AgentConfiguration>(
+  const { t } = useUiPreferences();
+  const [configuration, setConfiguration] = useState<AgentConfiguration>(() =>
     AgentConfigurationManager.getConfiguration()
   );
   const [isBlacklistDialogOpen, setIsBlacklistDialogOpen] = useState(false);
@@ -294,7 +297,7 @@ export function AgentEdit() {
         <TableBody>
           <TableRow className="h-12 hover:bg-transparent">
             <TableCell className="px-0 pl-4 py-1 align-middle">
-              <Label>Context Pruning</Label>
+              <Label>{t("agent.contextPruning")}</Label>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle">
               <div className="flex h-10 items-center">
@@ -305,13 +308,13 @@ export function AgentEdit() {
               </div>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
-              Enable surgical pruning of SQL validations from history to save tokens.
+              {t("agent.contextPruningHelp")}
             </TableCell>
           </TableRow>
 
           <TableRow className="h-12 hover:bg-transparent">
             <TableCell className="px-0 pl-4 py-1 align-middle">
-              <Label>Output Reasoning</Label>
+              <Label>{t("agent.outputReasoning")}</Label>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle">
               <div className="flex h-10 items-center">
@@ -322,13 +325,13 @@ export function AgentEdit() {
               </div>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
-              Request reasoning summaries when the selected model supports reasoning output.
+              {t("agent.outputReasoningHelp")}
             </TableCell>
           </TableRow>
 
           <TableRow className="h-12 hover:bg-transparent">
             <TableCell className="px-0 pl-4 py-1 align-middle">
-              <Label>AI Response Language</Label>
+              <Label>{t("agent.responseLanguage")}</Label>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle">
               <DropdownMenu>
@@ -367,14 +370,13 @@ export function AgentEdit() {
               </DropdownMenu>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
-              Controls the response language for AI chat, visible reasoning summaries, and SQL
-              editor AI commands.
+              {t("agent.responseLanguageHelp")}
             </TableCell>
           </TableRow>
 
           <TableRow className="h-12 hover:bg-transparent">
             <TableCell className="px-0 pl-4 py-1 align-middle">
-              <Label>Auto Explain Errors</Label>
+              <Label>{t("agent.autoExplain")}</Label>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle">
               <div className="flex h-10 items-center">
@@ -385,7 +387,7 @@ export function AgentEdit() {
               </div>
             </TableCell>
             <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
-              Automatically ask AI to explain eligible ClickHouse errors inline in query results.
+              {t("agent.autoExplainHelp")}
             </TableCell>
           </TableRow>
 
@@ -393,18 +395,16 @@ export function AgentEdit() {
             <>
               <TableRow className="h-12 border-b-0 hover:bg-transparent">
                 <TableCell className="px-0 pl-4 py-1 align-middle">
-                  <Label className="pl-6">Skipped Error Codes</Label>
+                  <Label className="pl-6">{t("agent.skippedCodes")}</Label>
                 </TableCell>
                 <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
                   {selectedErrorCodes.length === 0
-                    ? "No error codes selected."
-                    : `${selectedErrorCodes.length} error code${selectedErrorCodes.length === 1 ? "" : "s"}`}
+                    ? t("agent.noCodesSelected")
+                    : t("agent.codeCount", { count: selectedErrorCodes.length })}
                 </TableCell>
                 <TableCell className="px-0 pr-2 py-1 align-middle">
                   <div className="flex items-center justify-between gap-4">
-                    <div className="text-muted-foreground">
-                      Error codes listed below will be SKIPPED for auto-trigger inline explanation.
-                    </div>
+                    <div className="text-muted-foreground">{t("agent.skippedCodesHelp")}</div>
                     <div className="flex items-center gap-2">
                       {!isBlacklistDefault && (
                         <Button
@@ -413,7 +413,7 @@ export function AgentEdit() {
                           className="h-8"
                           onClick={resetBlacklistToDefault}
                         >
-                          Reset
+                          {t("common.reset")}
                         </Button>
                       )}
                       {selectedErrorCodes.length > 0 && (
@@ -423,7 +423,7 @@ export function AgentEdit() {
                           className="h-8"
                           onClick={clearBlacklist}
                         >
-                          Clear all
+                          {t("common.clearAll")}
                         </Button>
                       )}
                       <Button
@@ -433,7 +433,7 @@ export function AgentEdit() {
                         onClick={openBlacklistDialog}
                       >
                         <Plus className="h-4 w-4" />
-                        Add
+                        {t("common.add")}
                       </Button>
                     </div>
                   </div>

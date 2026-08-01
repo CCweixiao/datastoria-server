@@ -1,28 +1,45 @@
-import { describe, expect, it } from "vitest";
-import { buildSignInUrl, type AuthProvider } from "./auth-client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearAuthToken, getAuthToken } from "./auth-token-store";
+import { login } from "./auth-client";
 
-const provider: AuthProvider = {
-  id: "github",
-  name: "GitHub",
-  signinUrl: "/api/auth/signin/github",
-};
+describe("username and password authentication", () => {
+  beforeEach(() => {
+    clearAuthToken();
+    vi.restoreAllMocks();
+  });
 
-describe("buildSignInUrl", () => {
-  it("preserves a local callback for the Java OAuth round-trip", () => {
-    expect(new URL(buildSignInUrl(provider, "/session/abc")).searchParams.get("callbackUrl")).toBe(
-      "/session/abc"
+  it("stores the JWT after a successful login", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          token: "signed-jwt",
+          user: {
+            userId: "user-1",
+            username: "alice",
+            role: "USER",
+            tenantId: "default",
+            status: 1,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
     );
+
+    await expect(login("alice", "password123")).resolves.toEqual({
+      user: { id: "user-1", name: "alice", email: undefined, role: "USER" },
+    });
+    expect(getAuthToken()).toBe("signed-jwt");
   });
 
-  it("rejects an absolute callback URL", () => {
-    expect(
-      new URL(buildSignInUrl(provider, "https://evil.example")).searchParams.get("callbackUrl")
-    ).toBe("/");
-  });
+  it("does not store a token when credentials are rejected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Authentication failed" }), {
+        status: 401,
+        headers: { "Content-Type": "application/problem+json" },
+      })
+    );
 
-  it("rejects a sign-in URL outside the Java authentication endpoints", () => {
-    expect(() =>
-      buildSignInUrl({ ...provider, signinUrl: "https://evil.example/signin" }, "/")
-    ).toThrow("invalid sign-in URL");
+    await expect(login("alice", "wrong-password")).rejects.toThrow("Authentication failed");
+    expect(getAuthToken()).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { useToolProgressStore } from "@/lib/ai/tools/clickhouse/tool-progress-store";
 import { Loader2 } from "lucide-react";
 import { memo } from "react";
@@ -13,6 +14,7 @@ export const ToolProgressIndicator = memo(function ToolProgressIndicator({
 }: {
   toolCallId: string;
 }) {
+  const { t } = useUiPreferences();
   // Subscribe to progress updates for this specific toolCallId
   // Use a selector that returns the specific progress entry
   const progress = useToolProgressStore((state) => {
@@ -25,7 +27,7 @@ export const ToolProgressIndicator = memo(function ToolProgressIndicator({
 
   return (
     <div className="tool-progress text-[10px]">
-      <div className="text-muted-foreground">stages:</div>
+      <div className="text-muted-foreground">{t("tool.stages")}</div>
       {progress.stages.map((stage, i) => (
         <div key={i} className="flex items-center gap-2 px-2 text-[10px]">
           {stage.status === "started" && <Loader2 className="h-3 w-3 animate-spin" />}

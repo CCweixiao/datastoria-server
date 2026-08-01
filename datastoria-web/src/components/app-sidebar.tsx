@@ -5,6 +5,7 @@ import { showConnectionEditDialog } from "@/components/connection/connection-edi
 import { ConnectionSelector } from "@/components/connection/connection-selector";
 import { openConnectionSelectorDialog } from "@/components/connection/connection-selector-dialog";
 import { openReleaseNotes } from "@/components/release-note/release-notes-view";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { SYSTEM_TABLE_REGISTRY } from "@/components/system-table-tab/system-table-registry";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -301,6 +302,7 @@ function DashboardsSidebarMenuItem() {
 
 export function AppSidebar() {
   const { isConnectionAvailable } = useConnection();
+  const { t } = useUiPreferences();
   const { open: openChatPanel, setActiveSidebarTab, setDisplayMode } = useChatPanel();
   const [activeTabType, setActiveTabType] = useState<TabType | null>(null);
   const [authUser, setAuthUser] = useState<NonNullable<AuthSession["user"]>>();
@@ -341,7 +343,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip={{
-                  children: "Work with AI",
+                  children: t("sidebar.workWithAi"),
                   className:
                     "bg-primary text-primary-foreground text-xs px-2 py-1 border-0 rounded-sm",
                 }}
@@ -356,7 +358,7 @@ export function AppSidebar() {
                 }}
               >
                 <Sparkles className="h-5 w-5" />
-                <span>Work with AI</span>
+                <span>{t("sidebar.workWithAi")}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
 
@@ -364,7 +366,7 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   tooltip={{
-                    children: "Query Data with SQL",
+                    children: t("sidebar.querySql"),
                     className:
                       "bg-primary text-primary-foreground text-xs px-2 py-1 border-0 rounded-sm",
                   }}
@@ -372,7 +374,7 @@ export function AppSidebar() {
                   onClick={() => TabManager.activateQueryTab()}
                 >
                   <Terminal className="h-5 w-5" />
-                  <span>Query Data with SQL</span>
+                  <span>{t("sidebar.querySql")}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
@@ -404,12 +406,13 @@ export function AppSidebar() {
 
 function UserNavButton({ user }: { user: NonNullable<AuthSession["user"]> }) {
   const { isMobile } = useSidebar();
+  const { t } = useUiPreferences();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <SidebarMenuButton tooltip="Account">
+        <SidebarMenuButton tooltip={t("sidebar.account")}>
           <UserProfileImage user={user} className="h-5 w-5" />
-          <span>Account</span>
+          <span>{t("sidebar.account")}</span>
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-56" align="end" side={isMobile ? "top" : "right"}>
@@ -425,7 +428,7 @@ function UserNavButton({ user }: { user: NonNullable<AuthSession["user"]> }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer" onClick={() => void signOut("/login")}>
           <LogOut className="mr-2 h-4 w-4" />
-          Log out
+          {t("sidebar.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -433,18 +436,19 @@ function UserNavButton({ user }: { user: NonNullable<AuthSession["user"]> }) {
 }
 
 function SettingsSidebarMenuItem() {
+  const { t } = useUiPreferences();
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         size="default"
         tooltip={{
-          children: "Settings",
+          children: t("sidebar.settings"),
           className: "bg-primary text-primary-foreground text-xs px-2 py-1 border-0 rounded-sm",
         }}
         onClick={() => showSettingsDialog({ initialSection: "ui" })}
       >
         <Settings className="h-5 w-5" />
-        <span>Settings</span>
+        <span>{t("sidebar.settings")}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
@@ -466,10 +470,11 @@ export function GitHubIcon({ className }: { className?: string }) {
 }
 
 function HelpSidebarMenuItem() {
+  const { t } = useUiPreferences();
   return (
     <HoverCardSidebarMenuItem
       icon={<HelpCircle className="h-5 w-5" />}
-      description="Help & Resources"
+      description={t("sidebar.help")}
       align="end"
       content={(_isOpen, onClose) => (
         <div className="space-y-1">
@@ -481,7 +486,7 @@ function HelpSidebarMenuItem() {
             }}
           >
             <BookOpen className="h-4 w-4" />
-            Documentation
+            {t("sidebar.documentation")}
           </button>
           <button
             className="w-full flex items-center gap-2 text-left px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
@@ -491,7 +496,7 @@ function HelpSidebarMenuItem() {
             }}
           >
             <History className="h-4 w-4" />
-            Release Notes
+            {t("sidebar.releaseNotes")}
           </button>
         </div>
       )}
@@ -501,6 +506,7 @@ function HelpSidebarMenuItem() {
 }
 
 function GitHubButton() {
+  const { t } = useUiPreferences();
   const simpleTooltipClass =
     "bg-primary text-primary-foreground text-xs px-2 py-1 border-0 rounded-sm";
 
@@ -508,7 +514,7 @@ function GitHubButton() {
     <SidebarMenuButton
       size="default"
       tooltip={{
-        children: "View on GitHub",
+        children: t("sidebar.github"),
         className: simpleTooltipClass,
       }}
       onClick={() =>
@@ -516,7 +522,7 @@ function GitHubButton() {
       }
     >
       <GitHubIcon className="h-5 w-5" />
-      <span>View on GitHub</span>
+      <span>{t("sidebar.github")}</span>
     </SidebarMenuButton>
   );
 }

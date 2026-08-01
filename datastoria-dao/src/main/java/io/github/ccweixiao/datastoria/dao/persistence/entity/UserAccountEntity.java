@@ -21,6 +21,7 @@ public class UserAccountEntity {
   private String passwordHash;
   private String role;
   private Integer status;
+  private Integer tokenVersion;
   private Instant createdAt;
   private Instant updatedAt;
 
@@ -33,6 +34,7 @@ public class UserAccountEntity {
     e.passwordHash = a.passwordHash();
     e.role = a.role();
     e.status = a.status();
+    e.tokenVersion = a.tokenVersion();
     e.createdAt = a.createdAt();
     e.updatedAt = a.updatedAt();
     return e;
@@ -47,6 +49,7 @@ public class UserAccountEntity {
         passwordHash,
         role != null ? role : UserAccount.ROLE_USER,
         status != null ? status : 1,
+        tokenVersion != null ? tokenVersion : 1,
         createdAt,
         updatedAt);
   }
@@ -105,6 +108,14 @@ public class UserAccountEntity {
 
   public void setStatus(Integer status) {
     this.status = status;
+  }
+
+  public Integer getTokenVersion() {
+    return tokenVersion;
+  }
+
+  public void setTokenVersion(Integer tokenVersion) {
+    this.tokenVersion = tokenVersion;
   }
 
   public Instant getCreatedAt() {

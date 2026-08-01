@@ -580,3 +580,25 @@ CREATE TABLE ds_agentscope_sessions (
     updated_at   datetime     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (session_id, state_key, item_index)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Source: V17__user_account.sql
+CREATE TABLE ds_user_account (
+    id            VARCHAR(64) NOT NULL,
+    tenant_id     VARCHAR(64) NOT NULL,
+    username      VARCHAR(64) NOT NULL,
+    password_hash VARCHAR(100) NOT NULL,
+    display_name  VARCHAR(128) NOT NULL,
+    email         VARCHAR(320) NULL,
+    role          VARCHAR(16) NOT NULL DEFAULT 'USER',
+    status        VARCHAR(16) NOT NULL DEFAULT 'ENABLED',
+    token_version INT NOT NULL DEFAULT 1,
+    created_at    DATETIME(6) NOT NULL,
+    updated_at    DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_account_username (username),
+    UNIQUE KEY uk_user_account_email (email),
+    KEY idx_user_account_tenant (tenant_id),
+    CONSTRAINT chk_user_account_role CHECK (role IN ('ADMIN', 'USER')),
+    CONSTRAINT chk_user_account_status CHECK (status IN ('ENABLED', 'DISABLED')),
+    CONSTRAINT chk_user_account_token_version CHECK (token_version > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

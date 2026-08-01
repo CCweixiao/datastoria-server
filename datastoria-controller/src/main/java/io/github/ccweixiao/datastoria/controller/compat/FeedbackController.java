@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.github.ccweixiao.datastoria.common.domain.FeedbackEvent;
 import io.github.ccweixiao.datastoria.common.dto.FeedbackAcceptedResponse;
 import io.github.ccweixiao.datastoria.common.dto.FeedbackUpsertRequest;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
 import io.github.ccweixiao.datastoria.dao.repository.FeedbackEventRepository;
@@ -136,14 +137,14 @@ public class FeedbackController {
 
   private FeedbackUpsertRequest parse(JsonNode raw) {
     if (raw == null || !raw.isObject()) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
     try {
       return objectMapper.treeToValue(raw, FeedbackUpsertRequest.class);
     } catch (MismatchedInputException e) {
-      throw PlainTextException.badRequest("Invalid request format");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST_FORMAT);
     } catch (IOException e) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
   }
 }

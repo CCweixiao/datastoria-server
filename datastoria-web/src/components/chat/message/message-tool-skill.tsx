@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type {
   AppUIMessage,
   SkillResourceToolInput,
@@ -85,6 +86,7 @@ export const MessageToolSkill = memo(function MessageToolSkill({
   isRunning?: boolean;
   label?: string;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart;
   const state = toolPart.state;
   const input = (toolPart.input ?? {}) as SkillInput;
@@ -103,7 +105,7 @@ export const MessageToolSkill = memo(function MessageToolSkill({
     >
       {requestedItems.length > 0 ? (
         <div className="text-[10px] text-muted-foreground">
-          <div className="font-medium">input:</div>
+          <div className="font-medium">{t("tool.input")}</div>
           <div className="pl-3 font-mono">
             {requestedItems.map((item, index) => (
               <div key={`${item}-${index}`}>{item}</div>
@@ -113,7 +115,7 @@ export const MessageToolSkill = memo(function MessageToolSkill({
       ) : null}
       {characterCount != null ? (
         <div className="text-[10px] text-muted-foreground">
-          <div className="font-medium">output:</div>
+          <div className="font-medium">{t("tool.output")}</div>
           <div className="pl-3 font-mono">{characterCount} characters</div>
         </div>
       ) : null}

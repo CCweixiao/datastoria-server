@@ -45,25 +45,36 @@ public class UserAdminController {
 
   @PostMapping
   public Mono<ResponseEntity<UserResponse>> create(@RequestBody @Valid CreateUserRequest req) {
-    return userAccountService.create(req).map(UserResponse::from).map(ResponseEntity::ok);
+    return IdentityContext.current()
+        .flatMap(identity -> userAccountService.create(identity.tenantId(), req))
+        .map(UserResponse::from)
+        .map(ResponseEntity::ok);
   }
 
   @GetMapping("/{userId}")
   public Mono<ResponseEntity<UserResponse>> get(@PathVariable String userId) {
-    return userAccountService.findByUserId(userId).map(UserResponse::from).map(ResponseEntity::ok);
+    return IdentityContext.current()
+        .flatMap(identity -> userAccountService.findByUserId(identity.tenantId(), userId))
+        .map(UserResponse::from)
+        .map(ResponseEntity::ok);
   }
 
   @PutMapping("/{userId}")
   public Mono<ResponseEntity<UserResponse>> update(
       @PathVariable String userId, @RequestBody @Valid UpdateUserRequest req) {
-    return userAccountService.update(userId, req).map(UserResponse::from).map(ResponseEntity::ok);
+    return IdentityContext.current()
+        .flatMap(identity -> userAccountService.update(identity.tenantId(), userId, req))
+        .map(UserResponse::from)
+        .map(ResponseEntity::ok);
   }
 
   @PostMapping("/{userId}/reset-password")
   public Mono<ResponseEntity<UserResponse>> resetPassword(
       @PathVariable String userId, @RequestBody @Valid ResetPasswordRequest req) {
-    return userAccountService
-        .resetPassword(userId, req.password())
+    return IdentityContext.current()
+        .flatMap(
+            identity ->
+                userAccountService.resetPassword(identity.tenantId(), userId, req.password()))
         .map(UserResponse::from)
         .map(ResponseEntity::ok);
   }

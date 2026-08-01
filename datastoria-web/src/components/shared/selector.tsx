@@ -523,12 +523,12 @@ const Selector = React.forwardRef<SelectorRef, SelectorProps>(
     }, [supportedComparators]);
 
     const [isOpen, setIsOpen] = useState(false);
-    const [selectedComparator, setSelectedComparator] = useState(
+    const [selectedComparator, setSelectedComparator] = useState(() =>
       ComparatorManager.parseComparator(defaultPattern?.comparator ?? "=")
     );
 
     const [selectedValue, setSelectedValue] = useState(
-      new Set<string>(defaultPattern?.values ?? [])
+      () => new Set<string>(defaultPattern?.values ?? [])
     );
     const [listItems, setListItems] = useState<SelectorItem[]>(defaultItems);
     const [isLoading, setIsLoading] = useState(false);

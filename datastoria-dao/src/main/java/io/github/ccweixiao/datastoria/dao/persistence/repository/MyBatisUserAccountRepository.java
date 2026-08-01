@@ -49,6 +49,14 @@ public class MyBatisUserAccountRepository implements UserAccountRepository {
   }
 
   @Override
+  public Optional<UserAccount> findByTenantIdAndUserId(String tenantId, String userId) {
+    return selectOne(
+        Wrappers.<UserAccountEntity>lambdaQuery()
+            .eq(UserAccountEntity::getTenantId, tenantId)
+            .eq(UserAccountEntity::getUserId, userId));
+  }
+
+  @Override
   public List<UserAccount> findAll(String tenantId) {
     return mapper
         .selectList(

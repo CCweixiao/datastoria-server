@@ -1,3 +1,5 @@
+import { getAuthToken } from "@/lib/auth-token-store";
+
 export function backendApiUrl(path: string): string {
   const base = (process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "/backend").replace(
     /\/+$/,
@@ -14,13 +16,18 @@ export function backendApiUrl(path: string): string {
 
 export function backendApiHeaders(extra?: HeadersInit): HeadersInit {
   const email = process.env.NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL;
+  const language =
+    typeof document === "undefined" ? "en" : document.documentElement.lang || navigator.language;
+  const token = getAuthToken();
   return {
+    "Accept-Language": language,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(email ? { "x-datastoria-user-email": email } : {}),
     ...(extra ?? {}),
   };
 }
 
-/** Sends a browser request to Java with the server-owned login session cookie. */
+/** Sends a browser request to Java with locale and the current Bearer token. */
 export function backendApiFetch(
   input: string | URL | Request,
   init?: RequestInit

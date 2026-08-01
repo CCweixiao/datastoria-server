@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ interface ConnectionDetailContentProps {
 }
 
 export function ConnectionDetailContent({ conn, className }: ConnectionDetailContentProps) {
+  const { t } = useUiPreferences();
   if (!conn) {
     return null;
   }
@@ -24,28 +26,28 @@ export function ConnectionDetailContent({ conn, className }: ConnectionDetailCon
     <div className={cn("px-2 py-2 text-[10px] text-popover-foreground", className)}>
       <div className="flex flex-col gap-y-2">
         <div>
-          <div className="text-xs text-muted-foreground">Name</div>
+          <div className="text-xs text-muted-foreground">{t("connection.name")}</div>
           <div className="text-xs font-medium break-all">{conn.name}</div>
         </div>
 
         <div>
-          <div className="text-xs text-muted-foreground">URL</div>
+          <div className="text-xs text-muted-foreground">{t("connection.url")}</div>
           <div className="text-xs break-all">{conn.url}</div>
         </div>
 
         <div>
-          <div className="text-xs text-muted-foreground">User</div>
+          <div className="text-xs text-muted-foreground">{t("connection.user")}</div>
           <div className="text-xs break-all">{conn.user}</div>
         </div>
 
         <div>
-          <div className="text-xs text-muted-foreground">Password</div>
-          <div className="text-xs">Stored securely on the server</div>
+          <div className="text-xs text-muted-foreground">{t("connection.password")}</div>
+          <div className="text-xs">{t("connection.passwordStored")}</div>
         </div>
 
         <div>
-          <div className="text-xs text-muted-foreground">Cluster</div>
-          <div className="text-xs break-all">{conn.cluster || "N/A"}</div>
+          <div className="text-xs text-muted-foreground">{t("connection.cluster")}</div>
+          <div className="text-xs break-all">{conn.cluster || t("common.notAvailable")}</div>
         </div>
       </div>
     </div>
@@ -53,6 +55,7 @@ export function ConnectionDetailContent({ conn, className }: ConnectionDetailCon
 }
 
 export function ConnectionDetailPanel({ conn, onEdit }: ConnectionDetailPanelProps) {
+  const { t } = useUiPreferences();
   if (!conn) {
     return null;
   }
@@ -72,7 +75,7 @@ export function ConnectionDetailPanel({ conn, onEdit }: ConnectionDetailPanelPro
           onClick={() => onEdit?.(conn)}
         >
           <Pencil className="h-4 w-4 mr-2" />
-          Edit Connection
+          {t("connection.edit")}
         </Button>
       </div>
     </div>

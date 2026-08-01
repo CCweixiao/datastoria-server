@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLogo } from "@/components/app-logo";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { TypingDots } from "@/components/ui/typing-dots";
 import type { AppUIMessage } from "@/lib/ai/ai-types";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ function isAtBottom(element: HTMLDivElement) {
 
 export const ChatMessageList = React.memo(
   ({ messages, isRunning, error }: ChatMessageListProps) => {
+    const { t } = useUiPreferences();
     const prevLastMessageKeyRef = React.useRef(
       messages.length > 0 ? `${messages.length}:${messages[messages.length - 1].id}` : undefined
     );
@@ -157,7 +159,7 @@ export const ChatMessageList = React.memo(
 
                     <div className="flex-1 overflow-hidden min-w-0 text-sm pr-6">
                       <div className="flex items-center gap-2 text-muted-foreground">
-                        <span className={RUNNING_TEXT_CLASS}>Thinking</span>
+                        <span className={RUNNING_TEXT_CLASS}>{t("chat.thinking")}</span>
                       </div>
                       <div className="mt-2 flex items-center gap-2 text-muted-foreground">
                         <TypingDots />
@@ -174,7 +176,7 @@ export const ChatMessageList = React.memo(
           <div className="mt-4 p-3 bg-destructive/10 border border-destructive rounded-lg flex items-start gap-2 mx-2">
             <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-medium text-destructive">Error</p>
+              <p className="font-medium text-destructive">{t("common.error")}</p>
               <p className="text-sm text-destructive/80">{error.message}</p>
             </div>
           </div>

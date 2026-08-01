@@ -2,6 +2,12 @@ package io.github.ccweixiao.datastoria.common.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * Resolved configuration for local username+password authentication and JWT issuance/verification
@@ -11,13 +17,14 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConfigurationProperties(prefix = "datastoria.security")
+@Validated
 public class SecurityProperties {
 
   /** Single default tenant assigned to every account until multi-organization support lands. */
-  private String defaultTenant = "default";
+  @NotBlank private String defaultTenant = "default";
 
-  private final Jwt jwt = new Jwt();
-  private final BootstrapAdmin bootstrapAdmin = new BootstrapAdmin();
+  @Valid private final Jwt jwt = new Jwt();
+  @Valid private final BootstrapAdmin bootstrapAdmin = new BootstrapAdmin();
 
   public String getDefaultTenant() {
     return defaultTenant;
@@ -38,9 +45,9 @@ public class SecurityProperties {
   /** HS256 signing parameters for login JWTs. */
   public static class Jwt {
     private String secret = "";
-    private String issuer = "datastoria";
-    private String audience = "datastoria-api";
-    private long ttlMinutes = 480L;
+    @NotBlank private String issuer = "datastoria";
+    @NotBlank private String audience = "datastoria-api";
+    @Min(1) private long ttlMinutes = 480L;
 
     public String getSecret() {
       return secret;
@@ -77,9 +84,9 @@ public class SecurityProperties {
 
   /** Credentials for the idempotent administrator created on first startup. */
   public static class BootstrapAdmin {
-    private String username = "admin";
+    @NotBlank private String username = "admin";
     private String password = "";
-    private String role = "ADMIN";
+    @Pattern(regexp = "USER|ADMIN") private String role = "ADMIN";
     private String tenant;
     private String email;
 

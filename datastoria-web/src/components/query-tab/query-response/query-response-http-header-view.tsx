@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { QueryIdButton } from "../query-id-button";
 
 interface QueryResponseHttpHeaderViewProps {
@@ -5,6 +6,7 @@ interface QueryResponseHttpHeaderViewProps {
 }
 
 export function QueryResponseHttpHeaderView({ headers }: QueryResponseHttpHeaderViewProps) {
+  const { t } = useUiPreferences();
   if (!headers) {
     return null;
   }
@@ -13,8 +15,8 @@ export function QueryResponseHttpHeaderView({ headers }: QueryResponseHttpHeader
     <table className="w-full border-collapse text-xs">
       <thead>
         <tr className="border-b">
-          <th className="text-left p-2 whitespace-nowrap">Name</th>
-          <th className="text-left p-2 whitespace-nowrap">Value</th>
+          <th className="text-left p-2 whitespace-nowrap">{t("common.name")}</th>
+          <th className="text-left p-2 whitespace-nowrap">{t("queryContext.value")}</th>
         </tr>
       </thead>
       <tbody>

@@ -1,6 +1,6 @@
 "use client";
 
-import { loadAuthProviders, loadAuthSession } from "@/lib/auth-client";
+import { loadAuthSession } from "@/lib/auth-client";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -15,10 +15,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     let active = true;
-    Promise.all([loadAuthProviders(), loadAuthSession()])
-      .then(([providers, session]) => {
+    loadAuthSession()
+      .then((session) => {
         if (!active) return;
-        if (Object.keys(providers).length > 0 && !session.user) {
+        if (!session.user) {
           router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
           return;
         }

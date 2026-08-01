@@ -2,6 +2,7 @@ import { useSqlExecution } from "@/components/chat/sql-execution-context";
 import { useConnection } from "@/components/connection/connection-context";
 import { QueryExecutionTimer } from "@/components/query-tab/query-execution-timer";
 import { openSaveSnippetDialog } from "@/components/query-tab/snippet/save-snippet-dialog";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import type { QueryError } from "@/lib/connection/connection";
 import { SqlUtils } from "@/lib/sql-utils";
@@ -37,6 +38,7 @@ export const MessageMarkdownSql = memo(function MessageMarkdownSql({
   showLineNumbers,
   expandable = false,
 }: MessageMarkdownSqlProps) {
+  const { t } = useUiPreferences();
   const { connection } = useConnection();
   const { executionMode } = useSqlExecution();
   const [isExecuting, setIsExecuting] = useState(false);
@@ -48,7 +50,7 @@ export const MessageMarkdownSql = memo(function MessageMarkdownSql({
   const handleRun = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!connection) {
-      toastManager.show("No connection selected", "error");
+      toastManager.show(t("chat.noConnection"), "error");
       return;
     }
 
@@ -130,7 +132,7 @@ export const MessageMarkdownSql = memo(function MessageMarkdownSql({
                   isHovered || isExecuting ? "opacity-100" : "opacity-0 pointer-events-none"
                 )}
                 onClick={handleRun}
-                title={executionMode === "inline" ? "Run in place" : "Run in Query Tab"}
+                title={executionMode === "inline" ? t("chat.runInPlace") : t("chat.runInQueryTab")}
                 disabled={isExecuting}
               >
                 {isExecuting ? (
@@ -157,7 +159,7 @@ export const MessageMarkdownSql = memo(function MessageMarkdownSql({
                 isHovered ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
               onClick={() => openSaveSnippetDialog({ initialSql: code })}
-              title="Save as snippet"
+              title={t("chat.saveAsSnippet")}
             >
               <Bookmark className="!h-3 !w-3" />
             </Button>
@@ -193,7 +195,7 @@ export const MessageMarkdownSql = memo(function MessageMarkdownSql({
             size="icon"
             className="absolute top-2 right-2 h-5 w-5 opacity-60 hover:opacity-100 transition-all z-10"
             onClick={() => setShowResults(false)}
-            title="Close results"
+            title={t("chat.closeResults")}
           >
             <X className="!h-3 !w-3" />
           </Button>

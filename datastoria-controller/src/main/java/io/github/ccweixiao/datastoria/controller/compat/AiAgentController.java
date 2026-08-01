@@ -20,6 +20,7 @@ import io.github.ccweixiao.datastoria.agent.application.AiSdkStreamEncoder;
 import io.github.ccweixiao.datastoria.agent.application.ChatRunService;
 import io.github.ccweixiao.datastoria.agent.application.SessionTitleService;
 import io.github.ccweixiao.datastoria.common.agent.AgentChatRequest;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.ClientSecretNotAllowedException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.IdentityContext;
@@ -66,7 +67,7 @@ public class AiAgentController {
       ServerWebExchange exchange) {
     markLegacyRoute(exchange);
     if (raw == null) {
-      throw PlainTextException.badRequest("Invalid JSON in request body");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_JSON);
     }
     rejectClientSecrets(raw);
     AgentChatRequest req = parseRequest(raw, idempotencyKey);

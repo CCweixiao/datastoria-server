@@ -1,7 +1,9 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog } from "@/components/shared/use-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normalizeLocale, translate } from "@/lib/i18n/i18n";
 import {
   SqlUtils,
   type SqlCustomSplitterOptions,
@@ -39,6 +41,7 @@ function RunScriptConfirmDialogContent({
   onFailureModeChange,
   onStatementsChange,
 }: RunScriptConfirmDialogContentProps) {
+  const { t } = useUiPreferences();
   const [splitter, setSplitter] = useState<SqlStatementSplitter>(defaultSplitter);
   const [customSplitter, setCustomSplitter] =
     useState<SqlCustomSplitterOptions>(defaultCustomSplitter);
@@ -87,7 +90,7 @@ function RunScriptConfirmDialogContent({
   return (
     <div className="grid gap-2 pt-2">
       <div className="flex items-center gap-4">
-        <Label className="mb-0">Splitter</Label>
+        <Label className="mb-0">{t("query.splitter")}</Label>
         <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
           <input
             type="radio"
@@ -96,7 +99,7 @@ function RunScriptConfirmDialogContent({
             checked={splitter === "semicolon"}
             onChange={() => setSplitter("semicolon")}
           />
-          Semicolon (;)
+          {t("query.semicolon")}
         </label>
         <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
           <input
@@ -106,7 +109,7 @@ function RunScriptConfirmDialogContent({
             checked={splitter === "newline"}
             onChange={() => setSplitter("newline")}
           />
-          Newline
+          {t("query.newline")}
         </label>
         <label className="inline-flex items-center gap-2 text-sm whitespace-nowrap">
           <input
@@ -116,7 +119,7 @@ function RunScriptConfirmDialogContent({
             checked={splitter === "custom"}
             onChange={() => setSplitter("custom")}
           />
-          Custom
+          {t("query.custom")}
         </label>
         <div className="relative w-full">
           <Input
@@ -127,7 +130,7 @@ function RunScriptConfirmDialogContent({
                 value: event.target.value,
               }))
             }
-            placeholder="Custom splitter"
+            placeholder={t("query.customSplitter")}
             disabled={splitter !== "custom"}
             className="h-7 pr-12 pl-2 text-left text-sm [direction:ltr]"
           />
@@ -142,7 +145,7 @@ function RunScriptConfirmDialogContent({
                 isRegex: !prev.isRegex,
               }))
             }
-            title="Toggle regular expression mode"
+            title={t("query.regexMode")}
           >
             {customSplitter.isRegex && <Check className="!h-2 !w-2" />}
             RE
@@ -158,7 +161,7 @@ function RunScriptConfirmDialogContent({
                 <input
                   type="checkbox"
                   checked={allSelected}
-                  aria-label="Select all statements"
+                  aria-label={t("query.selectAll")}
                   onChange={toggleSelectAll}
                 />
               </th>
@@ -180,7 +183,7 @@ function RunScriptConfirmDialogContent({
                   <input
                     type="checkbox"
                     checked={selectedIndexes.includes(index)}
-                    aria-label={`Select statement ${index + 1}`}
+                    aria-label={t("query.selectStatement", { count: index + 1 })}
                     onChange={() => toggleSelection(index)}
                   />
                 </td>
@@ -195,7 +198,7 @@ function RunScriptConfirmDialogContent({
       </div>
 
       <div className="flex items-center gap-4">
-        <Label className="mb-0">Failure Mode</Label>
+        <Label className="mb-0">{t("query.failureMode")}</Label>
         <label className="inline-flex items-center gap-2 text-sm">
           <input
             type="radio"
@@ -204,7 +207,7 @@ function RunScriptConfirmDialogContent({
             checked={failureMode === "abort"}
             onChange={() => setFailureMode("abort")}
           />
-          Abort on first failure
+          {t("query.abortOnFailure")}
         </label>
         <label className="inline-flex items-center gap-2 text-sm">
           <input
@@ -214,7 +217,7 @@ function RunScriptConfirmDialogContent({
             checked={failureMode === "continue"}
             onChange={() => setFailureMode("continue")}
           />
-          Continue on failure
+          {t("query.continueOnFailure")}
         </label>
       </div>
     </div>
@@ -230,6 +233,9 @@ export function showMultipleStatementsConfirmDialog({
   onConfirm,
   onCancel,
 }: ShowMultipleStatementsConfirmDialogOptions) {
+  const locale = normalizeLocale(
+    typeof document === "undefined" ? "en" : document.documentElement.lang
+  );
   let currentStatements = SqlUtils.splitSqlStatements(
     sqlText,
     defaultSplitter,
@@ -244,8 +250,13 @@ export function showMultipleStatementsConfirmDialog({
       .filter((statement): statement is string => statement !== undefined);
 
   Dialog.showDialog({
-    title: "SQL Execution Confirmation",
-    description: `${source === "selection" ? "Selected text" : "Editor content"} will be executed as batch SQLs. Confirm statements and options before execution.`,
+    title: translate(locale, "query.executionConfirmation"),
+    description: translate(locale, "query.batchDescription", {
+      source: translate(
+        locale,
+        source === "selection" ? "query.selectedText" : "query.editorContent"
+      ),
+    }),
     className: "sm:max-w-[900px]",
     mainContent: (
       <RunScriptConfirmDialogContent
@@ -267,7 +278,7 @@ export function showMultipleStatementsConfirmDialog({
     ),
     dialogButtons: [
       {
-        text: "Cancel",
+        text: translate(locale, "common.cancel"),
         default: false,
         variant: "outline",
         onClick: async () => {
@@ -276,14 +287,14 @@ export function showMultipleStatementsConfirmDialog({
         },
       },
       {
-        text: "Execute",
+        text: translate(locale, "query.execute"),
         default: true,
         onClick: async () => {
           const selectedStatements = getSelectedStatements();
           if (selectedStatements.length === 0) {
             Dialog.alert({
-              title: "No statements selected",
-              description: "Select at least one statement to execute.",
+              title: translate(locale, "query.noStatements"),
+              description: translate(locale, "query.selectOneStatement"),
             });
             return false;
           }

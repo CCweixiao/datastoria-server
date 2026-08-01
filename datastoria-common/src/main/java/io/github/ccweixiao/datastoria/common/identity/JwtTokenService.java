@@ -40,7 +40,8 @@ public class JwtTokenService {
     this.signingKey = resolveSigningKey(properties.getJwt().getSecret(), masterKeyProvider);
   }
 
-  public String sign(String userId, String tenantId, String role, String username) {
+  public String sign(
+      String userId, String tenantId, String role, String username, int tokenVersion) {
     Instant now = Instant.now();
     Instant exp = now.plus(Duration.ofMinutes(properties.getJwt().getTtlMinutes()));
     return Jwts.builder()
@@ -53,6 +54,7 @@ public class JwtTokenService {
         .claim("tenant", tenantId)
         .claim("role", role)
         .claim("name", username)
+        .claim("ver", tokenVersion)
         .issuedAt(Date.from(now))
         .notBefore(Date.from(now))
         .expiration(Date.from(exp))
@@ -74,12 +76,18 @@ public class JwtTokenService {
               .build()
               .parseSignedClaims(token)
               .getPayload();
+      String subject = claims.getSubject();
+      Object versionClaim = claims.get("ver");
+      if (subject == null || subject.isBlank() || !(versionClaim instanceof Number version)) {
+        return Optional.empty();
+      }
       return Optional.of(
           new VerifiedToken(
-              claims.getSubject(),
+              subject,
               stringClaim(claims, "tenant"),
               stringClaim(claims, "role"),
-              stringClaim(claims, "name")));
+              stringClaim(claims, "name"),
+              version.intValue()));
     } catch (JwtException | IllegalArgumentException e) {
       log.debug("login token rejected: {}", e.getMessage());
       return Optional.empty();
@@ -108,5 +116,6 @@ public class JwtTokenService {
   }
 
   /** Claims carried by a verified login token. */
-  public record VerifiedToken(String userId, String tenantId, String role, String username) {}
+  public record VerifiedToken(
+      String userId, String tenantId, String role, String username, int tokenVersion) {}
 }

@@ -13,13 +13,14 @@ const AceEditor = dynamic(
     const { initAce } = await import("@/components/query-tab/query-input/ace-setup");
     await initAce();
 
-    await import("ace-builds/src-noconflict/ext-language_tools");
-    await import("ace-builds/src-noconflict/mode-sql");
-    await import("ace-builds/src-noconflict/theme-xcode");
-    await import("ace-builds/src-noconflict/theme-solarized_dark");
-    await import("@/components/query-tab/query-input/completion/clickhouse-sql");
-
-    const ReactAce = await import("react-ace");
+    const [, , , , , ReactAce] = await Promise.all([
+      import("ace-builds/src-noconflict/ext-language_tools"),
+      import("ace-builds/src-noconflict/mode-sql"),
+      import("ace-builds/src-noconflict/theme-xcode"),
+      import("ace-builds/src-noconflict/theme-solarized_dark"),
+      import("@/components/query-tab/query-input/completion/clickhouse-sql"),
+      import("react-ace"),
+    ]);
     return ReactAce.default;
   },
   { ssr: false }
@@ -59,14 +60,8 @@ function PanelEditSqlEditorComponent({
   const [editorWidth, setEditorWidth] = useState(800);
   const latestOnRunQuery = useRef(onRunQuery);
   const latestOnSqlChange = useRef(onSqlChange);
-
-  useEffect(() => {
-    latestOnRunQuery.current = onRunQuery;
-  }, [onRunQuery]);
-
-  useEffect(() => {
-    latestOnSqlChange.current = onSqlChange;
-  }, [onSqlChange]);
+  latestOnRunQuery.current = onRunQuery;
+  latestOnSqlChange.current = onSqlChange;
 
   // Dark mode detection (same pattern as query-input-view)
   const [isDark, setIsDark] = useState(() => {

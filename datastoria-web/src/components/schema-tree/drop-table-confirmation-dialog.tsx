@@ -2,11 +2,13 @@ import type { FieldOption } from "@/components/shared/dashboard/dashboard-model"
 import { DataTable } from "@/components/shared/dashboard/data-table";
 import FloatingProgressBar from "@/components/shared/floating-progress-bar";
 import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog } from "@/components/shared/use-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Connection, QueryError } from "@/lib/connection/connection";
 import { HttpResponseLineReader } from "@/lib/http-response-line-reader";
+import { normalizeLocale, translate } from "@/lib/i18n/i18n";
 import "@/lib/number-utils";
 import { SqlUtils } from "@/lib/sql-utils";
 import { Loader2 } from "lucide-react";
@@ -71,6 +73,7 @@ function DropTableConfirmationDialogContent({
   onCancel?: () => void;
   isDroppingRef: React.MutableRefObject<boolean>;
 }) {
+  const { t } = useUiPreferences();
   const [options, setOptions] = useState<DropTableOptions>({
     dropAsync: false,
     skipSizeRestriction: false,
@@ -130,7 +133,7 @@ function DropTableConfirmationDialogContent({
       const res = await response;
       const reader = res.body?.getReader();
       if (!reader) {
-        throw new Error("Response body is not readable");
+        throw new Error(t("schema.responseUnreadable"));
       }
 
       const exceptionTag = "__exception__";
@@ -139,7 +142,7 @@ function DropTableConfirmationDialogContent({
         const exceptionIndex = line.indexOf(exceptionTag);
         if (exceptionIndex >= 0) {
           const message = line.slice(exceptionIndex + exceptionTag.length).trim();
-          exceptionLines.push(message || "Unknown error");
+          exceptionLines.push(message || t("schema.unknownError"));
           return;
         }
         if (exceptionLines.length > 0) {
@@ -157,19 +160,17 @@ function DropTableConfirmationDialogContent({
       }
 
       if (options.dropAsync) {
-        setMessages(
-          "DROP DDL has been successfully submitted.\nYou may need to refresh the schema tree manually to see the changes."
-        );
+        setMessages(t("schema.dropSubmitted"));
       } else {
-        setMessages("Table has been dropped successfully across all nodes.");
+        setMessages(t("schema.dropSucceeded"));
         onSuccess();
       }
     } catch (error) {
-      let message = "Error dropping table: ";
+      let message = t("schema.dropFailed");
       if (error instanceof QueryError) {
         message += String(error.data || error.message);
       } else {
-        message += error instanceof Error ? error.message : "Unknown error occurred";
+        message += error instanceof Error ? error.message : t("schema.unknownError");
       }
       setMessages(message);
     } finally {
@@ -190,65 +191,56 @@ function DropTableConfirmationDialogContent({
   const confirmationView = (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="min-h-0 flex-1 overflow-auto space-y-4">
-        <p>
-          Are you sure to drop the table{" "}
-          <u>
-            {table.database}.{table.table}
-          </u>
-          ? This action cannot be reverted.
-        </p>
+        <p>{t("schema.dropConfirm", { name: `${table.database}.${table.table}` })}</p>
         <div>
-          <p className="text-sm text-muted-foreground">Table Info:</p>
+          <p className="text-sm text-muted-foreground">{t("schema.tableInfo")}</p>
           <div className="rounded-md border p-3 text-sm">
             {tableStats ? (
               <>
-                <span className="text-muted-foreground">Total rows: </span>
+                <span className="text-muted-foreground">{t("schema.totalRows")} </span>
                 <span className="font-medium">{Number(tableStats.totalRows).toLocaleString()}</span>
                 <span className="mx-2 text-muted-foreground">·</span>
-                <span className="text-muted-foreground">Size: </span>
+                <span className="text-muted-foreground">{t("schema.size")} </span>
                 <span className="font-medium">
                   {Number(tableStats.totalBytes).formatBinarySize()}
                 </span>
               </>
             ) : (
-              "Loading table info..."
+              t("schema.loadingTableInfo")
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">Drop Settings:</p>
+          <p className="text-sm text-muted-foreground">{t("schema.dropSettings")}</p>
           <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Drop table asynchronously</p>
-                <p className="text-xs text-muted-foreground">
-                  This helps if you drop a large table while it does not block other DDL operations
-                </p>
+                <p className="text-sm font-medium">{t("schema.dropAsync")}</p>
+                <p className="text-xs text-muted-foreground">{t("schema.dropAsyncHelp")}</p>
               </div>
               <Switch
                 checked={options.dropAsync}
                 onCheckedChange={(checked) => updateOption("dropAsync", checked)}
-                aria-label="Drop table asynchronously"
+                aria-label={t("schema.dropAsync")}
               />
             </div>
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Skip table size drop restriction</p>
+                <p className="text-sm font-medium">{t("schema.skipDropRestriction")}</p>
                 <p className="text-xs text-muted-foreground">
-                  ClickHouse may refuse to drop a table if its size is larger than{" "}
-                  <i>max_table_size_to_drop</i>. This option skips that restriction.
+                  {t("schema.skipDropRestrictionHelp")}
                 </p>
               </div>
               <Switch
                 checked={options.skipSizeRestriction}
                 onCheckedChange={(checked) => updateOption("skipSizeRestriction", checked)}
-                aria-label="Skip table size drop restriction"
+                aria-label={t("schema.skipDropRestriction")}
               />
             </div>
           </div>
         </div>
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">The following SQL will be executed:</p>
+          <p className="text-sm text-muted-foreground">{t("schema.sqlToExecute")}</p>
           <div className="max-h-16 overflow-auto rounded-md border">
             <ThemedSyntaxHighlighter
               language="sql"
@@ -263,7 +255,7 @@ function DropTableConfirmationDialogContent({
       </div>
       <div className="flex shrink-0 justify-end gap-2">
         <Button type="button" variant="outline" size="sm" onClick={handleCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           type="button"
@@ -275,10 +267,10 @@ function DropTableConfirmationDialogContent({
           {isDropping ? (
             <>
               <Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
-              Dropping...
+              {t("schema.dropping")}
             </>
           ) : (
-            "Drop Table"
+            t("schema.dropTitle")
           )}
         </Button>
       </div>
@@ -303,8 +295,8 @@ function DropTableConfirmationDialogContent({
               ]}
               fieldOptions={
                 [
-                  { name: "host", title: "Executed Host" },
-                  { name: "timestamp", title: "Executed Time", format: "MMddHHmmss" },
+                  { name: "host", title: t("schema.executedHost") },
+                  { name: "timestamp", title: t("schema.executedTime"), format: "MMddHHmmss" },
                 ] as FieldOption[]
               }
               enableIndexColumn
@@ -315,7 +307,7 @@ function DropTableConfirmationDialogContent({
       {message && <pre className="overflow-auto text-sm">{message}</pre>}
       <div className="mt-auto flex shrink-0 justify-end">
         <Button type="button" size="sm" onClick={handleOk}>
-          OK
+          {t("common.ok")}
         </Button>
       </div>
     </div>
@@ -335,9 +327,12 @@ export function showDropTableConfirmationDialog({
   onCancel,
 }: DropTableConfirmationDialogProps) {
   const isDroppingRef = { current: false };
+  const locale = normalizeLocale(
+    typeof document === "undefined" ? "en" : document.documentElement.lang
+  );
 
   Dialog.showDialog({
-    title: "Drop Table",
+    title: translate(locale, "schema.dropTitle"),
     mainContent: (
       <DropTableConfirmationDialogContent
         table={table}

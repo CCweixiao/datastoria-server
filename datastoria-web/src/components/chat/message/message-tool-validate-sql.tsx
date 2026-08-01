@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import {
   type ValidateSqlToolInput,
@@ -14,6 +15,7 @@ export const MessageToolValidateSql = memo(function MessageToolValidateSql({
   part: AppUIMessage["parts"][0];
   isRunning?: boolean;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart & {
     input?: ValidateSqlToolInput;
     output?: ValidateSqlToolOutput;
@@ -31,7 +33,7 @@ export const MessageToolValidateSql = memo(function MessageToolValidateSql({
     >
       {input?.sql && (
         <>
-          <div className="text-[10px] text-muted-foreground">input:</div>
+          <div className="text-[10px] text-muted-foreground">{t("tool.input")}</div>
           <MessageMarkdownSql
             code={input.sql}
             showExecuteButton={false}

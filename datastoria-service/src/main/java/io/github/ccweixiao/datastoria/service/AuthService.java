@@ -45,7 +45,11 @@ public class AuthService {
             account -> {
               String token =
                   tokenService.sign(
-                      account.userId(), account.tenantId(), account.role(), account.username());
+                      account.userId(),
+                      account.tenantId(),
+                      account.role(),
+                      account.username(),
+                      account.tokenVersion());
               return new LoginResponse(token, UserResponse.from(account));
             });
   }
@@ -55,15 +59,13 @@ public class AuthService {
     io.github.ccweixiao.datastoria.common.domain.UserAccount account =
         users
             .findByUsername(username)
-            .orElseThrow(
-                () ->
-                    new BadCredentialsException("Authentication failed for username: " + username));
+            .orElseThrow(BadCredentialsException::new);
     if (!account.enabled()) {
-      throw new BadCredentialsException("Account is disabled: " + username);
+      throw new BadCredentialsException();
     }
     if (account.passwordHash() == null
         || !passwordEncoder.matches(password, account.passwordHash())) {
-      throw new BadCredentialsException("Authentication failed for username: " + username);
+      throw new BadCredentialsException();
     }
     return account;
   }

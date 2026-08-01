@@ -16,6 +16,7 @@ public record UserAccount(
     String passwordHash,
     String role,
     int status,
+    int tokenVersion,
     Instant createdAt,
     Instant updatedAt) {
 

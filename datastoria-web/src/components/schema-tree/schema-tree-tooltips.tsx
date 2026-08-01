@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { CopyButton } from "@/components/ui/copy-button";
 import { parseEnumType } from "./schema-tree-utils";
 
@@ -10,7 +11,8 @@ export function ColumnTooltip({
     comment?: string | null;
   };
 }) {
-  const columnName = String(column.name || "Unknown");
+  const { t } = useUiPreferences();
+  const columnName = String(column.name || t("schema.unknown"));
   const columnType = String(column.type || "");
   const columnComment = column.comment || null;
 
@@ -23,7 +25,7 @@ export function ColumnTooltip({
   return (
     <div className="text-xs space-y-1 max-w-[400px]">
       <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
-        <div className="font-medium text-muted-foreground">Column</div>
+        <div className="font-medium text-muted-foreground">{t("schema.column")}</div>
         <div className="text-foreground break-all flex items-center gap-1 min-w-0">
           <span>{columnName}</span>
           <CopyButton
@@ -31,7 +33,7 @@ export function ColumnTooltip({
             className="relative top-0 right-0 h-4 w-4 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
         </div>
-        <div className="font-medium text-muted-foreground">Type</div>
+        <div className="font-medium text-muted-foreground">{t("schema.type")}</div>
         <div className="text-foreground break-all min-w-0">{columnType}</div>
       </div>
 
@@ -72,15 +74,16 @@ export function TableTooltip({
     tableComment?: string | null;
   };
 }) {
-  const tableName = String(table.table || "Unknown");
-  const databaseName = String(table.database || "Unknown");
+  const { t } = useUiPreferences();
+  const tableName = String(table.table || t("schema.unknown"));
+  const databaseName = String(table.database || t("schema.unknown"));
   const fullName = `${databaseName}.${tableName}`;
   const tableComment = table.tableComment || null;
 
   return (
     <div className="text-xs space-y-1 max-w-[400px]">
       <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-        <div className="font-medium text-muted-foreground">Table</div>
+        <div className="font-medium text-muted-foreground">{t("schema.table")}</div>
         <div className="text-foreground break-all flex items-center gap-1 min-w-0">
           <span>{fullName}</span>
           <CopyButton
@@ -88,7 +91,7 @@ export function TableTooltip({
             className="relative top-0 right-0 h-4 w-4 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
         </div>
-        <div className="font-medium text-muted-foreground">Engine</div>
+        <div className="font-medium text-muted-foreground">{t("schema.engine")}</div>
         <div className="text-foreground break-all min-w-0">
           {table.fullTableEngine || table.tableEngine}
         </div>
@@ -112,12 +115,13 @@ export function DatabaseTooltip({
     tableCount: number;
   };
 }) {
-  const dbName = String(db.name || "Unknown");
+  const { t } = useUiPreferences();
+  const dbName = String(db.name || t("schema.unknown"));
 
   return (
     <div className="text-xs space-y-1 max-w-[400px]">
       <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-        <div className="font-medium text-muted-foreground">Database</div>
+        <div className="font-medium text-muted-foreground">{t("schema.database")}</div>
         <div className="text-foreground break-all flex items-center gap-1 min-w-0">
           <span>{dbName}</span>
           <CopyButton
@@ -125,9 +129,9 @@ export function DatabaseTooltip({
             className="relative top-0 right-0 h-4 w-4 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
         </div>
-        <div className="font-medium text-muted-foreground">Engine</div>
+        <div className="font-medium text-muted-foreground">{t("schema.engine")}</div>
         <div className="text-foreground break-all min-w-0">{db.engine}</div>
-        <div className="font-medium text-muted-foreground">Tables</div>
+        <div className="font-medium text-muted-foreground">{t("schema.tables")}</div>
         <div className="text-foreground min-w-0">{db.tableCount}</div>
       </div>
       {db.comment && (
@@ -154,6 +158,7 @@ export function HostTooltip({
   databaseCount: number;
   tableCount: number;
 }) {
+  const { t } = useUiPreferences();
   return (
     <div className="text-xs space-y-1 max-w-[400px]">
       <div className="font-medium text-muted-foreground">{connection.name}</div>
@@ -166,14 +171,14 @@ export function HostTooltip({
             className="relative top-0 right-0 h-4 w-4 shrink-0 [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
         </div>
-        <div className="font-medium text-muted-foreground">User</div>
+        <div className="font-medium text-muted-foreground">{t("connection.user")}</div>
         <div className="text-foreground break-all min-w-0">{connection.user}</div>
-        <div className="font-medium text-muted-foreground">Current Node</div>
+        <div className="font-medium text-muted-foreground">{t("schema.currentNode")}</div>
         <div className="text-foreground break-all min-w-0">{fullServerName}</div>
         <div className="col-span-2 pt-1 mt-1 border-t" />
-        <div className="font-medium text-muted-foreground">Databases</div>
+        <div className="font-medium text-muted-foreground">{t("schema.databases")}</div>
         <div className="text-foreground">{databaseCount}</div>
-        <div className="font-medium text-muted-foreground">Tables</div>
+        <div className="font-medium text-muted-foreground">{t("schema.tables")}</div>
         <div className="text-foreground">{tableCount}</div>
       </div>
     </div>

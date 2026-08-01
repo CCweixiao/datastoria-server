@@ -10,6 +10,7 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 
@@ -90,7 +91,7 @@ public class RepositoryBrowseService {
       throws IOException {
     Path file = resolve(relativePath);
     if (Files.size(file) > MAX_SOURCE_FILE_BYTES) {
-      throw PlainTextException.badRequest("Repository file is too large to browse");
+      throw PlainTextException.badRequest(ApiErrorCode.REPOSITORY_FILE_TOO_LARGE);
     }
     List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
     int total = lines.size();
@@ -110,7 +111,7 @@ public class RepositoryBrowseService {
         Math.min(
             total, requestedEnd == null ? Math.min(total, start + MAX_LINES - 1) : requestedEnd);
     if (end < start) {
-      throw PlainTextException.badRequest("Requested file range is invalid");
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_FILE_RANGE);
     }
     end = Math.min(end, start + MAX_LINES - 1);
     StringBuilder content = new StringBuilder();
@@ -157,7 +158,7 @@ public class RepositoryBrowseService {
 
   private Path resolve(String relativePath) throws IOException {
     if (relativePath == null || relativePath.isBlank() || Path.of(relativePath).isAbsolute()) {
-      throw PlainTextException.badRequest("A repo-relative path is required");
+      throw PlainTextException.badRequest(ApiErrorCode.REPOSITORY_PATH_REQUIRED);
     }
     Path candidate = root.resolve(relativePath).normalize();
     if (!candidate.startsWith(root) || !Files.isRegularFile(candidate)) {
@@ -165,7 +166,7 @@ public class RepositoryBrowseService {
     }
     Path real = candidate.toRealPath();
     if (!real.startsWith(root)) {
-      throw PlainTextException.badRequest("Repository path escapes the configured root");
+      throw PlainTextException.badRequest(ApiErrorCode.REPOSITORY_PATH_OUTSIDE_ROOT);
     }
     return real;
   }

@@ -14,6 +14,8 @@ public interface UserAccountRepository {
 
   Optional<UserAccount> findByUserId(String userId);
 
+  Optional<UserAccount> findByTenantIdAndUserId(String tenantId, String userId);
+
   List<UserAccount> findAll(String tenantId);
 
   /** Updates mutable fields (role, status, email, passwordHash); bumps {@code updated_at}. */

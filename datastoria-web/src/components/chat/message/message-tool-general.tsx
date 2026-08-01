@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import type { AppUIMessage, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
 import { memo, useState } from "react";
@@ -16,6 +17,7 @@ export const MessageToolGeneral = memo(function MessageToolGeneral({
   isRunning?: boolean;
   pendingAction?: PendingActionData;
 }) {
+  const { t } = useUiPreferences();
   const toolPart = part as ToolPart;
   const state = toolPart.state;
   const { onApproval } = useChatAction();
@@ -34,7 +36,7 @@ export const MessageToolGeneral = memo(function MessageToolGeneral({
     <CollapsiblePart toolName={toolName} state={state} isRunning={isRunning}>
       {toolPart.input != null && (
         <div className="mt-1 max-h-[300px] overflow-auto text-[10px] text-muted-foreground">
-          <div className="mb-0.5">input:</div>
+          <div className="mb-0.5">{t("tool.input")}</div>
           <pre className="bg-muted/30 rounded p-2 overflow-x-auto shadow-sm leading-tight border border-muted/20">
             {JSON.stringify(toolPart.input, null, 2)}
           </pre>
@@ -100,7 +102,7 @@ export const MessageToolGeneral = memo(function MessageToolGeneral({
 
       {toolPart.output != null && (
         <div className="mt-1 max-h-[300px] overflow-auto text-[10px] text-muted-foreground">
-          <div className="mb-0.5">output:</div>
+          <div className="mb-0.5">{t("tool.output")}</div>
           <pre className="bg-muted/30 rounded p-2 overflow-x-auto shadow-sm leading-tight border border-muted/20">
             {JSON.stringify(toolPart.output, null, 2)}
           </pre>

@@ -10,7 +10,4 @@ public class BadCredentialsException extends RuntimeException {
     super("Invalid username or password");
   }
 
-  public BadCredentialsException(String message) {
-    super(message);
-  }
 }

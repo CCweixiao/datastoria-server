@@ -1,63 +1,67 @@
-import { backendApiFetch, backendApiUrl } from "@/lib/backend-api";
+import { clearAuthToken, setAuthToken } from "@/lib/auth-token-store";
+import { backendApiFetch, backendApiUrl, readBackendError } from "@/lib/backend-api";
 
-const SIGNIN_PATH_PREFIX = "/api/auth/signin/";
+type BackendUser = {
+  userId: string;
+  username: string;
+  email?: string;
+  role: "USER" | "ADMIN";
+  tenantId: string;
+  status: number;
+};
 
-export type AuthProvider = {
+type LoginResponse = {
+  token: string;
+  user: BackendUser;
+};
+
+export type AuthUser = {
   id: string;
   name: string;
-  signinUrl: string;
+  email?: string;
+  role: "USER" | "ADMIN";
 };
 
 export type AuthSession = {
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-    image?: string;
-  };
-  expires?: string;
+  user?: AuthUser;
 };
 
-export async function loadAuthProviders(): Promise<Record<string, AuthProvider>> {
-  const response = await backendApiFetch(backendApiUrl("/api/auth/providers"));
+function toAuthUser(user: BackendUser): AuthUser {
+  return {
+    id: user.userId,
+    name: user.username,
+    email: user.email || undefined,
+    role: user.role,
+  };
+}
+
+export async function login(username: string, password: string): Promise<AuthSession> {
+  const response = await backendApiFetch(backendApiUrl("/api/auth/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
   if (!response.ok) {
-    throw new Error(`Failed to load authentication providers: ${response.status}`);
+    throw new Error((await readBackendError(response)).message);
   }
-  return (await response.json()) as Record<string, AuthProvider>;
+  const result = (await response.json()) as LoginResponse;
+  setAuthToken(result.token);
+  return { user: toAuthUser(result.user) };
 }
 
 export async function loadAuthSession(): Promise<AuthSession> {
-  const response = await backendApiFetch(backendApiUrl("/api/auth/session"));
+  const response = await backendApiFetch(backendApiUrl("/api/auth/me"));
   if (response.status === 401) {
+    clearAuthToken();
     return {};
   }
   if (!response.ok) {
-    throw new Error(`Failed to load authentication session: ${response.status}`);
+    throw new Error((await readBackendError(response)).message);
   }
-  return (await response.json()) as AuthSession;
+  return { user: toAuthUser((await response.json()) as BackendUser) };
 }
 
-export function beginSignIn(provider: AuthProvider, callbackUrl = "/"): void {
-  window.location.assign(buildSignInUrl(provider, callbackUrl));
-}
-
-export function buildSignInUrl(provider: AuthProvider, callbackUrl = "/"): string {
-  if (!provider.signinUrl.startsWith(SIGNIN_PATH_PREFIX)) {
-    throw new Error("Authentication provider returned an invalid sign-in URL");
-  }
-  const url = new URL(backendApiUrl(provider.signinUrl));
-  const safeCallback =
-    callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/";
-  url.searchParams.set("callbackUrl", safeCallback);
-  return url.toString();
-}
-
-export async function signOut(callbackUrl = "/login"): Promise<void> {
-  const response = await backendApiFetch(backendApiUrl("/api/auth/signout"), {
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to sign out: ${response.status}`);
-  }
+export function signOut(callbackUrl = "/login"): void {
+  clearAuthToken();
   window.location.assign(callbackUrl);
 }

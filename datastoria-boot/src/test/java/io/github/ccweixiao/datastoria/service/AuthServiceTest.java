@@ -50,6 +50,7 @@ class AuthServiceTest {
         encoder.encode(password),
         "USER",
         status,
+        1,
         now,
         now);
   }

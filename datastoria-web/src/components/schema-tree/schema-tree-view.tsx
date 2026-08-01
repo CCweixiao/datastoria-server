@@ -1,5 +1,6 @@
 import { useConnection } from "@/components/connection/connection-context";
 import FloatingProgressBar from "@/components/shared/floating-progress-bar";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,7 @@ export interface SchemaTreeViewProps {
 }
 
 export function SchemaTreeView({ initialSchemaData }: SchemaTreeViewProps) {
+  const { t } = useUiPreferences();
   const { connection, updateConnectionMetadata } = useConnection();
   const [isLoading, setIsLoading] = useState(false);
   const [treeData, setTreeData] = useState<TreeDataItem[]>([]);
@@ -356,7 +358,7 @@ export function SchemaTreeView({ initialSchemaData }: SchemaTreeViewProps) {
         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           ref={searchInputRef}
-          placeholder="Search databases/tables/columns"
+          placeholder={t("schema.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={cn(
@@ -371,8 +373,8 @@ export function SchemaTreeView({ initialSchemaData }: SchemaTreeViewProps) {
             size="sm"
             className="absolute right-8 h-6 w-6 shrink-0"
             onClick={() => setSearch("")}
-            title="Clear search"
-            aria-label="Clear search"
+            title={t("schema.clearSearch")}
+            aria-label={t("schema.clearSearch")}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -383,8 +385,8 @@ export function SchemaTreeView({ initialSchemaData }: SchemaTreeViewProps) {
           className="absolute right-1 h-6 w-6 shrink-0"
           onClick={() => loadDatabases()}
           disabled={isLoading || !connection}
-          title="Refresh schema"
-          aria-label="Refresh schema"
+          title={t("schema.refresh")}
+          aria-label={t("schema.refresh")}
         >
           <RotateCw className="h-4 w-4" />
         </Button>
@@ -401,7 +403,7 @@ export function SchemaTreeView({ initialSchemaData }: SchemaTreeViewProps) {
               <div className="flex items-start gap-2 w-full">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <AlertTitle className="text-sm">Error loading schema</AlertTitle>
+                  <AlertTitle className="text-sm">{t("schema.loadError")}</AlertTitle>
                   <AlertDescription className="mt-1 break-words overflow-wrap-anywhere whitespace-pre-wrap text-xs">
                     {error}
                   </AlertDescription>

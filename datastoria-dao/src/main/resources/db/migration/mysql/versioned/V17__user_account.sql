@@ -14,6 +14,7 @@ CREATE TABLE ds_user_account (
     password_hash   varchar(255) NULL,
     role            varchar(32)  NOT NULL DEFAULT 'USER',
     status          tinyint      NOT NULL DEFAULT 1,
+    token_version   int          NOT NULL DEFAULT 1,
     created_at      datetime(6)  NOT NULL,
     updated_at      datetime(6)  NOT NULL,
     CONSTRAINT chk_user_role CHECK (role IN ('USER','ADMIN')),

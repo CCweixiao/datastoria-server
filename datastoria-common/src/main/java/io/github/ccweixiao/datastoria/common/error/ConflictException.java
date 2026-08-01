@@ -6,7 +6,14 @@ package io.github.ccweixiao.datastoria.common.error;
  */
 public class ConflictException extends RuntimeException {
 
-  public ConflictException(String message) {
-    super(message);
+  private final ApiErrorCode code;
+
+  public ConflictException(ApiErrorCode code) {
+    super(code.message(java.util.Locale.ENGLISH));
+    this.code = code;
+  }
+
+  public ApiErrorCode code() {
+    return code;
   }
 }

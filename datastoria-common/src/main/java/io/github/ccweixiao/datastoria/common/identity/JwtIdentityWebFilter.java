@@ -1,8 +1,8 @@
 package io.github.ccweixiao.datastoria.common.identity;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -11,10 +11,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
+
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
@@ -45,12 +46,13 @@ import reactor.util.context.Context;
 public class JwtIdentityWebFilter implements WebFilter {
 
   static final String ADMIN_PREFIX = "/api/admin/";
-  static final String UNAUTHENTICATED_BODY = "Authentication required";
-
   private final JwtTokenService tokenService;
+  private final TokenAccountResolver accountResolver;
 
-  public JwtIdentityWebFilter(JwtTokenService tokenService) {
+  public JwtIdentityWebFilter(
+      JwtTokenService tokenService, TokenAccountResolver accountResolver) {
     this.tokenService = tokenService;
+    this.accountResolver = accountResolver;
   }
 
   @Override
@@ -66,20 +68,18 @@ public class JwtIdentityWebFilter implements WebFilter {
     Optional<JwtTokenService.VerifiedToken> verified =
         tokenService.parseAndVerify(extractBearer(exchange));
     if (verified.isEmpty()) {
-      return writeUnauthorized(exchange);
+      return writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED);
     }
-    JwtTokenService.VerifiedToken token = verified.get();
-    Set<String> roles = rolesFor(token.role());
-    Identity identity =
-        new Identity(
-            token.tenantId() != null ? token.tenantId() : "default", token.userId(), roles);
-    return enforce(identity, path, exchange, chain);
+    return accountResolver
+        .resolve(verified.get())
+        .flatMap(identity -> enforce(identity, path, exchange, chain))
+        .switchIfEmpty(Mono.defer(() -> writeError(exchange, ApiErrorCode.AUTHENTICATION_REQUIRED)));
   }
 
   private static Mono<Void> enforce(
       Identity identity, String path, ServerWebExchange exchange, WebFilterChain chain) {
     if (path.startsWith(ADMIN_PREFIX) && !identity.isAdmin()) {
-      return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "ROLE_ADMIN required"));
+      return writeError(exchange, ApiErrorCode.ADMIN_ACCESS_REQUIRED);
     }
     return chain.filter(exchange).contextWrite(Context.of(IdentityContext.CONTEXT_KEY, identity));
   }
@@ -103,18 +103,20 @@ public class JwtIdentityWebFilter implements WebFilter {
     return token.isEmpty() ? null : token;
   }
 
-  private static Set<String> rolesFor(String role) {
-    return "ADMIN".equalsIgnoreCase(role) ? Set.of("ROLE_ADMIN", "ROLE_USER") : Set.of("ROLE_USER");
-  }
-
-  private static Mono<Void> writeUnauthorized(ServerWebExchange exchange) {
-    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+  private static Mono<Void> writeError(ServerWebExchange exchange, ApiErrorCode error) {
+    Locale locale = exchange.getLocaleContext().getLocale();
+    exchange.getResponse().setStatusCode(HttpStatus.valueOf(error.status()));
     exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
+    exchange.getResponse().getHeaders().set("X-Error-Code", error.name());
+    exchange
+        .getResponse()
+        .getHeaders()
+        .set("Content-Language", ApiErrorCode.isChinese(locale) ? "zh-CN" : "en");
     DataBuffer buffer =
         exchange
             .getResponse()
             .bufferFactory()
-            .wrap(UNAUTHENTICATED_BODY.getBytes(StandardCharsets.UTF_8));
+            .wrap(error.title(locale).getBytes(StandardCharsets.UTF_8));
     return exchange.getResponse().writeWith(Mono.just(buffer));
   }
 }

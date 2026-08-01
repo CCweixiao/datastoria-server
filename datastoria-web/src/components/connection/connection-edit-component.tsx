@@ -1,3 +1,4 @@
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog } from "@/components/shared/use-dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/backend-api";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
+import { normalizeLocale, translate } from "@/lib/i18n/i18n";
 import { cn } from "@/lib/utils";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
@@ -84,6 +86,7 @@ export function ConnectionEditComponent({
   onCancel?: () => void;
   isAddMode: boolean;
 }) {
+  const { t } = useUiPreferences();
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const isMobile = useIsMobile();
@@ -133,7 +136,7 @@ export function ConnectionEditComponent({
     let hasError = false;
 
     if (name.trim().length === 0) {
-      setFieldError("name", "Name can't be empty.");
+      setFieldError("name", t("connection.nameRequired"));
       hasError = true;
     }
 
@@ -141,11 +144,11 @@ export function ConnectionEditComponent({
     try {
       cURL = new URL(url.trim());
     } catch {
-      setFieldError("url", "URL is invalid.");
+      setFieldError("url", t("connection.invalidUrl"));
       hasError = true;
     }
     if (cURL && cURL.protocol !== "http:" && cURL.protocol !== "https:") {
-      setFieldError("url", "URL must start with http:// or https://");
+      setFieldError("url", t("connection.urlProtocol"));
       hasError = true;
     }
     if (cURL && cURL.pathname === "") {
@@ -154,7 +157,7 @@ export function ConnectionEditComponent({
 
     const userText = user.trim();
     if (userText.length === 0) {
-      setFieldError("user", "User can't be empty.");
+      setFieldError("user", t("connection.userRequired"));
       hasError = true;
     }
 
@@ -172,7 +175,7 @@ export function ConnectionEditComponent({
     };
 
     return newConnection;
-  }, [name, cluster, url, user, password, editable, clearFieldErrors, setFieldError]);
+  }, [name, cluster, url, user, password, editable, clearFieldErrors, setFieldError, t]);
 
   // Save handler
   const stableHandleSave = useCallback(async (): Promise<boolean> => {
@@ -336,7 +339,7 @@ export function ConnectionEditComponent({
   const renderUrlField = (
     <Field className="space-y-1">
       <div className="flex items-center gap-2">
-        <FieldLabel htmlFor="url">URL</FieldLabel>
+        <FieldLabel htmlFor="url">{t("connection.url")}</FieldLabel>
         <FieldDescription className="text-xs text-muted-foreground"></FieldDescription>
       </div>
       <Input
@@ -355,16 +358,16 @@ export function ConnectionEditComponent({
 
   const renderPlaygroundHelper = isAddMode ? (
     <div className="mb-4 text-xs text-muted-foreground">
-      No server yet?{" "}
+      {t("connection.playgroundPrefix")}{" "}
       <button
         type="button"
         className="text-primary disabled:pointer-events-none disabled:opacity-50"
         onClick={handleUsePlayground}
         disabled={isTesting || isSaving || showDeleteConfirm}
       >
-        Use{" "}
+        {t("connection.playgroundUse")}{" "}
         <span className="underline decoration-dotted underline-offset-4">play.clickhouse.com</span>{" "}
-        for testing
+        {t("connection.playgroundSuffix")}
       </button>
     </div>
   ) : null;
@@ -372,7 +375,7 @@ export function ConnectionEditComponent({
   const renderClusterField = (
     <Field className="space-y-1">
       <div className="flex items-center gap-2">
-        <FieldLabel htmlFor="cluster">Cluster</FieldLabel>
+        <FieldLabel htmlFor="cluster">{t("connection.cluster")}</FieldLabel>
         <FieldDescription className="text-xs text-muted-foreground"></FieldDescription>
       </div>
       <Input
@@ -380,7 +383,7 @@ export function ConnectionEditComponent({
         value={cluster}
         disabled={!editable}
         onChange={handleClusterChange}
-        placeholder="Optional. The cluster name if the server is deployed as cluster."
+        placeholder={t("connection.clusterPlaceholder")}
         className="h-10 w-full"
       />
     </Field>
@@ -425,13 +428,13 @@ export function ConnectionEditComponent({
         );
         throw new Error(message);
       }
-      setTestResultWithDelay({ type: "success", message: "Successfully connected." });
+      setTestResultWithDelay({ type: "success", message: t("connection.success") });
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {
         setIsTesting(false);
         return;
       }
-      const errorMessage = e instanceof Error ? e.message : "Unknown error";
+      const errorMessage = e instanceof Error ? e.message : t("connection.unknownError");
       setTestResultWithDelay({
         type: "error",
         message: errorMessage,
@@ -439,7 +442,7 @@ export function ConnectionEditComponent({
     } finally {
       setAbort(undefined);
     }
-  }, [getEditingConnection, setAbort]);
+  }, [getEditingConnection, setAbort, t]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -509,14 +512,14 @@ export function ConnectionEditComponent({
       <FieldGroup className="space-y-5 sm:space-y-4">
         <Field className="space-y-1">
           <div className="flex items-center gap-2">
-            <FieldLabel htmlFor="user">User</FieldLabel>
+            <FieldLabel htmlFor="user">{t("connection.user")}</FieldLabel>
             <FieldDescription className="text-xs text-muted-foreground"></FieldDescription>
           </div>
           <Input
             id="user"
             value={user}
             onChange={handleUserChange}
-            placeholder="The user name to connect to the server."
+            placeholder={t("connection.userPlaceholder")}
             className={cn("h-10 w-full", fieldErrors.user && "border-destructive")}
           />
           {fieldErrors.user && (
@@ -528,7 +531,7 @@ export function ConnectionEditComponent({
 
         <Field className="space-y-1">
           <div className="flex items-center gap-2">
-            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <FieldLabel htmlFor="password">{t("connection.password")}</FieldLabel>
             <FieldDescription className="text-xs text-muted-foreground"></FieldDescription>
           </div>
           <div className="relative w-full min-w-0">
@@ -536,7 +539,7 @@ export function ConnectionEditComponent({
               id="password"
               type={isShowPassword ? "text" : "password"}
               value={password}
-              placeholder="The password to connect to the server. Leave blank if no password."
+              placeholder={t("connection.passwordPlaceholder")}
               onChange={handlePasswordChange}
               className="h-10 w-full pr-10"
               autoComplete="current-password"
@@ -558,14 +561,14 @@ export function ConnectionEditComponent({
 
         <Field className="space-y-1">
           <div className="flex items-center gap-2">
-            <FieldLabel htmlFor="name">Connection Name</FieldLabel>
+            <FieldLabel htmlFor="name">{t("connection.displayName")}</FieldLabel>
             <FieldDescription className="text-xs text-muted-foreground"></FieldDescription>
           </div>
           <Input
             id="name"
             value={name}
             onChange={handleNameChange}
-            placeholder="Display name for this connection"
+            placeholder={t("connection.displayNamePlaceholder")}
             className={cn("h-10 w-full", fieldErrors.name && "border-destructive")}
           />
           {fieldErrors.name && (
@@ -590,7 +593,7 @@ export function ConnectionEditComponent({
                     disabled={isTesting || isSaving || showDeleteConfirm}
                   >
                     {isTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Test Connection
+                    {t("connection.testAction")}
                   </Button>
                 }
                 side={isMobile ? "top" : "left"}
@@ -604,7 +607,7 @@ export function ConnectionEditComponent({
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
                   )
                 }
-                title={testStatus?.type === "success" ? "Connection Test" : "Error"}
+                title={testStatus?.type === "success" ? t("connection.test") : t("common.error")}
               >
                 <div className="text-xs whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto">
                   {testStatus?.message}
@@ -622,18 +625,16 @@ export function ConnectionEditComponent({
                       onClick={handleDeleteClick}
                       disabled={isTesting || isSaving}
                     >
-                      Delete
+                      {t("connection.delete")}
                     </Button>
                   }
                   side="top"
                   align={isMobile ? "center" : "end"}
                   sideOffset={isMobile ? 4 : undefined}
                   icon={<AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />}
-                  title="Confirm deletion"
+                  title={t("connection.confirmDeletion")}
                 >
-                  <div className="text-xs mb-3">
-                    Are you sure to delete this connection? This action cannot be reverted.
-                  </div>
+                  <div className="text-xs mb-3">{t("connection.deleteDescription")}</div>
                   <div className="flex justify-end gap-2">
                     <Button
                       type="button"
@@ -642,7 +643,7 @@ export function ConnectionEditComponent({
                       onClick={handleDeleteCancel}
                       disabled={isTesting || isSaving}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                     <Button
                       type="button"
@@ -651,7 +652,7 @@ export function ConnectionEditComponent({
                       onClick={handleDeleteConfirm}
                       disabled={isTesting || isSaving}
                     >
-                      Delete
+                      {t("connection.delete")}
                     </Button>
                   </div>
                 </StatusPopover>
@@ -663,14 +664,14 @@ export function ConnectionEditComponent({
                 onClick={handleCancel}
                 disabled={isTesting || isSaving || showDeleteConfirm}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="submit"
                 className="w-full sm:w-auto sm:shrink-0"
                 disabled={isTesting || isSaving || showDeleteConfirm}
               >
-                Save
+                {t("common.save")}
               </Button>
             </div>
           </Field>
@@ -690,6 +691,9 @@ export interface ShowConnectionEditDialogOptions {
 export function showConnectionEditDialog(options: ShowConnectionEditDialogOptions) {
   const { connection, onSave, onDelete, onCancel } = options;
   const isAddMode = connection == null;
+  const locale = normalizeLocale(
+    typeof document === "undefined" ? "en" : document.documentElement.lang
+  );
 
   const handleClose = () => {
     Dialog.close();
@@ -699,8 +703,8 @@ export function showConnectionEditDialog(options: ShowConnectionEditDialogOption
   };
 
   Dialog.showDialog({
-    title: isAddMode ? "Create a new connection" : "Modify existing connection",
-    description: "Configure your ClickHouse connection settings.",
+    title: translate(locale, isAddMode ? "connection.createTitle" : "connection.modifyTitle"),
+    description: translate(locale, "connection.editDescription"),
     className: "max-w-2xl",
     overlayClassName: "bg-black/85",
     mainContent: (

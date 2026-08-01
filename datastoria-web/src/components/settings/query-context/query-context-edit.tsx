@@ -4,6 +4,7 @@ import type { QueryContext } from "@/components/settings/query-context/query-con
 import { QueryContextManager } from "@/components/settings/query-context/query-context-manager";
 import FloatingProgressBar from "@/components/shared/floating-progress-bar";
 import { SuggestionList } from "@/components/shared/suggestion";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ interface SystemSetting {
 type BottomSectionContent = { type: "error"; message: string } | null;
 
 function ErrorMessage({ message, title }: { message: string; title?: string }) {
+  const { t } = useUiPreferences();
   return (
     <div className="w-full rounded-t-none border-t-0 max-h-[140px] flex flex-col mt-4">
       <Alert
@@ -53,7 +55,7 @@ function ErrorMessage({ message, title }: { message: string; title?: string }) {
         <div className="flex items-start gap-2 w-full h-full min-h-0">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-            <AlertTitle className="text-sm shrink-0">{title || "Error"}</AlertTitle>
+            <AlertTitle className="text-sm shrink-0">{title || t("common.error")}</AlertTitle>
             <AlertDescription className="mt-1 break-words overflow-wrap-anywhere whitespace-pre-wrap text-xs overflow-y-auto flex-1 min-h-0">
               {message}
             </AlertDescription>
@@ -101,6 +103,7 @@ function SettingNameInputWithSuggestions({
   onCancel,
   isLastRow = false,
 }: SettingNameInputWithSuggestionsProps) {
+  const { t } = useUiPreferences();
   const [isEditing, setIsEditing] = useState(false);
   const hasAutoOpenedRef = useRef(false);
 
@@ -164,7 +167,7 @@ function SettingNameInputWithSuggestions({
           }
         }}
         onCancel={handleCancel}
-        placeholder="Type to search settings..."
+        placeholder={t("queryContext.search")}
         className="w-full h-8"
       />
     );
@@ -175,7 +178,9 @@ function SettingNameInputWithSuggestions({
       className="text-sm font-medium truncate min-h-[32px] flex items-center min-w-0 cursor-pointer hover:underline"
       onClick={handleFocus}
     >
-      {row.name || <span className="text-muted-foreground italic">Click to edit</span>}
+      {row.name || (
+        <span className="text-muted-foreground italic">{t("queryContext.clickToEdit")}</span>
+      )}
     </div>
   );
 
@@ -216,6 +221,7 @@ function SettingTableRow({
   renderValueInput,
   handleRemoveRow,
 }: SettingTableRowProps) {
+  const { t } = useUiPreferences();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleDeleteCancel = useCallback(() => {
@@ -269,9 +275,9 @@ function SettingTableRow({
             side="left"
             align={"end"}
             icon={<AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />}
-            title="Confirm deletion"
+            title={t("queryContext.confirmDeletion")}
           >
-            <div className="text-xs mb-3">Are you sure to delete this setting?</div>
+            <div className="text-xs mb-3">{t("queryContext.deleteDescription")}</div>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -280,7 +286,7 @@ function SettingTableRow({
                 className="h-8"
                 onClick={handleDeleteCancel}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -289,7 +295,7 @@ function SettingTableRow({
                 className="h-8"
                 onClick={onDeleteClick}
               >
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
           </StatusPopover>
@@ -300,6 +306,7 @@ function SettingTableRow({
 }
 
 export function QueryContextEdit() {
+  const { t } = useUiPreferences();
   const { connection } = useConnection();
   const [rows, setRows] = useState<SettingRow[]>([]);
   const [availableSettings, setAvailableSettings] = useState<SystemSetting[]>([]);
@@ -595,18 +602,18 @@ export function QueryContextEdit() {
           <Table>
             <TableHeader>
               <TableRow className="h-9">
-                <TableHead className="w-[200px] py-2">Name</TableHead>
-                <TableHead className="w-[120px] py-2">Type</TableHead>
+                <TableHead className="w-[200px] py-2">{t("common.name")}</TableHead>
+                <TableHead className="w-[120px] py-2">{t("queryContext.type")}</TableHead>
                 <TableHead className="w-[80px] py-2 text-center">
                   <span className="inline-flex items-center justify-center gap-1">
-                    Readonly
+                    {t("queryContext.readonly")}
                     <HoverCard openDelay={200} closeDelay={100}>
                       <HoverCardTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-5 w-5 shrink-0"
-                          aria-label="Readonly column info"
+                          aria-label={t("queryContext.readonlyInfo")}
                         >
                           <Info className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
@@ -617,16 +624,12 @@ export function QueryContextEdit() {
                         align="center"
                         side="bottom"
                       >
-                        Indicate whether the setting is restricted from being changed due to
-                        server-side configuration. <br />
-                        <br />
-                        For readonly settings, the value cannot be changed in the query context, and
-                        if you may contact your administrators if you really need to change it.
+                        {t("queryContext.readonlyHelp")}
                       </HoverCardContent>
                     </HoverCard>
                   </span>
                 </TableHead>
-                <TableHead className="min-w-[150px] py-2">Value</TableHead>
+                <TableHead className="min-w-[150px] py-2">{t("queryContext.value")}</TableHead>
                 <TableHead className="w-[60px] py-2"></TableHead>
               </TableRow>
             </TableHeader>
@@ -634,7 +637,7 @@ export function QueryContextEdit() {
               {rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                    No settings configured. Click{" "}
+                    {t("queryContext.empty")}{" "}
                     <Button
                       type="button"
                       variant="outline"
@@ -643,9 +646,9 @@ export function QueryContextEdit() {
                       disabled={!connection || isLoadingSettings}
                     >
                       <Plus className="h-4 w-4" />
-                      Add Setting
+                      {t("queryContext.addSetting")}
                     </Button>{" "}
-                    to get started.
+                    {t("queryContext.toStart")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -677,7 +680,7 @@ export function QueryContextEdit() {
           disabled={!connection || isLoadingSettings}
         >
           <Plus className="h-4 w-4" />
-          Add Setting
+          {t("queryContext.addSetting")}
         </Button>
         <Button
           size="sm"
@@ -685,7 +688,7 @@ export function QueryContextEdit() {
           onClick={handleSave}
           disabled={!isChanged}
         >
-          Save
+          {t("common.save")}
         </Button>
       </div>
 

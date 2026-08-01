@@ -58,6 +58,7 @@ public class AdminUserBootstrap implements ApplicationRunner {
             passwordEncoder.encode(password),
             cfg.getRole() != null ? cfg.getRole() : UserAccount.ROLE_ADMIN,
             1,
+            1,
             now,
             now);
     users.save(admin);

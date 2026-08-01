@@ -32,6 +32,23 @@ vi.mock("@/lib/auth-client", () => ({
   signOut: signOutMock,
 }));
 
+vi.mock("@/components/shared/ui-preferences-provider", () => ({
+  useUiPreferences: () => ({
+    t: (key: string) =>
+      ({
+        "sidebar.workWithAi": "Work with AI",
+        "sidebar.querySql": "Query Data with SQL",
+        "sidebar.settings": "Settings",
+        "sidebar.account": "Account",
+        "sidebar.logout": "Log out",
+        "sidebar.help": "Help & Resources",
+        "sidebar.documentation": "Documentation",
+        "sidebar.releaseNotes": "Release Notes",
+        "sidebar.github": "View on GitHub",
+      })[key] ?? key,
+  }),
+}));
+
 const testGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };

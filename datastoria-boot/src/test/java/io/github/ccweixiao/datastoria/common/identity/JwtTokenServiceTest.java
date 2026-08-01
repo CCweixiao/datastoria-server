@@ -24,7 +24,7 @@ class JwtTokenServiceTest {
   @Test
   void signAndVerifyRoundTripsClaims() {
     JwtTokenService service = service();
-    String token = service.sign("user-123", "default", "ADMIN", "alice");
+    String token = service.sign("user-123", "default", "ADMIN", "alice", 3);
 
     var verified = service.parseAndVerify(token);
     assertThat(verified).isPresent();
@@ -32,6 +32,7 @@ class JwtTokenServiceTest {
     assertThat(verified.get().tenantId()).isEqualTo("default");
     assertThat(verified.get().role()).isEqualTo("ADMIN");
     assertThat(verified.get().username()).isEqualTo("alice");
+    assertThat(verified.get().tokenVersion()).isEqualTo(3);
   }
 
   @Test
@@ -46,7 +47,7 @@ class JwtTokenServiceTest {
     other.getJwt().setIssuer("datastoria-test");
     other.getJwt().setAudience("datastoria-test-api");
     MasterKeyProvider masterKey = new MasterKeyProvider(MASTER_KEY);
-    String token = new JwtTokenService(other, masterKey).sign("u", "default", "USER", "bob");
+    String token = new JwtTokenService(other, masterKey).sign("u", "default", "USER", "bob", 1);
 
     // Same key material but different effective secret hash -> signature mismatch.
     SecurityProperties mine = new SecurityProperties();

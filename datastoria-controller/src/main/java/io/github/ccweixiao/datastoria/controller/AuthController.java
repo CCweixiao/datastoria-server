@@ -43,7 +43,9 @@ public class AuthController {
   @GetMapping("/me")
   public Mono<ResponseEntity<UserResponse>> me() {
     return IdentityContext.current()
-        .flatMap(identity -> userAccountService.findByUserId(identity.userId()))
+        .flatMap(
+            identity ->
+                userAccountService.findByUserId(identity.tenantId(), identity.userId()))
         .map(UserResponse::from)
         .map(ResponseEntity::ok);
   }
