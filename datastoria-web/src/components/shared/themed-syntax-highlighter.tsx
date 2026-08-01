@@ -43,13 +43,11 @@ export function ThemedSyntaxHighlighter({
   const currentDarkMode = useIsDarkTheme();
 
   // Use memoized style that updates when theme actually changes
-  const syntaxStyle = useMemo(() => {
-    return currentDarkMode ? darkStyle : lightStyle;
-  }, [currentDarkMode]);
+  const syntaxStyle = currentDarkMode ? darkStyle : lightStyle;
   const highlightRootRef = useRef<HTMLDivElement | null>(null);
   const sql = children ?? "";
   const sqlLines = useMemo(() => String(sql).split(/\r\n|\r|\n/).length, [sql]);
-  const isOverflowing = useMemo(() => sqlLines > collapseLines, [sqlLines, collapseLines]);
+  const isOverflowing = sqlLines > collapseLines;
   const collapsedHeight = collapseLines * lineHeightPx;
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
