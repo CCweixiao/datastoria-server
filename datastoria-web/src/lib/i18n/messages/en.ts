@@ -109,6 +109,7 @@ export const en = {
   "common.code": "Code",
   "common.name": "Name",
   "common.action": "Action",
+  "common.edit": "Edit",
   "agent.addBlacklist": "Add Blacklisted Error Codes",
   "agent.addBlacklistHelp":
     "Search ClickHouse error codes by number or name and select multiple entries to skip automatic explanation.",
@@ -354,6 +355,33 @@ export const en = {
   "query.execute": "Execute",
   "query.noStatements": "No statements selected",
   "query.selectOneStatement": "Select at least one statement to execute.",
+  "snippet.search": "Search snippets...",
+  "snippet.add": "Add new snippet",
+  "snippet.nameLabel": "Name (used as the auto-completion suggestion)",
+  "snippet.nameExample": "e.g., daily_active_users",
+  "snippet.nameRequired": "Name is required",
+  "snippet.sqlRequired": "SQL is required",
+  "snippet.nameExists": "Snippet name already exists",
+  "snippet.saveFailed": "Failed to save snippet",
+  "snippet.saveTitle": "Save Snippet",
+  "snippet.saveHelp":
+    "Save your query as a reusable snippet. Access it from the snippet library or auto-complete it in the editor.",
+  "snippet.cancelEdit": "Cancel edit",
+  "snippet.save": "Save snippet",
+  "snippet.runNewTab": "Run in new tab",
+  "snippet.insertCursor": "Insert at cursor",
+  "snippet.clone": "Clone / Edit Copy",
+  "snippet.readonly": "Built-in snippets are read-only. Clone to edit a copy.",
+  "snippet.edit": "Edit snippet",
+  "snippet.cannotDelete": "Built-in snippets cannot be deleted.",
+  "snippet.delete": "Delete snippet",
+  "snippet.validationError": "Validation error",
+  "snippet.fieldsRequired": "Name and SQL are required.",
+  "snippet.nameExistsPeriod": "Snippet name already exists.",
+  "snippet.saveFailedPeriod": "Failed to save snippet.",
+  "snippet.confirmDeletion": "Confirm deletion",
+  "snippet.deleteDescription":
+    "Are you sure you want to delete this snippet? This action cannot be undone.",
 } as const;
 
 export type MessageKey = keyof typeof en;
