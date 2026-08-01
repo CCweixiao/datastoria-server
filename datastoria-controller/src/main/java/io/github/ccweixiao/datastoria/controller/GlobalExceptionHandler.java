@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.MethodNotAllowedException;
+import org.springframework.web.util.DisconnectedClientHelper;
 
 import io.github.ccweixiao.datastoria.common.agent.PendingActionConflictException;
 import io.github.ccweixiao.datastoria.common.agent.PendingActionExpiredException;
@@ -30,6 +31,8 @@ import io.github.ccweixiao.datastoria.common.error.RevisionConflictException;
 import io.github.ccweixiao.datastoria.common.error.ShareNotFoundException;
 import io.github.ccweixiao.datastoria.common.error.SharePermissionDeniedException;
 
+import reactor.core.publisher.Mono;
+
 /**
  * Translates application exceptions into RFC 9457 {@link org.springframework.http.ProblemDetail}
  * responses. No secret value (cipher text or plaintext) is ever placed in the response body.
@@ -38,6 +41,8 @@ import io.github.ccweixiao.datastoria.common.error.SharePermissionDeniedExceptio
 public class GlobalExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+  private static final DisconnectedClientHelper DISCONNECTED_CLIENTS =
+      new DisconnectedClientHelper(GlobalExceptionHandler.class.getName() + ".DisconnectedClient");
 
   private final ProblemDetailFactory problems;
 
@@ -225,10 +230,19 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<org.springframework.http.ProblemDetail> handleUnexpected(Exception ex) {
+  public Mono<ResponseEntity<org.springframework.http.ProblemDetail>> handleUnexpected(
+      Exception ex) {
+    // A browser can cancel a streaming query after its 200 response has already been committed
+    // (for example when switching tabs or refreshing a dashboard). Treat that transport event as
+    // normal cancellation: attempting to write a second error response only produces a misleading
+    // ERROR followed by "response already committed".
+    if (DISCONNECTED_CLIENTS.checkAndLogClientDisconnectedException(ex)) {
+      return Mono.empty();
+    }
     log.error("Unexpected error", ex);
-    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .body(problems.forError(ApiErrorCode.INTERNAL_ERROR));
+    return Mono.just(
+        ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(problems.forError(ApiErrorCode.INTERNAL_ERROR)));
   }
 
   private static String safeMessage(Exception ex) {

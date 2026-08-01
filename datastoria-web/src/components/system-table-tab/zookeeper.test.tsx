@@ -118,6 +118,36 @@ describe("Zookeeper", () => {
     });
   });
 
+  it("shows a friendly empty state when system.zookeeper is unavailable", async () => {
+    const queryMock = vi.fn().mockReturnValue({
+      response: Promise.reject(
+        new Error(
+          "Code: 60. DB::Exception: Unknown table expression identifier 'system.zookeeper' (UNKNOWN_TABLE)"
+        )
+      ),
+    });
+
+    await act(async () => {
+      root.render(
+        <ConnectionContext.Provider
+          value={
+            getConnectionContextValue({
+              connectionId: "zookeeper-unavailable-test",
+              query: queryMock,
+            }) as never
+          }
+        >
+          <Zookeeper database="system" table="zookeeper" />
+        </ConnectionContext.Provider>
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("ZooKeeper is not available");
+      expect(container.textContent).not.toContain("Unknown table expression identifier");
+    });
+  });
+
   it("ignores stale root request failures after a manual refresh starts a newer request", async () => {
     const firstResponse = createDeferredResponse<{ data: { json: () => Promise<unknown> } }>();
     const secondResponse = createDeferredResponse<{ data: { json: () => Promise<unknown> } }>();

@@ -288,6 +288,8 @@ function CrossConnectionSwitchPopover({
   onConfirm: (chat: ManagedSession) => Promise<void>;
   children: React.ReactNode;
 }) {
+  const { t } = useUiPreferences();
+
   if (
     !chat.databaseId ||
     isCurrentConnection ||
@@ -317,11 +319,12 @@ function CrossConnectionSwitchPopover({
       align="start"
       className="w-[400px]"
       icon={<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />}
-      title="Switch connection?"
+      title={t("chat.switchConnectionTitle")}
     >
       <p className="mb-3 text-xs text-muted-foreground">
-        This chat belongs to another cluster <u>{connectionName}</u>.<br />
-        You need to switch to it before opening this chat.
+        {t("chat.switchConnectionDescription", { connection: connectionName })}
+        <br />
+        {t("chat.switchConnectionHelp")}
       </p>
       <div className="flex justify-end gap-2">
         <Button
@@ -334,7 +337,7 @@ function CrossConnectionSwitchPopover({
             onConfirmStateChange(null);
           }}
         >
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button
           type="button"
@@ -346,7 +349,7 @@ function CrossConnectionSwitchPopover({
             await onConfirm(chat);
           }}
         >
-          Switch & open
+          {t("chat.switchAndOpen")}
         </Button>
       </div>
     </StatusPopover>

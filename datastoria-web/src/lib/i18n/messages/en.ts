@@ -544,6 +544,10 @@ export const en = {
   "chat.closeResults": "Close results",
   "chat.runInPlace": "Run in place",
   "chat.runInQueryTab": "Run in Query Tab",
+  "chat.switchConnectionTitle": "Switch connection?",
+  "chat.switchConnectionDescription": "This chat belongs to another cluster: {connection}.",
+  "chat.switchConnectionHelp": "Switch to that connection before opening this chat.",
+  "chat.switchAndOpen": "Switch & open",
   "diagram.buildFailed": "Failed to build Mermaid from Vizlayer document.",
   "diagram.fullscreenUnavailable": "Fullscreen API unavailable",
   "diagram.fullscreen": "Open diagram in fullscreen",
@@ -557,6 +561,10 @@ export const en = {
   "diagram.downloadSvg": "Download diagram as SVG",
   "diagram.vizlayerRenderFailed": "Unable to render Vizlayer diagram",
   "diagram.vizlayerInvalid": "Invalid Vizlayer document",
+  "zookeeper.unavailableTitle": "ZooKeeper is not available",
+  "zookeeper.unavailableDescription":
+    "This ClickHouse server does not have ZooKeeper configured, so system.zookeeper cannot be browsed.",
+  "zookeeper.loadFailed": "Failed to load ZooKeeper nodes.",
 } as const;
 
 export type MessageKey = keyof typeof en;

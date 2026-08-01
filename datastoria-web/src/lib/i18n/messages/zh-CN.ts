@@ -508,6 +508,10 @@ export const zhCN: Record<MessageKey, string> = {
   "chat.closeResults": "关闭结果",
   "chat.runInPlace": "原地运行",
   "chat.runInQueryTab": "在查询标签页运行",
+  "chat.switchConnectionTitle": "切换连接？",
+  "chat.switchConnectionDescription": "该会话属于另一个集群：{connection}。",
+  "chat.switchConnectionHelp": "打开该会话前，需要先切换到对应连接。",
+  "chat.switchAndOpen": "切换并打开",
   "diagram.buildFailed": "无法从 Vizlayer 文档生成 Mermaid。",
   "diagram.fullscreenUnavailable": "全屏 API 不可用",
   "diagram.fullscreen": "全屏打开图表",
@@ -521,4 +525,8 @@ export const zhCN: Record<MessageKey, string> = {
   "diagram.downloadSvg": "下载 SVG 图表",
   "diagram.vizlayerRenderFailed": "无法渲染 Vizlayer 图表",
   "diagram.vizlayerInvalid": "无效的 Vizlayer 文档",
+  "zookeeper.unavailableTitle": "ZooKeeper 不可用",
+  "zookeeper.unavailableDescription":
+    "当前 ClickHouse 服务未配置 ZooKeeper，因此无法浏览 system.zookeeper。",
+  "zookeeper.loadFailed": "加载 ZooKeeper 节点失败。",
 };

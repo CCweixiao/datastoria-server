@@ -1,11 +1,12 @@
 "use client";
 
 import { useConnection } from "@/components/connection/connection-context";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import type { JSONFormatResponse } from "@/lib/connection/connection";
 import { Formatter } from "@/lib/formatter";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronRight, FileIcon, FolderIcon, Loader2, RotateCw } from "lucide-react";
+import { ChevronRight, FileIcon, FolderIcon, Info, Loader2, RotateCw } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ZookeeperProps {
@@ -38,6 +39,10 @@ interface FlatNode {
 type RootLoadState = "idle" | "loading" | "loaded" | "error";
 
 const rootLoadFailures = new Map<string, string>();
+
+function isZooKeeperUnavailableError(message: string): boolean {
+  return /(?:UNKNOWN_TABLE|Code:\s*60)/i.test(message) && /(?:system\.)?zookeeper/i.test(message);
+}
 
 function createInitialRootNode(): ZookeeperNode {
   return {
@@ -76,6 +81,7 @@ function getRootLoadKey(connectionId: string | undefined, database: string, tabl
 
 export const Zookeeper = React.memo(({ database, table }: ZookeeperProps) => {
   const { connection } = useConnection();
+  const { t } = useUiPreferences();
   const rootLoadKey = useMemo(
     () => getRootLoadKey(connection?.connectionId, database, table),
     [connection?.connectionId, database, table]
@@ -232,9 +238,11 @@ WHERE path = '${nodePath}'`,
           return;
         }
 
-        console.error("Failed to fetch zookeeper nodes", e);
+        const errorMessage = e instanceof Error ? e.message : "Failed to fetch zookeeper nodes";
+        if (!isZooKeeperUnavailableError(errorMessage)) {
+          console.error("Failed to fetch zookeeper nodes", e);
+        }
         if (isRootRequest) {
-          const errorMessage = e instanceof Error ? e.message : "Failed to fetch zookeeper nodes";
           rootLoadFailures.set(rootLoadKey, errorMessage);
           setRootLoadState("error");
           setRootLoadError(errorMessage);
@@ -339,6 +347,7 @@ WHERE path = '${nodePath}'`,
   }, [resetTree]);
 
   const truncatedTextFormatter = Formatter.getInstance().getFormatter("truncatedText");
+  const zooKeeperUnavailable = rootLoadError !== null && isZooKeeperUnavailableError(rootLoadError);
 
   return (
     <div className="h-full overflow-hidden flex flex-col text-sm">
@@ -372,15 +381,26 @@ WHERE path = '${nodePath}'`,
 
       {/* Body */}
       <div ref={parentRef} className="flex-1 overflow-auto relative">
-        {rootLoadError ? (
+        {zooKeeperUnavailable ? (
+          <div className="flex min-h-52 flex-col items-center justify-center gap-2 px-6 text-center">
+            <div className="rounded-full bg-muted p-3 text-muted-foreground">
+              <Info className="h-5 w-5" />
+            </div>
+            <div className="font-medium">{t("zookeeper.unavailableTitle")}</div>
+            <div className="max-w-lg text-sm text-muted-foreground">
+              {t("zookeeper.unavailableDescription")}
+            </div>
+          </div>
+        ) : rootLoadError ? (
           <div
             className="border-b bg-destructive/5 px-4 py-2 text-sm text-destructive"
             role="alert"
           >
-            Failed to load ZooKeeper nodes. {rootLoadError}
+            {t("zookeeper.loadFailed")} {rootLoadError}
           </div>
         ) : null}
         <div
+          className={zooKeeperUnavailable ? "hidden" : undefined}
           style={{
             height: `${rowVirtualizer.getTotalSize()}px`,
             width: "100%",
