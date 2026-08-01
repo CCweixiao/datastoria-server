@@ -369,6 +369,7 @@ CREATE TABLE ds_clickhouse_connection (
     url                  TEXT NOT NULL,
     username             VARCHAR(255) NOT NULL,
     cluster_name         VARCHAR(255),
+    remark               VARCHAR(1000),
     password_cipher      LONGBLOB,
     password_nonce       VARBINARY(64),
     password_key_version VARCHAR(64),

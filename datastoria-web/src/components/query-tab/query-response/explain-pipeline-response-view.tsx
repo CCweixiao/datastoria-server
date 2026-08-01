@@ -1,6 +1,7 @@
 import { useConnection } from "@/components/connection/connection-context";
 import { GraphvizComponent } from "@/components/shared/graphviz/GraphvizComponent";
 import { useTheme } from "@/components/shared/theme-provider";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type QueryError, type QueryResponse } from "@/lib/connection/connection";
 import { toastManager } from "@/lib/toast";
@@ -135,16 +136,17 @@ function applyGraphvizStyling(dot: string, bgColor: string): string {
     // Edges need to be visible against the main graph background (dark) and subgraph backgrounds (lighter/darker)
     // Use a color that contrasts well with both - for dark themes, use a lighter color; for light themes, use a darker color
     const edgeColor = isDark ? "#a0b0b2" : "#4a5a5c"; // Lighter for dark theme (visible on dark main and light subgraphs), darker for light theme
+    const textColor = isDark ? "#D3E4E6" : "#1F2937";
 
     // Define styling for main graph (includes rankdir and global edge/node styles)
     // Note: nodes get their own bgcolor to distinguish them from subgraphs
     // Use a thicker penwidth for edges to ensure visibility in subgraphs
-    const mainGraphStyling = `\nbgcolor="${bgColor}"\nfontsize="9"\nrankdir="LR";\nedge [arrowhead="normal" fontsize="10" fontcolor="#D3E4E6" color="${edgeColor}" penwidth=2.5 style=solid];\nnode [shape=record fontsize="10" fontcolor="#D3E4E6" color="#839496" style=filled fillcolor="${nodeBgColor}"];\n`;
+    const mainGraphStyling = `\nbgcolor="${bgColor}"\nfontsize="9"\nfontcolor="${textColor}"\nrankdir="LR";\nedge [arrowhead="normal" fontsize="10" fontcolor="${textColor}" color="${edgeColor}" penwidth=2.5 style=solid];\nnode [shape=record fontsize="10" fontcolor="${textColor}" color="#839496" style=filled fillcolor="${nodeBgColor}"];\n`;
 
     // Define styling for subgraphs with very distinct background and border
     // Subgraphs should be clearly visible as containers
     // Note: d3-graphviz doesn't support edge styling in subgraphs, so edges use the global edge color
-    const subgraphStyling = `\nstyle=filled\nbgcolor="${subgraphBgColor}"\ncolor="#839496"\npenwidth=2\n`;
+    const subgraphStyling = `\nstyle=filled\nbgcolor="${subgraphBgColor}"\ncolor="#839496"\nfontcolor="${textColor}"\npenwidth=2\n`;
 
     // Apply styling to main graph
     const mainBraceIndex = cleaned.indexOf("{");
@@ -404,6 +406,7 @@ const ExplainPipelineResponseViewComponent = ({
   error,
 }: QueryResponseViewProps) => {
   const [selectedSubView, setSelectedSubView] = useState(error ? "result" : "compactGraph");
+  const { t } = useUiPreferences();
   const { theme } = useTheme();
   const [bgColor, setBgColor] = useState("#002B36");
 
@@ -464,18 +467,20 @@ const ExplainPipelineResponseViewComponent = ({
           {!error && graphModeResult && (
             <TabsTrigger
               value="compactGraph"
+              title={t("query.pipelineCompactDescription")}
               className="rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
             >
-              Compact Graph
+              {t("query.pipelineCompactGraph")}
             </TabsTrigger>
           )}
           {!error && (
             <>
               <TabsTrigger
                 value="completeGraph"
+                title={t("query.pipelineCompleteDescription")}
                 className="rounded-none text-xs border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
               >
-                Complete Graph
+                {t("query.pipelineCompleteGraph")}
               </TabsTrigger>
               <TabsTrigger
                 value="text"

@@ -9,4 +9,5 @@ public record ClickHouseConnectionRequest(
     @NotBlank @Size(max = 255) String username,
     @Size(max = 255) String password,
     @Size(max = 255) String cluster,
+    @Size(max = 1000) String remark,
     Boolean enabled) {}

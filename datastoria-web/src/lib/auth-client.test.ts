@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearAuthToken, getAuthToken } from "./auth-token-store";
 import { login } from "./auth-client";
+import { clearAuthToken, getAuthToken } from "./auth-token-store";
 
 describe("username and password authentication", () => {
   beforeEach(() => {

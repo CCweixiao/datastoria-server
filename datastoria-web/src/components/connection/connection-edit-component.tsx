@@ -36,6 +36,7 @@ const PLAYGROUND_CONNECTION: ConnectionConfig = {
   user: "play",
   password: "",
   cluster: "",
+  remark: "",
   editable: true,
 };
 
@@ -94,6 +95,7 @@ export function ConnectionEditComponent({
   // View Model
   const [name, setName] = useState(connection ? connection.name : "");
   const [cluster, setCluster] = useState(connection ? connection.cluster : "");
+  const [remark, setRemark] = useState(connection?.remark ?? "");
   const [url, setUrl] = useState(connection ? connection.url : "");
   const [user, setUser] = useState(connection ? connection.user : "");
   const [password, setPassword] = useState(connection ? connection.password : "");
@@ -171,11 +173,12 @@ export function ConnectionEditComponent({
       user: userText,
       password: password,
       cluster: cluster.trim(),
+      remark: remark.trim(),
       editable: editable,
     };
 
     return newConnection;
-  }, [name, cluster, url, user, password, editable, clearFieldErrors, setFieldError, t]);
+  }, [name, cluster, remark, url, user, password, editable, clearFieldErrors, setFieldError, t]);
 
   // Save handler
   const stableHandleSave = useCallback(async (): Promise<boolean> => {
@@ -313,6 +316,11 @@ export function ConnectionEditComponent({
     []
   );
 
+  const handleRemarkChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setRemark(e.target.value),
+    []
+  );
+
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setName(e.target.value);
@@ -327,6 +335,7 @@ export function ConnectionEditComponent({
   const handleUsePlayground = useCallback(() => {
     setCurrentSelectedConnection(PLAYGROUND_CONNECTION);
     setCluster(PLAYGROUND_CONNECTION.cluster);
+    setRemark(PLAYGROUND_CONNECTION.remark ?? "");
     setEditable(PLAYGROUND_CONNECTION.editable);
     setName(PLAYGROUND_CONNECTION.name);
     setUrl(PLAYGROUND_CONNECTION.url);
@@ -389,6 +398,21 @@ export function ConnectionEditComponent({
     </Field>
   );
 
+  const renderRemarkField = (
+    <Field className="space-y-1">
+      <FieldLabel htmlFor="remark">{t("connection.remark")}</FieldLabel>
+      <Input
+        id="remark"
+        value={remark}
+        disabled={!editable}
+        onChange={handleRemarkChange}
+        placeholder={t("connection.remarkPlaceholder")}
+        maxLength={1000}
+        className="h-10 w-full"
+      />
+    </Field>
+  );
+
   // Test handler that manages testing state
   const handleTestConnection = useCallback(async () => {
     const testConnectionConfig = getEditingConnection();
@@ -417,6 +441,7 @@ export function ConnectionEditComponent({
           username: testConnectionConfig.user,
           password: testConnectionConfig.password,
           cluster: testConnectionConfig.cluster || null,
+          remark: testConnectionConfig.remark?.trim() || null,
           enabled: true,
         }),
         signal: controller.signal,
@@ -558,6 +583,7 @@ export function ConnectionEditComponent({
         </Field>
 
         {renderClusterField}
+        {renderRemarkField}
 
         <Field className="space-y-1">
           <div className="flex items-center gap-2">

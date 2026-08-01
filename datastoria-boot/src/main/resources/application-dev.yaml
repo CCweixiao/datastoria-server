@@ -6,7 +6,6 @@ spring:
     password: "Datastoria@123456"
 
 datastoria:
-  master-key: ${DATASTORIA_MASTER_KEY}
   agent:
     repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
   skills:

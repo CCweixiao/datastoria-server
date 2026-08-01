@@ -31,21 +31,19 @@ public class MyBatisClickHouseConnectionRepository implements ClickHouseConnecti
     e.setCreatedAt(now);
     e.setUpdatedAt(now);
     mapper.insertConnection(e);
-    return findById(c.id(), c.tenantId(), c.ownerUserId())
+    return findById(c.id(), c.tenantId())
         .orElseThrow(() -> new NotFoundException("ClickHouseConnection", c.id()));
   }
 
   @Override
-  public Optional<ClickHouseConnection> findById(String id, String tenantId, String ownerUserId) {
-    return Optional.ofNullable(mapper.findById(id, tenantId, ownerUserId))
+  public Optional<ClickHouseConnection> findById(String id, String tenantId) {
+    return Optional.ofNullable(mapper.findById(id, tenantId))
         .map(ClickHouseConnectionEntity::toDomain);
   }
 
   @Override
-  public List<ClickHouseConnection> findAll(String tenantId, String ownerUserId) {
-    return mapper.findAll(tenantId, ownerUserId).stream()
-        .map(ClickHouseConnectionEntity::toDomain)
-        .toList();
+  public List<ClickHouseConnection> findAll(String tenantId) {
+    return mapper.findAll(tenantId).stream().map(ClickHouseConnectionEntity::toDomain).toList();
   }
 
   @Override
@@ -54,17 +52,17 @@ public class MyBatisClickHouseConnectionRepository implements ClickHouseConnecti
     e.setUpdatedAt(Instant.now());
     int affected = mapper.updateCas(e, expectedRevision);
     if (affected == 0) {
-      if (findById(c.id(), c.tenantId(), c.ownerUserId()).isEmpty()) {
+      if (findById(c.id(), c.tenantId()).isEmpty()) {
         throw new NotFoundException("ClickHouseConnection", c.id());
       }
       throw new RevisionConflictException("ClickHouseConnection", c.id(), expectedRevision, -1);
     }
-    return findById(c.id(), c.tenantId(), c.ownerUserId()).orElseThrow();
+    return findById(c.id(), c.tenantId()).orElseThrow();
   }
 
   @Override
-  public void softDelete(String id, String tenantId, String ownerUserId, long expectedRevision) {
-    int affected = mapper.softDelete(id, tenantId, ownerUserId, expectedRevision, Instant.now());
+  public void softDelete(String id, String tenantId, long expectedRevision) {
+    int affected = mapper.softDelete(id, tenantId, expectedRevision, Instant.now());
     if (affected == 0) {
       throw new NotFoundException("ClickHouseConnection", id);
     }

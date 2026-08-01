@@ -25,6 +25,8 @@ import org.springframework.http.HttpStatus;
 
 import io.github.ccweixiao.datastoria.common.crypto.EnvelopeEncryptionService;
 import io.github.ccweixiao.datastoria.common.domain.ClickHouseConnection;
+import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionRequest;
+import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ClickHouseConnectionRepository;
 
@@ -58,6 +60,7 @@ class ClickHouseSqlPermissionTest {
         "http://ch:8123",
         "chuser",
         "mycluster",
+        "Production analytics cluster",
         null,
         null,
         null,
@@ -79,7 +82,7 @@ class ClickHouseSqlPermissionTest {
 
   @Test
   void regularUserDdlIsRejectedBeforeReachingClickHouse() {
-    when(repository.findById("c1", "default", "plain-user")).thenReturn(Optional.of(connection()));
+    when(repository.findById("c1", "default")).thenReturn(Optional.of(connection()));
 
     Mono<?> result =
         service.queryStream("c1", "DROP TABLE sensitive", Map.of(), null, null, regularUser());
@@ -90,7 +93,7 @@ class ClickHouseSqlPermissionTest {
 
   @Test
   void adminDdlReachesClickHouseUnchanged() {
-    when(repository.findById("c1", "default", "admin-user")).thenReturn(Optional.of(connection()));
+    when(repository.findById("c1", "default")).thenReturn(Optional.of(connection()));
     ClickHouseRemoteClient.RemoteQueryResponse stub =
         new ClickHouseRemoteClient.RemoteQueryResponse(
             HttpStatus.OK, new HttpHeaders(), Flux.<DataBuffer>empty());
@@ -106,7 +109,7 @@ class ClickHouseSqlPermissionTest {
 
   @Test
   void regularUserSelectReachesClickHouse() {
-    when(repository.findById("c1", "default", "plain-user")).thenReturn(Optional.of(connection()));
+    when(repository.findById("c1", "default")).thenReturn(Optional.of(connection()));
     ClickHouseRemoteClient.RemoteQueryResponse stub =
         new ClickHouseRemoteClient.RemoteQueryResponse(
             HttpStatus.OK, new HttpHeaders(), Flux.<DataBuffer>empty());
@@ -118,5 +121,28 @@ class ClickHouseSqlPermissionTest {
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(remoteClient).executeStream(any(), anyString(), sql.capture(), any());
     assertThat(sql.getValue()).startsWith("SELECT 1");
+  }
+
+  @Test
+  void regularUserCannotManageConnections() {
+    assertThatThrownBy(() -> service.create(null, regularUser()))
+        .isInstanceOf(AdminAccessRequiredException.class);
+    assertThatThrownBy(() -> service.update("c1", null, null, regularUser()))
+        .isInstanceOf(AdminAccessRequiredException.class);
+    assertThatThrownBy(() -> service.delete("c1", null, regularUser()))
+        .isInstanceOf(AdminAccessRequiredException.class);
+    assertThatThrownBy(() -> service.test((ClickHouseConnectionRequest) null, regularUser()))
+        .isInstanceOf(AdminAccessRequiredException.class);
+    verifyNoInteractions(repository, remoteClient, crypto);
+  }
+
+  @Test
+  void regularUserCanListTenantConnectionsCreatedByAnAdmin() {
+    when(repository.findAll("default")).thenReturn(java.util.List.of(connection()));
+
+    var connections = service.findAll(regularUser()).block();
+
+    assertThat(connections).singleElement().satisfies(c -> assertThat(c.remark()).isNotBlank());
+    verify(repository).findAll("default");
   }
 }

@@ -15,6 +15,7 @@ import org.springframework.web.server.MethodNotAllowedException;
 
 import io.github.ccweixiao.datastoria.common.agent.PendingActionConflictException;
 import io.github.ccweixiao.datastoria.common.agent.PendingActionExpiredException;
+import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.BadCredentialsException;
 import io.github.ccweixiao.datastoria.common.error.ClientSecretNotAllowedException;
@@ -55,6 +56,13 @@ public class GlobalExceptionHandler {
       BadCredentialsException ex) {
     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
         .body(problems.forError(ApiErrorCode.AUTHENTICATION_FAILED));
+  }
+
+  @ExceptionHandler(AdminAccessRequiredException.class)
+  public ResponseEntity<org.springframework.http.ProblemDetail> handleAdminAccessRequired(
+      AdminAccessRequiredException ex) {
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .body(problems.forError(ApiErrorCode.ADMIN_ACCESS_REQUIRED));
   }
 
   @ExceptionHandler(ConflictException.class)

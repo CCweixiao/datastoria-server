@@ -30,10 +30,9 @@ CREATE USER 'datastoria'@'%' IDENTIFIED BY 'datastoria';
 GRANT ALL PRIVILEGES ON datastoria.* TO 'datastoria'@'%';
 ```
 
-仓库只提供 `dev` 与 `prod` 两个 Profile。不要把真实密钥写进 YAML：
+仓库只提供 `dev` 与 `prod` 两个 Profile。主密钥已通过 `application.yaml` 配置：
 
 ```bash
-export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
 ./mvnw -pl datastoria-boot -am package -DskipTests
 SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
@@ -55,8 +54,7 @@ curl -fsS \
   http://127.0.0.1:8080/api/connections
 ```
 
-IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `dev`，环境变量中设置
-`DATASTORIA_MASTER_KEY`。
+IntelliJ Run Configuration 使用 JDK 17，Active profiles 填 `dev`。
 
 ## 前端
 

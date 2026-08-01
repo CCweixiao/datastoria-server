@@ -11,6 +11,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { loadAuthSession } from "@/lib/auth-client";
 import type { ConnectionConfig } from "@/lib/connection/connection-config";
 import { ConnectionManager } from "@/lib/connection/connection-manager";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ export function ConnectionSelector({
   const isMobile = useIsMobile();
   const { connection, pendingConfig, isConnectionAvailable, switchConnection } = useConnection();
   const [connections, setConnections] = useState<ConnectionConfig[]>([]);
+  const [canManageConnections, setCanManageConnections] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const resolvedDefault =
     defaultConnectionNameProp ??
@@ -67,6 +69,17 @@ export function ConnectionSelector({
 
   useEffect(() => {
     reloadConnections();
+    let active = true;
+    void loadAuthSession()
+      .then((session) => {
+        if (active) setCanManageConnections(session.user?.role === "ADMIN");
+      })
+      .catch(() => {
+        if (active) setCanManageConnections(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []); // Load connections on mount
 
   // Reload connections when selector opens and focus input
@@ -203,6 +216,7 @@ export function ConnectionSelector({
                 <CommandItem
                   key={conn.name}
                   value={conn.name}
+                  keywords={conn.remark ? [conn.remark] : undefined}
                   onSelect={() => handleConnectionSelect(conn)}
                   className={cn(
                     "flex items-center justify-between !rounded-none cursor-pointer !py-2 !px-2.5 transition-colors hover:bg-muted group",
@@ -212,35 +226,51 @@ export function ConnectionSelector({
                 >
                   <div
                     className={cn(
-                      "flex items-center text-sm truncate flex-1 min-w-0",
+                      "flex items-start text-sm flex-1 min-w-0",
                       isSelected && "text-primary"
                     )}
                   >
-                    {isSelected && <Check className="h-3 w-3 mr-1" />}
-                    <HighlightableCommandItem text={conn.name} />
+                    {isSelected ? <Check className="h-3 w-3 mr-1 mt-1 shrink-0" /> : null}
+                    <div className="min-w-0">
+                      <div className="truncate">
+                        <HighlightableCommandItem text={conn.name} />
+                      </div>
+                      {conn.remark ? (
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {conn.remark}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </CommandItem>
               );
             })}
           </CommandList>
 
-          <div className="h-px bg-border shrink-0" />
-          <div className="items-center flex shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-center text-sm font-normal gap-2 rounded-none"
-              onClick={handleAddConnection}
-            >
-              <Plus className="h-3 w-3" />
-              Add Connection
-            </Button>
-          </div>
+          {canManageConnections ? (
+            <>
+              <div className="h-px bg-border shrink-0" />
+              <div className="items-center flex shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-sm font-normal gap-2 rounded-none"
+                  onClick={handleAddConnection}
+                >
+                  <Plus className="h-3 w-3" />
+                  {t("connection.add")}
+                </Button>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Right Pane: description view hidden on mobile for simplicity */}
         {!isMobile && (
-          <ConnectionDetailPanel conn={highlightedConnection} onEdit={handleEditConnection} />
+          <ConnectionDetailPanel
+            conn={highlightedConnection}
+            onEdit={canManageConnections ? handleEditConnection : undefined}
+          />
         )}
       </Command>
     </>

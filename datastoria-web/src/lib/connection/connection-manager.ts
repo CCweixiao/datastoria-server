@@ -25,6 +25,7 @@ type ServerConnection = {
   url: string;
   username: string;
   cluster?: string | null;
+  remark?: string | null;
   enabled: boolean;
   revision: number;
 };
@@ -42,6 +43,7 @@ function fromServer(connection: ServerConnection): ConnectionConfig {
     user: connection.username,
     password: "",
     cluster: connection.cluster ?? "",
+    remark: connection.remark ?? "",
     editable: true,
   };
 }
@@ -101,6 +103,7 @@ export class ConnectionManager {
         username: connection.user,
         password: connection.password,
         cluster: connection.cluster || null,
+        remark: connection.remark?.trim() || null,
         enabled: true,
       }),
     });
@@ -131,6 +134,7 @@ export class ConnectionManager {
         username: newConnection.user,
         ...(newConnection.password ? { password: newConnection.password } : {}),
         cluster: newConnection.cluster || null,
+        remark: newConnection.remark?.trim() || null,
         enabled: true,
       }),
     });

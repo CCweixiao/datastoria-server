@@ -181,6 +181,7 @@ class ClickHouseAgentToolsTest {
         "http://clickhouse:8123",
         "default",
         cluster,
+        "Analytics workload",
         true,
         "****",
         true,

@@ -6,14 +6,14 @@
 
 - 模型 API Key、OAuth Client Secret、Refresh Token；
 - ClickHouse/MySQL 密码和完整连接串中的凭据；
-- `DATASTORIA_MASTER_KEY`、Cookie、Authorization Header；
+- `datastoria.master-key`、Cookie、Authorization Header；
 - 包含客户数据的 SQL 结果、Prompt、会话内容和导出文件。
 
 ## 存储与传输
 
 - 浏览器只向 Java 提交一次凭据，不从读取接口取回明文；
 - Java 使用 AES-256-GCM 加密供应商和连接凭据；
-- 生产主密钥来自环境变量或密钥管理系统；
+- 主密钥由受控的应用配置文件提供并限制文件访问权限；
 - 外部模型、MySQL、ClickHouse 和用户入口在生产环境使用 TLS；
 - 失败信息返回稳定错误码与安全描述，原始供应商响应只在受控调试中查看。
 

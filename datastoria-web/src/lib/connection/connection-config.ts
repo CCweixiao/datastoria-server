@@ -6,5 +6,6 @@ export interface ConnectionConfig {
   user: string;
   password: string;
   cluster: string;
+  remark?: string;
   editable: boolean;
 }

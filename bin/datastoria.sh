@@ -31,7 +31,6 @@ NODE_BIN="${NODE_BIN:-node}"
 JAVA_OPTS="${JAVA_OPTS:--Xms256m -Xmx1024m}"
 BACKEND_PID_FILE="$RUN_DIR/backend.pid"
 FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
-DEV_KEY_FILE="$CONF_DIR/.dev-master-key"
 
 is_running() {
   local pid_file="$1"
@@ -55,26 +54,12 @@ wait_for_url() {
   return 1
 }
 
-ensure_dev_master_key() {
-  if [[ "$DATASTORIA_PROFILE" != "dev" || -n "${DATASTORIA_MASTER_KEY:-}" ]]; then
-    return
-  fi
-  if [[ ! -s "$DEV_KEY_FILE" ]]; then
-    umask 077
-    dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 >"$DEV_KEY_FILE"
-    echo "Generated development encryption key: $DEV_KEY_FILE"
-  fi
-  DATASTORIA_MASTER_KEY="$(tr -d '\r\n' <"$DEV_KEY_FILE")"
-  export DATASTORIA_MASTER_KEY
-}
-
 initialize() {
   if [[ ! -f "$ENV_FILE" ]]; then
     cp "$CONF_DIR/datastoria.env.example" "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     echo "Created runtime configuration: $ENV_FILE"
   fi
-  ensure_dev_master_key
   echo "DataStoria initialization complete (profile $DATASTORIA_PROFILE)."
 }
 
@@ -163,7 +148,6 @@ stop_process() {
 }
 
 start_all() {
-  ensure_dev_master_key
   start_backend
   if ! start_frontend; then
     stop_process "Backend" "$BACKEND_PID_FILE"

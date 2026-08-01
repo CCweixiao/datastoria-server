@@ -40,7 +40,6 @@ FRONTEND_PORT=3000
 DATASTORIA_DB_URL=jdbc:mysql://mysql.internal:3306/datastoria?useSSL=true
 DATASTORIA_DB_USERNAME=datastoria
 DATASTORIA_DB_PASSWORD=<从密钥系统注入>
-DATASTORIA_MASTER_KEY=<base64 编码的 32 字节随机值>
 DATASTORIA_CORS_ALLOWED_ORIGINS=https://datastoria.example.com
 DATASTORIA_AUTH_SUCCESS_URL=https://datastoria.example.com
 DATASTORIA_DEFAULT_TENANT=tenant-default
@@ -50,8 +49,8 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET=<从密钥系统
 SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_SCOPE=openid,profile,email
 ```
 
-`DATASTORIA_MASTER_KEY` 用于解密已保存的供应商和连接凭据，必须稳定备份并限制访问。丢失后
-不能恢复密文；轮换必须采用明确的数据重加密流程，不能直接替换。
+`application.yaml` 中的 `datastoria.master-key` 用于解密已保存的供应商和连接凭据，必须稳定
+备份并限制访问。丢失后不能恢复密文；轮换必须采用明确的数据重加密流程，不能直接替换。
 
 ## 3. 启动与检查
 

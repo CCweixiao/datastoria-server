@@ -13,6 +13,7 @@ public record ClickHouseConnection(
     String url,
     String username,
     String cluster,
+    String remark,
     byte[] passwordCipher,
     byte[] passwordNonce,
     String passwordKeyVersion,

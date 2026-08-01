@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Provides the AES-256 master key(s) used by {@link EnvelopeEncryptionService}. The active key is
- * read from the {@code datastoria.master-key} property (mapped from {@code DATASTORIA_MASTER_KEY}
- * env var in production) as a base64-encoded 32-byte value.
+ * read from the {@code datastoria.master-key} configuration property as a base64-encoded 32-byte
+ * value.
  *
  * <p>Key versioning: the active key is always version {@code "v1"}. Additional historical keys can
  * be registered for decryption-only rotation; {@link #keyForVersion(String)} falls back to the
@@ -30,8 +30,7 @@ public class MasterKeyProvider {
   public MasterKeyProvider(@Value("${datastoria.master-key:}") String base64Key) {
     if (base64Key == null || base64Key.isBlank()) {
       throw new IllegalStateException(
-          "datastoria.master-key is not set. Provide a base64-encoded 32-byte key"
-              + " via the DATASTORIA_MASTER_KEY environment variable.");
+          "datastoria.master-key is not set. Configure a base64-encoded 32-byte key.");
     }
     byte[] keyBytes = Base64.getDecoder().decode(base64Key);
     if (keyBytes.length != KEY_LENGTH_BYTES) {

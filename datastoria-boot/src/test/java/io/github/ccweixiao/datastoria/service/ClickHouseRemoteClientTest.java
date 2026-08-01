@@ -64,6 +64,7 @@ class ClickHouseRemoteClientTest {
               null,
               null,
               null,
+              null,
               true,
               0,
               null,

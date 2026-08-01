@@ -6,7 +6,6 @@ spring:
     password: ${DATASTORIA_DB_PASSWORD}
 
 datastoria:
-  master-key: ${DATASTORIA_MASTER_KEY}
   security:
     default-tenant: ${DATASTORIA_DEFAULT_TENANT:default}
     jwt:

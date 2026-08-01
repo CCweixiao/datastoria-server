@@ -79,6 +79,9 @@ export const en = {
   "connection.cluster": "Cluster",
   "connection.clusterPlaceholder":
     "Optional. The cluster name if the server is deployed as cluster.",
+  "connection.remark": "Cluster Notes",
+  "connection.remarkPlaceholder": "Usage scenario or purpose of this cluster connection.",
+  "connection.add": "Add Connection",
   "connection.userPlaceholder": "The user name to connect to the server.",
   "connection.passwordPlaceholder":
     "The password to connect to the server. Leave blank if no password.",
@@ -308,6 +311,11 @@ export const en = {
   "query.explainSyntax": "Explain Syntax",
   "query.explainPlan": "Explain Plan",
   "query.explainPipeline": "Explain Pipeline",
+  "query.pipelineCompactGraph": "Collapsed Pipeline",
+  "query.pipelineCompactDescription":
+    "Groups repeated processor nodes to show the main execution flow.",
+  "query.pipelineCompleteGraph": "Full Pipeline",
+  "query.pipelineCompleteDescription": "Shows every processor node in the execution pipeline.",
   "query.explainEstimate": "Explain Estimate",
   "query.save": "Save",
   "query.history": "History",

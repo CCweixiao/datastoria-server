@@ -18,6 +18,7 @@ import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionRequest;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionTestResponse;
+import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ClickHouseConnectionRepository;
@@ -49,7 +50,7 @@ public class ClickHouseConnectionService {
   public Mono<List<ClickHouseConnectionResponse>> findAll(Identity identity) {
     return Mono.fromCallable(
             () ->
-                repository.findAll(identity.tenantId(), identity.userId()).stream()
+                repository.findAll(identity.tenantId()).stream()
                     .map(ClickHouseConnectionResponse::from)
                     .toList())
         .subscribeOn(jdbcScheduler);
@@ -62,6 +63,7 @@ public class ClickHouseConnectionService {
 
   public Mono<ClickHouseConnectionResponse> create(
       ClickHouseConnectionRequest request, Identity identity) {
+    requireAdmin(identity);
     return Mono.fromCallable(
             () -> {
               validateUrl(request.url());
@@ -75,6 +77,7 @@ public class ClickHouseConnectionService {
                       request.url().trim(),
                       request.username().trim(),
                       trimToNull(request.cluster()),
+                      trimToNull(request.remark()),
                       password.cipher(),
                       password.nonce(),
                       password.keyVersion(),
@@ -91,6 +94,7 @@ public class ClickHouseConnectionService {
 
   public Mono<ClickHouseConnectionResponse> update(
       String id, Long ifMatch, ClickHouseConnectionRequest request, Identity identity) {
+    requireAdmin(identity);
     return Mono.fromCallable(
             () -> {
               validateUrl(request.url());
@@ -112,6 +116,7 @@ public class ClickHouseConnectionService {
                       request.url().trim(),
                       request.username().trim(),
                       trimToNull(request.cluster()),
+                      trimToNull(request.remark()),
                       password.cipher(),
                       password.nonce(),
                       password.keyVersion(),
@@ -129,13 +134,13 @@ public class ClickHouseConnectionService {
   }
 
   public Mono<Void> delete(String id, Long ifMatch, Identity identity) {
+    requireAdmin(identity);
     return Mono.<Void>fromRunnable(
             () -> {
               ClickHouseConnection existing = require(id, identity);
               repository.softDelete(
                   id,
                   identity.tenantId(),
-                  identity.userId(),
                   ifMatch == null ? existing.revision() : ifMatch.longValue());
             })
         .subscribeOn(jdbcScheduler);
@@ -159,6 +164,7 @@ public class ClickHouseConnectionService {
 
   public Mono<ClickHouseConnectionTestResponse> test(
       ClickHouseConnectionRequest request, Identity identity) {
+    requireAdmin(identity);
     return Mono.defer(
             () -> {
               validateUrl(request.url());
@@ -171,6 +177,7 @@ public class ClickHouseConnectionService {
                       request.url().trim(),
                       request.username().trim(),
                       trimToNull(request.cluster()),
+                      trimToNull(request.remark()),
                       null,
                       null,
                       null,
@@ -279,8 +286,14 @@ public class ClickHouseConnectionService {
 
   private ClickHouseConnection require(String id, Identity identity) {
     return repository
-        .findById(id, identity.tenantId(), identity.userId())
+        .findById(id, identity.tenantId())
         .orElseThrow(() -> new NotFoundException("ClickHouseConnection", id));
+  }
+
+  private static void requireAdmin(Identity identity) {
+    if (!identity.isAdmin()) {
+      throw new AdminAccessRequiredException();
+    }
   }
 
   private EncryptedPassword encrypt(String plaintext) {

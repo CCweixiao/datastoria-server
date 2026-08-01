@@ -28,6 +28,8 @@ public class ClickHouseConnectionEntity {
   @TableField("cluster_name")
   private String cluster;
 
+  private String remark;
+
   private byte[] passwordCipher;
   private byte[] passwordNonce;
   private String passwordKeyVersion;
@@ -47,6 +49,7 @@ public class ClickHouseConnectionEntity {
     e.url = c.url();
     e.username = c.username();
     e.cluster = c.cluster();
+    e.remark = c.remark();
     e.passwordCipher = c.passwordCipher();
     e.passwordNonce = c.passwordNonce();
     e.passwordKeyVersion = c.passwordKeyVersion();
@@ -68,6 +71,7 @@ public class ClickHouseConnectionEntity {
         url,
         username,
         cluster,
+        remark,
         passwordCipher,
         passwordNonce,
         passwordKeyVersion,
@@ -133,6 +137,14 @@ public class ClickHouseConnectionEntity {
 
   public void setCluster(String cluster) {
     this.cluster = cluster;
+  }
+
+  public String getRemark() {
+    return remark;
+  }
+
+  public void setRemark(String remark) {
+    this.remark = remark;
   }
 
   public byte[] getPasswordCipher() {

@@ -55,10 +55,10 @@ bin/datastoria logs 200
 编辑权限为 `0600` 的 `conf/datastoria.env` 中的 `DATASTORIA_PROFILE`：
 
 - `dev`：MySQL 5.7，默认连接本机 `datastoria` 数据库，可通过环境变量覆盖。
-- `prod`：MySQL 5.7，必须配置示例文件列出的数据库、主密钥、租户、CORS 和认证变量。
+- `prod`：MySQL 5.7，必须配置示例文件列出的数据库、租户、CORS 和认证变量。
 
-配置文件中的密码和主密钥只是变量说明，真实值应由部署平台或密钥管理系统注入，不能提交到
-Git 或放入工单。`DATASTORIA_MASTER_KEY` 丢失后无法解密已保存的连接/模型凭据。
+`application.yaml` 中的 `datastoria.master-key` 必须限制访问并稳定备份；丢失后无法解密已保存
+的连接/模型凭据。
 
 部署配置统一放在 `conf/datastoria.env`。两个 Profile 都加载同一套 MySQL migration，应用
 统一拒绝非 MySQL JDBC URL。

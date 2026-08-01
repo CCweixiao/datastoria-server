@@ -36,7 +36,6 @@ AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与�
 git submodule update --init --recursive
 
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-export DATASTORIA_MASTER_KEY="$(openssl rand -base64 32)"
 ./mvnw -pl datastoria-boot -am package -DskipTests
 SPRING_PROFILES_ACTIVE=dev \
   java -jar datastoria-boot/target/datastoria-boot-0.0.1-SNAPSHOT.jar
@@ -54,7 +53,8 @@ npm run dev
 ```
 
 打开 `http://localhost:3000`，健康检查为 `http://127.0.0.1:8080/actuator/health`。
-本地配置只能用于开发；API Key、数据库密码和生产主密钥必须通过环境变量或密钥管理系统提供。
+本地配置只能用于开发。`datastoria.master-key` 位于 `application.yaml`，部署前应替换并稳定备份；
+修改后将无法读取使用旧密钥加密的凭据。
 
 ## 构建与验证
 

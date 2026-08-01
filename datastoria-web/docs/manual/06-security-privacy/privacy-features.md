@@ -24,7 +24,7 @@ ClickHouse endpoint, model provider and deployment topology configured by the op
 ## Operator responsibilities
 
 - Provide HTTPS for the user-facing endpoint and TLS to databases/providers.
-- Keep `DATASTORIA_MASTER_KEY`, database passwords and OAuth secrets in a secret manager.
+- Restrict access to `datastoria.master-key`, database passwords and OAuth secrets.
 - Use least-privilege ClickHouse accounts and restrict Java network access.
 - Configure backups, log retention and provider data policies.
 - Never include credentials or production rows in screenshots and issue reports.

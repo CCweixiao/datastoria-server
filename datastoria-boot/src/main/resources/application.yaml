@@ -37,6 +37,11 @@ info:
     name: DataStoria Server
     description: Spring Boot backend for DataStoria
 
+datastoria:
+  # Base64-encoded 32-byte AES-256 key used to encrypt server-managed credentials at rest.
+  # Keep this value stable: changing it makes existing encrypted credentials unreadable.
+  master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
+
 # Exactly one runtime profile is supported:
 #   dev  -> MySQL 5.7 with convenient local defaults and a fixed JWT secret / bootstrap admin
 #   prod -> MySQL 5.7 with environment-owned credentials, JWT secret and bootstrap admin

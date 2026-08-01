@@ -14,13 +14,9 @@ public interface ClickHouseConnectionMapper extends BaseMapper<ClickHouseConnect
 
   int insertConnection(ClickHouseConnectionEntity entity);
 
-  ClickHouseConnectionEntity findById(
-      @Param("id") String id,
-      @Param("tenantId") String tenantId,
-      @Param("ownerUserId") String ownerUserId);
+  ClickHouseConnectionEntity findById(@Param("id") String id, @Param("tenantId") String tenantId);
 
-  List<ClickHouseConnectionEntity> findAll(
-      @Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId);
+  List<ClickHouseConnectionEntity> findAll(@Param("tenantId") String tenantId);
 
   int updateCas(
       @Param("entity") ClickHouseConnectionEntity entity,
@@ -29,7 +25,6 @@ public interface ClickHouseConnectionMapper extends BaseMapper<ClickHouseConnect
   int softDelete(
       @Param("id") String id,
       @Param("tenantId") String tenantId,
-      @Param("ownerUserId") String ownerUserId,
       @Param("expectedRevision") long expectedRevision,
       @Param("now") Instant now);
 }

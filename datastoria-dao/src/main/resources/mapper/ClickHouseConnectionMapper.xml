@@ -13,48 +13,47 @@
   <!-- active_name is a GENERATED ALWAYS AS column: never appear in INSERT/UPDATE column lists. -->
   <insert id="insertConnection" parameterType="io.github.ccweixiao.datastoria.dao.persistence.entity.ClickHouseConnectionEntity">
     INSERT INTO ds_clickhouse_connection (id, tenant_id, owner_user_id, name, url, username,
-        cluster_name, password_cipher, password_nonce, password_key_version, password_masked_hint,
+        cluster_name, remark, password_cipher, password_nonce, password_key_version, password_masked_hint,
         enabled, revision, created_at, updated_at)
-    VALUES (#{id}, #{tenantId}, #{ownerUserId}, #{name}, #{url}, #{username}, #{cluster},
+    VALUES (#{id}, #{tenantId}, #{ownerUserId}, #{name}, #{url}, #{username}, #{cluster}, #{remark},
         #{passwordCipher}, #{passwordNonce}, #{passwordKeyVersion}, #{passwordMaskedHint},
         #{enabled}, #{revision}, #{createdAt}, #{updatedAt})
   </insert>
 
   <select id="findById" resultMap="ChMap">
-    SELECT id, tenant_id, owner_user_id, name, url, username, cluster_name, password_cipher,
+    SELECT id, tenant_id, owner_user_id, name, url, username, cluster_name, remark, password_cipher,
            password_nonce, password_key_version, password_masked_hint, enabled, revision,
            created_at, updated_at, deleted_at
     FROM ds_clickhouse_connection
-    WHERE id = #{id} AND tenant_id = #{tenantId} AND owner_user_id = #{ownerUserId}
+    WHERE id = #{id} AND tenant_id = #{tenantId}
       AND deleted_at IS NULL
   </select>
 
   <select id="findAll" resultMap="ChMap">
-    SELECT id, tenant_id, owner_user_id, name, url, username, cluster_name, password_cipher,
+    SELECT id, tenant_id, owner_user_id, name, url, username, cluster_name, remark, password_cipher,
            password_nonce, password_key_version, password_masked_hint, enabled, revision,
            created_at, updated_at, deleted_at
     FROM ds_clickhouse_connection
-    WHERE tenant_id = #{tenantId} AND owner_user_id = #{ownerUserId} AND deleted_at IS NULL
+    WHERE tenant_id = #{tenantId} AND deleted_at IS NULL
     ORDER BY created_at
   </select>
 
   <update id="updateCas">
     UPDATE ds_clickhouse_connection
     SET name = #{entity.name}, url = #{entity.url}, username = #{entity.username},
-        cluster_name = #{entity.cluster}, password_cipher = #{entity.passwordCipher},
+        cluster_name = #{entity.cluster}, remark = #{entity.remark}, password_cipher = #{entity.passwordCipher},
         password_nonce = #{entity.passwordNonce},
         password_key_version = #{entity.passwordKeyVersion},
         password_masked_hint = #{entity.passwordMaskedHint}, enabled = #{entity.enabled},
         revision = revision + 1, updated_at = #{entity.updatedAt}
     WHERE id = #{entity.id} AND tenant_id = #{entity.tenantId}
-      AND owner_user_id = #{entity.ownerUserId}
       AND revision = #{expectedRevision} AND deleted_at IS NULL
   </update>
 
   <update id="softDelete">
     UPDATE ds_clickhouse_connection
     SET deleted_at = #{now}
-    WHERE id = #{id} AND tenant_id = #{tenantId} AND owner_user_id = #{ownerUserId}
+    WHERE id = #{id} AND tenant_id = #{tenantId}
       AND revision = #{expectedRevision} AND deleted_at IS NULL
   </update>
 </mapper>
