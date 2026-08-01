@@ -24,6 +24,7 @@ public class TestDbHelper {
     "ds_agent_checkpoint",
     "ds_agent_run",
     "ds_chat_session",
+    "ds_ck_query_history",
     "ds_agent_revision",
     "ds_agent_definition",
     "ds_user_model_preference",

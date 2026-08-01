@@ -1,127 +1,127 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_QUERY_HISTORY_SIZE, QueryHistoryManager } from "./query-history-manager";
-import type { QueryHistoryEntry, QueryHistoryStorage } from "./query-history-storage";
 
-class MockQueryHistoryStorage implements QueryHistoryStorage {
-  private entries: QueryHistoryEntry[] = [];
+const listQueryHistory = vi.fn();
+const addQueryHistory = vi.fn();
+const deleteQueryHistory = vi.fn();
+const clearQueryHistory = vi.fn();
 
-  load = vi.fn(() => [...this.entries]);
+vi.mock("@/lib/query-history-client", () => ({
+  listQueryHistory: (...args: unknown[]) => listQueryHistory(...args),
+  addQueryHistory: (...args: unknown[]) => addQueryHistory(...args),
+  deleteQueryHistory: (...args: unknown[]) => deleteQueryHistory(...args),
+  clearQueryHistory: (...args: unknown[]) => clearQueryHistory(...args),
+}));
 
-  save = vi.fn((entries: QueryHistoryEntry[]) => {
-    this.entries = [...entries];
-  });
+import { QueryHistoryManager } from "./query-history-manager";
 
-  clear = vi.fn(() => {
-    this.entries = [];
-  });
-
-  seed(entries: QueryHistoryEntry[]) {
-    this.entries = [...entries];
-  }
+function dto(id: string, sql: string, executedAt: string) {
+  return {
+    id,
+    connectionId: "conn-1",
+    connectionName: "Prod",
+    rawSql: sql,
+    executedAt,
+  };
 }
 
 describe("QueryHistoryManager", () => {
-  let storage: MockQueryHistoryStorage;
-  let queryHistoryManager: QueryHistoryManager;
+  let manager: QueryHistoryManager;
 
   beforeEach(() => {
-    storage = new MockQueryHistoryStorage();
-    vi.stubGlobal("window", {
-      dispatchEvent: vi.fn(),
-    });
-    vi.stubGlobal("crypto", {
-      randomUUID: vi.fn(() => "uuid"),
-    });
-    queryHistoryManager = new QueryHistoryManager(storage);
+    // A real EventTarget so addEventListener/dispatchEvent actually deliver events.
+    vi.stubGlobal("window", new EventTarget());
+    listQueryHistory.mockReset();
+    addQueryHistory.mockReset();
+    deleteQueryHistory.mockReset();
+    clearQueryHistory.mockReset();
+    manager = new QueryHistoryManager();
   });
 
-  it("deduplicates identical SQL and keeps the newest entry", () => {
-    queryHistoryManager.add({
-      id: "older",
-      rawSQL: "SELECT 1",
-      timestamp: 100,
-      connectionName: "A",
-    });
-    queryHistoryManager.add({
-      id: "newer",
-      rawSQL: "SELECT 1",
-      timestamp: 200,
-      connectionName: "B",
-    });
-
-    expect(queryHistoryManager.list()).toEqual([
-      expect.objectContaining({
-        id: "newer",
-        timestamp: 200,
-      }),
+  it("loads entries from the backend mapped to the UI shape", async () => {
+    listQueryHistory.mockResolvedValue([
+      dto("a", "SELECT 1", "2026-08-01T00:00:00Z"),
+      dto("b", "SELECT 2", "2026-07-31T00:00:00Z"),
     ]);
-  });
 
-  it("loads storage once at initialization and then uses the in-memory cache", () => {
-    storage.seed([
-      {
-        id: "existing",
-        rawSQL: "SELECT 1",
-        timestamp: 100,
-        connectionName: "A",
-      },
-    ]);
-    storage.load.mockClear();
+    const entries = await manager.load("conn-1");
 
-    const cachedStorage = new QueryHistoryManager(storage);
-    expect(storage.load).toHaveBeenCalledTimes(1);
-
-    storage.seed([]);
-
-    expect(cachedStorage.list().map((entry) => entry.id)).toEqual(["existing"]);
-
-    cachedStorage.add({
-      id: "newer",
-      rawSQL: "SELECT 2",
-      timestamp: 200,
-      connectionName: "B",
-    });
-
-    expect(cachedStorage.list().map((entry) => entry.id)).toEqual(["newer", "existing"]);
-    expect(storage.load).toHaveBeenCalledTimes(1);
-  });
-
-  it("caps stored history at the maximum size", () => {
-    const entries: QueryHistoryEntry[] = [];
-    for (let index = 0; index < MAX_QUERY_HISTORY_SIZE + 5; index++) {
-      entries.push(
-        queryHistoryManager.add({
-          id: `entry-${index}`,
-          rawSQL: `SELECT ${index}`,
-          timestamp: index,
-          connectionName: "A",
-        })[0]
-      );
-    }
-
-    const history = queryHistoryManager.list();
-    expect(history).toHaveLength(MAX_QUERY_HISTORY_SIZE);
-    expect(history[0]?.rawSQL).toBe(`SELECT ${MAX_QUERY_HISTORY_SIZE + 4}`);
-    expect(history.at(-1)?.rawSQL).toBe("SELECT 5");
-    expect(entries).toHaveLength(MAX_QUERY_HISTORY_SIZE + 5);
-  });
-
-  it("removes individual entries and clears the whole history", () => {
-    queryHistoryManager.add({
-      id: "first",
+    expect(listQueryHistory).toHaveBeenCalledWith("conn-1", undefined);
+    expect(entries.map((entry) => entry.id)).toEqual(["a", "b"]);
+    expect(entries[0]).toMatchObject({
       rawSQL: "SELECT 1",
-      timestamp: 100,
-      connectionName: "A",
+      connectionId: "conn-1",
+      connectionName: "Prod",
+      timestamp: Date.parse("2026-08-01T00:00:00Z"),
     });
-    queryHistoryManager.add({
-      id: "second",
-      rawSQL: "SELECT 2",
-      timestamp: 200,
-      connectionName: "A",
+  });
+
+  it("saves via the backend and refreshes the active connection", async () => {
+    listQueryHistory.mockResolvedValue([dto("a", "SELECT 1", "2026-08-01T00:00:00Z")]);
+    await manager.load("conn-1");
+
+    addQueryHistory.mockResolvedValue(dto("a", "SELECT 1", "2026-08-02T00:00:00Z"));
+    listQueryHistory.mockResolvedValue([dto("a", "SELECT 1", "2026-08-02T00:00:00Z")]);
+
+    await manager.add({
+      rawSQL: "SELECT 1",
+      connectionId: "conn-1",
+      connectionName: "Prod",
     });
 
-    expect(queryHistoryManager.remove("first").map((entry) => entry.id)).toEqual(["second"]);
-    expect(queryHistoryManager.clear()).toEqual([]);
-    expect(queryHistoryManager.list()).toEqual([]);
+    expect(addQueryHistory).toHaveBeenCalledWith({
+      connectionId: "conn-1",
+      rawSql: "SELECT 1",
+      connectionName: "Prod",
+    });
+    expect(manager.list().map((entry) => entry.id)).toEqual(["a"]);
+  });
+
+  it("does not reload when saving for an inactive connection", async () => {
+    listQueryHistory.mockResolvedValue([dto("a", "SELECT 1", "2026-08-01T00:00:00Z")]);
+    await manager.load("conn-1");
+
+    addQueryHistory.mockResolvedValue(dto("b", "SELECT 2", "2026-08-01T00:00:00Z"));
+    await manager.add({
+      rawSQL: "SELECT 2",
+      connectionId: "conn-2",
+      connectionName: "Other",
+    });
+
+    expect(listQueryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes an entry by id after the backend confirms deletion", async () => {
+    listQueryHistory.mockResolvedValue([
+      dto("a", "SELECT 1", "2026-08-01T00:00:00Z"),
+      dto("b", "SELECT 2", "2026-07-31T00:00:00Z"),
+    ]);
+    await manager.load("conn-1");
+
+    deleteQueryHistory.mockResolvedValue(undefined);
+    await manager.remove("a");
+
+    expect(deleteQueryHistory).toHaveBeenCalledWith("a");
+    expect(manager.list().map((entry) => entry.id)).toEqual(["b"]);
+  });
+
+  it("clears the active connection's entries", async () => {
+    listQueryHistory.mockResolvedValue([dto("a", "SELECT 1", "2026-08-01T00:00:00Z")]);
+    await manager.load("conn-1");
+
+    clearQueryHistory.mockResolvedValue(undefined);
+    await manager.clear("conn-1");
+
+    expect(clearQueryHistory).toHaveBeenCalledWith("conn-1");
+    expect(manager.list()).toEqual([]);
+  });
+
+  it("notifies listeners after mutations", async () => {
+    const listener = vi.fn();
+    manager.addListener(listener);
+
+    listQueryHistory.mockResolvedValue([]);
+    await manager.load("conn-1");
+
+    expect(listener).toHaveBeenCalled();
   });
 });

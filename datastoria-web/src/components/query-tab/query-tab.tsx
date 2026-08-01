@@ -169,6 +169,7 @@ const QueryTabContent = ({ initialQuery, initialMode, initialExecute, active }: 
         open={isHistoryOpen}
         onOpenChange={setIsHistoryOpen}
         onRun={handleRunHistoryQuery}
+        connectionId={connection?.id}
       />
     </>
   );

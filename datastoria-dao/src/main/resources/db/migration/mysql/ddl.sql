@@ -1,6 +1,6 @@
 -- GENERATED FILE. DO NOT EDIT DIRECTLY.
 -- Regenerate with: node bin/dev/generate-schema-snapshots.mjs
--- Copyable DDL for a NEW MYSQL database at Flyway V16.
+-- Copyable DDL for a NEW MYSQL database at Flyway V19.
 -- Manual deployment helper; do not execute before Flyway manages the same database.
 
 -- Source: V1__identity_config_and_audit.sql
@@ -369,7 +369,6 @@ CREATE TABLE ds_clickhouse_connection (
     url                  TEXT NOT NULL,
     username             VARCHAR(255) NOT NULL,
     cluster_name         VARCHAR(255),
-    remark               VARCHAR(1000),
     password_cipher      LONGBLOB,
     password_nonce       VARBINARY(64),
     password_key_version VARCHAR(64),
@@ -584,22 +583,47 @@ CREATE TABLE ds_agentscope_sessions (
 
 -- Source: V17__user_account.sql
 CREATE TABLE ds_user_account (
-    id            VARCHAR(64) NOT NULL,
-    tenant_id     VARCHAR(64) NOT NULL,
-    username      VARCHAR(64) NOT NULL,
-    password_hash VARCHAR(100) NOT NULL,
-    display_name  VARCHAR(128) NOT NULL,
-    email         VARCHAR(320) NULL,
-    role          VARCHAR(16) NOT NULL DEFAULT 'USER',
-    status        VARCHAR(16) NOT NULL DEFAULT 'ENABLED',
-    token_version INT NOT NULL DEFAULT 1,
-    created_at    DATETIME(6) NOT NULL,
-    updated_at    DATETIME(6) NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_user_account_username (username),
-    UNIQUE KEY uk_user_account_email (email),
-    KEY idx_user_account_tenant (tenant_id),
-    CONSTRAINT chk_user_account_role CHECK (role IN ('ADMIN', 'USER')),
-    CONSTRAINT chk_user_account_status CHECK (status IN ('ENABLED', 'DISABLED')),
-    CONSTRAINT chk_user_account_token_version CHECK (token_version > 0)
+    user_id         varchar(64)  NOT NULL PRIMARY KEY,
+    tenant_id       varchar(64)  NOT NULL DEFAULT 'default',
+    username        varchar(64)  NOT NULL,
+    email           varchar(255) NULL,
+    password_hash   varchar(255) NULL,
+    role            varchar(32)  NOT NULL DEFAULT 'USER',
+    status          tinyint      NOT NULL DEFAULT 1,
+    token_version   int          NOT NULL DEFAULT 1,
+    created_at      datetime(6)  NOT NULL,
+    updated_at      datetime(6)  NOT NULL,
+    CONSTRAINT chk_user_role CHECK (role IN ('USER','ADMIN')),
+    CONSTRAINT chk_user_status CHECK (status IN (0,1)),
+    UNIQUE KEY uk_user_username (username),
+    UNIQUE KEY uk_user_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Source: V17__user_account.sql
+CREATE INDEX idx_user_account_tenant
+    ON ds_user_account (tenant_id, status);
+
+-- Source: V18__clickhouse_connection_remark.sql
+ALTER TABLE ds_clickhouse_connection
+    ADD COLUMN remark VARCHAR(1000) NULL AFTER cluster_name;
+
+-- Source: V19__ck_query_history.sql
+CREATE TABLE ds_ck_query_history (
+    id              varchar(26)   NOT NULL PRIMARY KEY,
+    tenant_id       varchar(64)   NOT NULL,
+    user_id         varchar(255)  NOT NULL,
+    connection_id   varchar(255)  NOT NULL,
+    connection_name varchar(255)  NULL,
+    raw_sql         text          NOT NULL,
+    executed_at     datetime(6)   NOT NULL,
+    created_at      datetime(6)   NOT NULL,
+    UNIQUE KEY uk_ck_query_history_tenant_id (tenant_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Source: V19__ck_query_history.sql
+CREATE INDEX idx_ck_query_history_user_conn_time
+    ON ds_ck_query_history (tenant_id, user_id, connection_id, executed_at);
+
+-- Source: V19__ck_query_history.sql
+CREATE INDEX idx_ck_query_history_user_time
+    ON ds_ck_query_history (tenant_id, user_id, executed_at);

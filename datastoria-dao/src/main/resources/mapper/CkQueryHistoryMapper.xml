@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.ccweixiao.datastoria.dao.persistence.mapper.CkQueryHistoryMapper">
+
+  <resultMap id="CkQueryHistoryMap" type="io.github.ccweixiao.datastoria.dao.persistence.entity.CkQueryHistoryEntity" autoMapping="true"/>
+
+  <insert id="insertHistory">
+    INSERT INTO ds_ck_query_history (id, tenant_id, user_id, connection_id, connection_name,
+        raw_sql, executed_at, created_at)
+    VALUES (#{entity.id}, #{entity.tenantId}, #{entity.userId}, #{entity.connectionId},
+        #{entity.connectionName}, #{entity.rawSql}, #{entity.executedAt}, #{entity.createdAt})
+  </insert>
+
+  <delete id="deleteByUserConnectionSql">
+    DELETE FROM ds_ck_query_history
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId}
+      AND connection_id = #{connectionId} AND raw_sql = #{rawSql}
+  </delete>
+
+  <!--
+    First-level filter on (tenant_id, user_id, connection_id) with an optional keyword on raw_sql,
+    ordered time-desc (executed_at DESC, id DESC as a stable tiebreaker). A null/blank keyword omits
+    the LIKE clause; LIMIT bounds the result to the per-(user, connection) cap.
+  -->
+  <select id="find" resultMap="CkQueryHistoryMap">
+    SELECT id, tenant_id, user_id, connection_id, connection_name, raw_sql, executed_at, created_at
+    FROM ds_ck_query_history
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND connection_id = #{connectionId}
+    <if test="keyword != null and keyword != ''">
+      AND raw_sql LIKE CONCAT('%', #{keyword}, '%')
+    </if>
+    ORDER BY executed_at DESC, id DESC
+    LIMIT #{limit}
+  </select>
+
+  <delete id="deleteOwned">
+    DELETE FROM ds_ck_query_history
+    WHERE id = #{id} AND tenant_id = #{tenantId} AND user_id = #{userId}
+  </delete>
+
+  <delete id="deleteAllByUserConnection">
+    DELETE FROM ds_ck_query_history
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND connection_id = #{connectionId}
+  </delete>
+
+  <!--
+    Enforce the per-(user, connection) cap by deleting every row whose id is not in the newest
+    `keep` window. The inner derived table aliases the target so MySQL allows the self-reference.
+  -->
+  <delete id="prune">
+    DELETE FROM ds_ck_query_history
+    WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND connection_id = #{connectionId}
+      AND id NOT IN (
+        SELECT id FROM (
+          SELECT id FROM ds_ck_query_history
+          WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND connection_id = #{connectionId}
+          ORDER BY executed_at DESC, id DESC
+          LIMIT #{keep}
+        ) AS keep_ids
+      )
+  </delete>
+</mapper>

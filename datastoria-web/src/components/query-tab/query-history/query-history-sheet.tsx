@@ -35,9 +35,10 @@ interface QueryHistorySheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRun: (sql: string) => void;
+  connectionId?: string;
 }
 
-export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistorySheetProps) {
+export function QueryHistorySheet({ open, onOpenChange, onRun, connectionId }: QueryHistorySheetProps) {
   const { t } = useUiPreferences();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<QueryHistoryEntry[]>([]);
@@ -45,9 +46,16 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
   const [isClearAllOpen, setIsClearAllOpen] = useState(false);
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
 
+  // Render the cached entries immediately, then refresh from the backend for the active connection.
   useEffect(() => {
     setEntries(queryHistoryManager.list());
   }, []);
+
+  useEffect(() => {
+    if (open && connectionId) {
+      void queryHistoryManager.load(connectionId);
+    }
+  }, [open, connectionId]);
 
   useEffect(() => {
     const syncHistory = () => {
@@ -157,7 +165,9 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                 size="sm"
                 className="h-7"
                 onClick={() => {
-                  setEntries(queryHistoryManager.clear());
+                  if (connectionId) {
+                    void queryHistoryManager.clear(connectionId);
+                  }
                   setIsClearAllOpen(false);
                 }}
               >
@@ -202,7 +212,7 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                       entry={entry}
                       index={virtualItem.index + 1}
                       searchText={deferredSearchText}
-                      onDelete={(id) => setEntries(queryHistoryManager.remove(id))}
+                      onDelete={(id) => void queryHistoryManager.remove(id)}
                       onRun={onRun}
                     />
                   </div>
@@ -217,7 +227,7 @@ export function QueryHistorySheet({ open, onOpenChange, onRun }: QueryHistoryShe
                   entry={entry}
                   index={index + 1}
                   searchText={deferredSearchText}
-                  onDelete={(id) => setEntries(queryHistoryManager.remove(id))}
+                  onDelete={(id) => void queryHistoryManager.remove(id)}
                   onRun={onRun}
                 />
               ))}

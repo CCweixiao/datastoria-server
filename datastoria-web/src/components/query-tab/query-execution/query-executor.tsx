@@ -198,10 +198,10 @@ export function QueryExecutionProvider({ children }: { children: ReactNode }) {
           )
         );
 
-        if ((view === undefined || view === "query") && connection) {
-          queryHistoryManager.add({
+        if ((view === undefined || view === "query") && connection?.id) {
+          void queryHistoryManager.add({
             rawSQL: rawSQL || processedSQL,
-            timestamp,
+            connectionId: connection.id,
             connectionName: connection.name,
           });
         }
