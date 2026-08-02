@@ -16,12 +16,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getApproval,
+  listApprovalExecutions,
+  listApprovalNodeExecutions,
   listApprovals,
   listApprovalTypeDefinitions,
   listApprovalTypes,
   transitionApproval,
   updateApprovalTypeDefinition,
   type ApprovalDetail,
+  type ApprovalExecution,
+  type ApprovalNodeExecution,
   type ApprovalRequest,
   type ApprovalStatus,
   type ApprovalType,
@@ -514,6 +518,7 @@ function ApprovalDetailPanel({
               ))}
             </div>
           </section>
+          {isAdmin && <ExecutionHistory requestId={request.id} />}
           <section>
             <h3 className="mb-2 text-sm font-semibold">{t("approval.timeline")}</h3>
             <div className="space-y-3 border-l pl-4">
@@ -533,5 +538,102 @@ function ApprovalDetailPanel({
         </CardContent>
       </ScrollArea>
     </Card>
+  );
+}
+
+function ExecutionHistory({ requestId }: { requestId: string }) {
+  const { t } = useUiPreferences();
+  const [executions, setExecutions] = useState<ApprovalExecution[]>([]);
+  const [nodes, setNodes] = useState<Record<string, ApprovalNodeExecution[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void listApprovalExecutions(requestId)
+      .then(async (nextExecutions) => {
+        const nodeEntries = await Promise.all(
+          nextExecutions.map(
+            async (execution) =>
+              [execution.id, await listApprovalNodeExecutions(requestId, execution.id)] as const
+          )
+        );
+        if (!cancelled) {
+          setExecutions(nextExecutions);
+          setNodes(Object.fromEntries(nodeEntries));
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled)
+          setError(caught instanceof Error ? caught.message : t("approval.execution.loadError"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestId, t]);
+
+  return (
+    <section>
+      <h3 className="mb-2 text-sm font-semibold">{t("approval.execution.title")}</h3>
+      {loading ? (
+        <p className="text-xs text-muted-foreground">{t("approval.loading")}</p>
+      ) : error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : executions.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("approval.execution.empty")}</p>
+      ) : (
+        <div className="space-y-2">
+          {executions.map((execution) => (
+            <div key={execution.id} className="rounded-md border p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">
+                  {t("approval.execution.attempt")} {execution.attemptNo} · #{execution.ordinal}
+                </span>
+                <Badge variant={execution.status === "FAILED" ? "destructive" : "outline"}>
+                  {execution.status}
+                </Badge>
+              </div>
+              <div className="mt-1 break-all font-mono text-muted-foreground">
+                query_id: {execution.queryId}
+              </div>
+              {execution.durationMs !== undefined && (
+                <div className="mt-1 text-muted-foreground">
+                  {t("approval.execution.duration")}: {execution.durationMs} ms
+                </div>
+              )}
+              {(nodes[execution.id] ?? []).map((node) => (
+                <div
+                  key={node.id}
+                  className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1.5"
+                >
+                  <span>
+                    {node.host}
+                    {node.port ? `:${node.port}` : ""}
+                  </span>
+                  <span
+                    className={
+                      node.status === "FAILED" ? "text-destructive" : "text-muted-foreground"
+                    }
+                  >
+                    {node.status}
+                    {node.durationMs !== undefined ? ` · ${node.durationMs} ms` : ""}
+                  </span>
+                </div>
+              ))}
+              {(execution.safeMessage || execution.errorCode) && (
+                <p className="mt-2 text-destructive">
+                  {[execution.errorCode, execution.safeMessage].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

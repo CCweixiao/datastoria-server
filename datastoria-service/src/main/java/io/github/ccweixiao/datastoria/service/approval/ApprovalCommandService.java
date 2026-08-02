@@ -1,5 +1,6 @@
 package io.github.ccweixiao.datastoria.service.approval;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -23,7 +24,9 @@ import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalEvent;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalItem;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
@@ -273,6 +276,39 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler);
   }
 
+  public Mono<List<ApprovalExecution>> executions(String requestId, Identity identity) {
+    requireAdmin(identity);
+    return Mono.fromCallable(
+            () -> {
+              requireVisible(requestId, identity, true);
+              return repository.findExecutions(identity.tenantId(), requestId);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
+  public Mono<List<ApprovalNodeExecution>> nodeExecutions(
+      String requestId,
+      String executionId,
+      String status,
+      int offset,
+      int limit,
+      Identity identity) {
+    requireAdmin(identity);
+    return Mono.fromCallable(
+            () -> {
+              requireVisible(requestId, identity, true);
+              boolean belongsToRequest =
+                  repository.findExecutions(identity.tenantId(), requestId).stream()
+                      .anyMatch(execution -> execution.id().equals(executionId));
+              if (!belongsToRequest) {
+                throw new NotFoundException("ApprovalExecution", executionId);
+              }
+              return repository.findNodeExecutions(
+                  identity.tenantId(), executionId, trimToNull(status), offset, limit);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
   public Mono<List<ApprovalTypeDefinition>> listTypes(String connectionId, Identity identity) {
     return connections
         .findById(connectionId, identity)
@@ -469,39 +505,99 @@ public class ApprovalCommandService {
                     request.tenantId(), request.id(), item.id(), attempt, item.ordinal(), queryId))
         .subscribeOn(jdbcScheduler)
         .flatMap(
-            executionId -> {
-              long started = System.nanoTime();
-              return connections
-                  .query(
-                      request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
-                  .then(
-                      Mono.<Void>fromRunnable(
-                              () ->
-                                  repository.finishExecution(
-                                      request.tenantId(),
-                                      executionId,
-                                      true,
-                                      elapsedMillis(started),
-                                      null,
-                                      null))
-                          .subscribeOn(jdbcScheduler))
-                  .onErrorResume(
-                      exception ->
-                          Mono.<Void>fromRunnable(
+            executionId ->
+                connections
+                    .findById(request.connectionId(), identity)
+                    .flatMap(
+                        connection -> {
+                          Endpoint endpoint = endpoint(connection.url());
+                          return Mono.fromCallable(
                                   () ->
-                                      repository.finishExecution(
+                                      repository.createNodeExecution(
                                           request.tenantId(),
                                           executionId,
-                                          false,
-                                          elapsedMillis(started),
-                                          exception.getClass().getSimpleName(),
-                                          "ClickHouse rejected approval item #" + item.ordinal()))
+                                          endpoint.key(),
+                                          endpoint.host(),
+                                          endpoint.port()))
                               .subscribeOn(jdbcScheduler)
-                              .then(
-                                  Mono.<Void>error(
-                                      new ExecutionFailedException(
-                                          "DDL item #" + item.ordinal() + " failed"))));
-            });
+                              .flatMap(
+                                  nodeExecutionId ->
+                                      executeOnEndpoint(
+                                          request,
+                                          item,
+                                          identity,
+                                          queryId,
+                                          executionId,
+                                          nodeExecutionId));
+                        })
+                    .onErrorResume(ExecutionFailedException.class, Mono::error)
+                    .onErrorResume(
+                        exception ->
+                            finishFailedExecution(request, item, executionId, null, 0, exception)));
+  }
+
+  private Mono<Void> executeOnEndpoint(
+      ApprovalRequest request,
+      ApprovalItem item,
+      Identity identity,
+      String queryId,
+      String executionId,
+      String nodeExecutionId) {
+    long started = System.nanoTime();
+    return connections
+        .query(request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
+        .then(
+            Mono.<Void>fromRunnable(
+                    () -> {
+                      long duration = elapsedMillis(started);
+                      repository.finishNodeExecution(
+                          request.tenantId(), nodeExecutionId, true, duration, null, null);
+                      repository.finishExecution(
+                          request.tenantId(), executionId, true, duration, null, null);
+                    })
+                .subscribeOn(jdbcScheduler))
+        .onErrorResume(
+            exception ->
+                finishFailedExecution(
+                    request,
+                    item,
+                    executionId,
+                    nodeExecutionId,
+                    elapsedMillis(started),
+                    exception));
+  }
+
+  private Mono<Void> finishFailedExecution(
+      ApprovalRequest request,
+      ApprovalItem item,
+      String executionId,
+      String nodeExecutionId,
+      long duration,
+      Throwable exception) {
+    return Mono.<Void>fromRunnable(
+            () -> {
+              String code = exception.getClass().getSimpleName();
+              String message = "ClickHouse rejected approval item #" + item.ordinal();
+              if (nodeExecutionId != null) {
+                repository.finishNodeExecution(
+                    request.tenantId(), nodeExecutionId, false, duration, code, message);
+              }
+              repository.finishExecution(
+                  request.tenantId(), executionId, false, duration, code, message);
+            })
+        .subscribeOn(jdbcScheduler)
+        .then(Mono.error(new ExecutionFailedException("DDL item #" + item.ordinal() + " failed")));
+  }
+
+  private static Endpoint endpoint(String url) {
+    try {
+      URI uri = URI.create(url);
+      int port = uri.getPort();
+      if (port < 0) port = "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
+      return new Endpoint(uri.getHost() + ":" + port, uri.getHost(), port);
+    } catch (RuntimeException exception) {
+      return new Endpoint(url, url, null);
+    }
   }
 
   private void finishExecutionRequest(
@@ -551,6 +647,9 @@ public class ApprovalCommandService {
   private Mono<Void> revalidate(
       ApprovalDetail detail, ApprovalTypeDefinition definition, Identity identity) {
     try {
+      if (!sha256(detail.request().contentJson()).equals(detail.request().contentDigest())) {
+        return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
+      }
       JsonNode content = mapper.readTree(detail.request().contentJson());
       JsonNode intent = content.path("intent");
       String typeKey = content.path("workOrderTypeKey").asText();
@@ -714,6 +813,8 @@ public class ApprovalCommandService {
   }
 
   private record ExecutionContext(ApprovalDetail detail, int attempt) {}
+
+  private record Endpoint(String key, String host, Integer port) {}
 
   private static final class ExecutionFailedException extends RuntimeException {
     private ExecutionFailedException(String message) {

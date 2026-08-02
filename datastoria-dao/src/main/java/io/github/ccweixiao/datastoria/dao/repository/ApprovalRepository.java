@@ -5,7 +5,9 @@ import java.util.Optional;
 
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalEvent;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalItem;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
@@ -77,6 +79,9 @@ public interface ApprovalRepository {
   String createExecution(
       String tenantId, String requestId, String itemId, int attemptNo, int ordinal, String queryId);
 
+  String createNodeExecution(
+      String tenantId, String executionId, String nodeKey, String host, Integer port);
+
   void finishExecution(
       String tenantId,
       String executionId,
@@ -84,6 +89,19 @@ public interface ApprovalRepository {
       long durationMs,
       String errorCode,
       String safeMessage);
+
+  void finishNodeExecution(
+      String tenantId,
+      String nodeExecutionId,
+      boolean succeeded,
+      long durationMs,
+      String errorCode,
+      String safeMessage);
+
+  List<ApprovalExecution> findExecutions(String tenantId, String requestId);
+
+  List<ApprovalNodeExecution> findNodeExecutions(
+      String tenantId, String executionId, String status, int offset, int limit);
 
   void finishRequestExecution(
       String tenantId,

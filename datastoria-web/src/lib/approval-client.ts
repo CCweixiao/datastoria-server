@@ -75,10 +75,36 @@ export type ApprovalTypeDefinition = {
 };
 
 export type PreparedApproval = {
-  requestId: string;
+  draftId: string;
   requestNo: string;
   revision: number;
   contentDigest: string;
+};
+
+export type ApprovalExecution = {
+  id: string;
+  itemId: string;
+  attemptNo: number;
+  ordinal: number;
+  status: string;
+  queryId: string;
+  durationMs?: number;
+  errorCode?: string;
+  safeMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+export type ApprovalNodeExecution = {
+  id: string;
+  executionId: string;
+  nodeKey: string;
+  host: string;
+  port?: number;
+  status: string;
+  durationMs?: number;
+  errorCode?: string;
+  safeMessage?: string;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -97,6 +123,24 @@ export function listApprovals(status?: ApprovalStatus): Promise<ApprovalRequest[
 
 export function getApproval(id: string): Promise<ApprovalDetail> {
   return request(`/api/approvals/${encodeURIComponent(id)}`);
+}
+
+export function listApprovalExecutions(id: string): Promise<ApprovalExecution[]> {
+  return request(`/api/admin/approvals/${encodeURIComponent(id)}/executions`);
+}
+
+export function listApprovalNodeExecutions(
+  requestId: string,
+  executionId: string,
+  options?: { status?: string; offset?: number; limit?: number }
+): Promise<ApprovalNodeExecution[]> {
+  const parameters = new URLSearchParams();
+  if (options?.status) parameters.set("status", options.status);
+  parameters.set("offset", String(options?.offset ?? 0));
+  parameters.set("limit", String(options?.limit ?? 50));
+  return request(
+    `/api/admin/approvals/${encodeURIComponent(requestId)}/executions/${encodeURIComponent(executionId)}/nodes?${parameters}`
+  );
 }
 
 export function listApprovalTypes(connectionId: string): Promise<ApprovalType[]> {

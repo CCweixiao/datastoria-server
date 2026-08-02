@@ -15,7 +15,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -58,6 +61,10 @@ class ApprovalCommandServiceTest {
     when(repository.createExecution(
             anyString(), anyString(), anyString(), eq(1), anyInt(), anyString()))
         .thenReturn("execution-1", "execution-2");
+    when(repository.createNodeExecution(
+            anyString(), anyString(), anyString(), anyString(), anyInt()))
+        .thenReturn("node-1", "node-2");
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
     when(connections.query(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
@@ -81,6 +88,11 @@ class ApprovalCommandServiceTest {
     InOrder order = inOrder(connections);
     order.verify(connections).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
     order.verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(repository, times(2))
+        .createNodeExecution(
+            eq("tenant"), anyString(), eq("localhost:80"), eq("localhost"), eq(80));
+    verify(repository, times(2))
+        .finishNodeExecution(eq("tenant"), anyString(), eq(true), anyLong(), eq(null), eq(null));
     verify(repository)
         .finishRequestExecution(
             eq("tenant"),
@@ -174,6 +186,11 @@ class ApprovalCommandServiceTest {
 
   private static ApprovalDetail detail() {
     Instant now = Instant.now();
+    String content =
+        """
+        {"workOrderTypeKey":"CLICKHOUSE_CREATE_TABLE","generationRuleChecksum":"checksum",\
+        "generatorKey":"test-generator","generationRule":{},"intent":{}}
+        """;
     ApprovalRequest request =
         new ApprovalRequest(
             "request",
@@ -191,12 +208,9 @@ class ApprovalCommandServiceTest {
             "connection",
             "Cluster",
             ApprovalStatus.APPROVED,
-            """
-            {"workOrderTypeKey":"CLICKHOUSE_CREATE_TABLE","generationRuleChecksum":"checksum",\
-            "generatorKey":"test-generator","generationRule":{},"intent":{}}
-            """,
+            content,
             1,
-            "digest",
+            digest(content),
             "MANUAL_TRIGGER",
             0,
             "reviewer",
@@ -282,5 +296,15 @@ class ApprovalCommandServiceTest {
         1,
         now,
         now);
+  }
+
+  private static String digest(String value) {
+    try {
+      return HexFormat.of()
+          .formatHex(
+              MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    } catch (Exception exception) {
+      throw new AssertionError(exception);
+    }
   }
 }

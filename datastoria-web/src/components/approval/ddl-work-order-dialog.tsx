@@ -107,7 +107,7 @@ export function DdlWorkOrderDialog({
         intent,
       });
       onOpenChange(false);
-      onCreated(result.requestId);
+      onCreated(result.draftId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("approval.error.action"));
     } finally {

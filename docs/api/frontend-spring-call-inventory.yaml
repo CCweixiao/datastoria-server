@@ -63,6 +63,8 @@ operations:
   - { method: POST, path: "/api/admin/approvals/{}/reject", callSite: lib/approval-client.ts }
   - { method: POST, path: "/api/admin/approvals/{}/execute", callSite: lib/approval-client.ts }
   - { method: POST, path: "/api/admin/approvals/{}/close", callSite: lib/approval-client.ts }
+  - { method: GET, path: "/api/admin/approvals/{}/executions", callSite: lib/approval-client.ts }
+  - { method: GET, path: "/api/admin/approvals/{}/executions/{}/nodes", callSite: lib/approval-client.ts }
   - { method: GET, path: /api/approval-types/clickhouse-ddl/capabilities, callSite: lib/approval-client.ts }
   - { method: POST, path: /api/approval-types/clickhouse-ddl/prepare, callSite: lib/approval-client.ts }
   - { method: GET, path: /api/admin/approval-types/clickhouse-ddl, callSite: lib/approval-client.ts }

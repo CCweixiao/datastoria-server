@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalExecution;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
@@ -111,6 +113,28 @@ public class ApprovalController {
       @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
     return IdentityContext.current()
         .flatMap(identity -> service.closeFailed(id, request, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @GetMapping("/admin/approvals/{id}/executions")
+  @AdminAccess
+  public Mono<ResponseEntity<List<ApprovalExecution>>> executions(@PathVariable String id) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.executions(id, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @GetMapping("/admin/approvals/{id}/executions/{executionId}/nodes")
+  @AdminAccess
+  public Mono<ResponseEntity<List<ApprovalNodeExecution>>> nodeExecutions(
+      @PathVariable String id,
+      @PathVariable String executionId,
+      @RequestParam(required = false) String status,
+      @RequestParam(defaultValue = "0") int offset,
+      @RequestParam(defaultValue = "50") int limit) {
+    return IdentityContext.current()
+        .flatMap(
+            identity -> service.nodeExecutions(id, executionId, status, offset, limit, identity))
         .map(ResponseEntity::ok);
   }
 

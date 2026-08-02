@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalEvent;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalItem;
+import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
@@ -266,6 +268,9 @@ public class JdbcApprovalRepository implements ApprovalRepository {
             """,
             parameters);
     if (affected == 1) {
+      if (targetStatus == ApprovalStatus.REJECTED || targetStatus == ApprovalStatus.CANCELLED) {
+        releaseResourceClaims(tenantId, requestId, now);
+      }
       insertEvent(event);
       return true;
     }
@@ -382,6 +387,30 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   }
 
   @Override
+  public String createNodeExecution(
+      String tenantId, String executionId, String nodeKey, String host, Integer port) {
+    Instant now = Instant.now();
+    String id = Ulid.next();
+    jdbc.update(
+        """
+        INSERT INTO ds_approval_node_execution
+          (id, tenant_id, execution_id, node_key, host, port, status,
+           started_at, created_at, updated_at)
+        VALUES (:id, :tenantId, :executionId, :nodeKey, :host, :port, 'RUNNING',
+          :now, :now, :now)
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", id)
+            .addValue("tenantId", tenantId)
+            .addValue("executionId", executionId)
+            .addValue("nodeKey", nodeKey)
+            .addValue("host", host)
+            .addValue("port", port)
+            .addValue("now", timestamp(now)));
+    return id;
+  }
+
+  @Override
   public void finishExecution(
       String tenantId,
       String executionId,
@@ -405,6 +434,64 @@ public class JdbcApprovalRepository implements ApprovalRepository {
             .addValue("safeMessage", safeMessage)
             .addValue("tenantId", tenantId)
             .addValue("executionId", executionId));
+  }
+
+  @Override
+  public void finishNodeExecution(
+      String tenantId,
+      String nodeExecutionId,
+      boolean succeeded,
+      long durationMs,
+      String errorCode,
+      String safeMessage) {
+    Instant now = Instant.now();
+    jdbc.update(
+        """
+        UPDATE ds_approval_node_execution
+        SET status = :status, finished_at = :now, duration_ms = :durationMs,
+          error_code = :errorCode, safe_message = :safeMessage, updated_at = :now
+        WHERE tenant_id = :tenantId AND id = :id AND status = 'RUNNING'
+        """,
+        new MapSqlParameterSource()
+            .addValue("status", succeeded ? "SUCCEEDED" : "FAILED")
+            .addValue("now", timestamp(now))
+            .addValue("durationMs", durationMs)
+            .addValue("errorCode", errorCode)
+            .addValue("safeMessage", safeMessage)
+            .addValue("tenantId", tenantId)
+            .addValue("id", nodeExecutionId));
+  }
+
+  @Override
+  public List<ApprovalExecution> findExecutions(String tenantId, String requestId) {
+    return jdbc.query(
+        """
+        SELECT * FROM ds_approval_execution
+        WHERE tenant_id = :tenantId AND request_id = :requestId
+        ORDER BY attempt_no DESC, ordinal
+        """,
+        Map.of("tenantId", tenantId, "requestId", requestId),
+        JdbcApprovalRepository::mapExecution);
+  }
+
+  @Override
+  public List<ApprovalNodeExecution> findNodeExecutions(
+      String tenantId, String executionId, String status, int offset, int limit) {
+    return jdbc.query(
+        """
+        SELECT * FROM ds_approval_node_execution
+        WHERE tenant_id = :tenantId AND execution_id = :executionId
+          AND (:status IS NULL OR status = :status)
+        ORDER BY CASE WHEN status = 'FAILED' THEN 0 ELSE 1 END, host, port
+        LIMIT :limit OFFSET :offset
+        """,
+        new MapSqlParameterSource()
+            .addValue("tenantId", tenantId)
+            .addValue("executionId", executionId)
+            .addValue("status", status)
+            .addValue("limit", Math.max(1, Math.min(limit, 200)))
+            .addValue("offset", Math.max(0, offset)),
+        JdbcApprovalRepository::mapNodeExecution);
   }
 
   @Override
@@ -439,15 +526,19 @@ public class JdbcApprovalRepository implements ApprovalRepository {
       throw new IllegalStateException("Approval execution state changed concurrently");
     }
     if (targetStatus == ApprovalStatus.SUCCEEDED || targetStatus == ApprovalStatus.CANCELLED) {
-      jdbc.update(
-          """
-          UPDATE ds_approval_resource_claim
-          SET active_key = NULL, released_at = :now
-          WHERE tenant_id = :tenantId AND request_id = :requestId AND active_key = 'ACTIVE'
-          """,
-          Map.of("now", timestamp(now), "tenantId", tenantId, "requestId", requestId));
+      releaseResourceClaims(tenantId, requestId, now);
     }
     insertEvent(event);
+  }
+
+  private void releaseResourceClaims(String tenantId, String requestId, Instant now) {
+    jdbc.update(
+        """
+        UPDATE ds_approval_resource_claim
+        SET active_key = NULL, released_at = :now
+        WHERE tenant_id = :tenantId AND request_id = :requestId AND active_key = 'ACTIVE'
+        """,
+        Map.of("now", timestamp(now), "tenantId", tenantId, "requestId", requestId));
   }
 
   private void insertItem(ApprovalItem item) {
@@ -637,6 +728,43 @@ public class JdbcApprovalRepository implements ApprovalRepository {
         instant(rs, "created_at"));
   }
 
+  private static ApprovalExecution mapExecution(ResultSet rs, int row) throws SQLException {
+    return new ApprovalExecution(
+        rs.getString("id"),
+        rs.getString("tenant_id"),
+        rs.getString("request_id"),
+        rs.getString("item_id"),
+        rs.getInt("attempt_no"),
+        rs.getInt("ordinal"),
+        rs.getString("status"),
+        rs.getString("query_id"),
+        instant(rs, "started_at"),
+        instant(rs, "finished_at"),
+        nullableLong(rs, "duration_ms"),
+        rs.getString("error_code"),
+        rs.getString("safe_message"),
+        instant(rs, "created_at"),
+        instant(rs, "updated_at"));
+  }
+
+  private static ApprovalNodeExecution mapNodeExecution(ResultSet rs, int row) throws SQLException {
+    return new ApprovalNodeExecution(
+        rs.getString("id"),
+        rs.getString("tenant_id"),
+        rs.getString("execution_id"),
+        rs.getString("node_key"),
+        rs.getString("host"),
+        nullableInteger(rs, "port"),
+        rs.getString("status"),
+        nullableLong(rs, "duration_ms"),
+        rs.getString("error_code"),
+        rs.getString("safe_message"),
+        instant(rs, "started_at"),
+        instant(rs, "finished_at"),
+        instant(rs, "created_at"),
+        instant(rs, "updated_at"));
+  }
+
   private static Timestamp timestamp(Instant value) {
     return value == null ? null : Timestamp.from(value);
   }
@@ -644,5 +772,15 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   private static Instant instant(ResultSet rs, String column) throws SQLException {
     Timestamp value = rs.getTimestamp(column);
     return value == null ? null : value.toInstant();
+  }
+
+  private static Long nullableLong(ResultSet rs, String column) throws SQLException {
+    Number value = (Number) rs.getObject(column);
+    return value == null ? null : value.longValue();
+  }
+
+  private static Integer nullableInteger(ResultSet rs, String column) throws SQLException {
+    Number value = (Number) rs.getObject(column);
+    return value == null ? null : value.intValue();
   }
 }
