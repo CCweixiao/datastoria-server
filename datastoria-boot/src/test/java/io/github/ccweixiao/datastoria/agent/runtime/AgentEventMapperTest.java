@@ -165,6 +165,59 @@ class AgentEventMapperTest {
   }
 
   @Test
+  void freeTextToolResultIsNormalisedToErrorObject() {
+    // AgentScope absorbs a failed tool call into a SUCCESS-state result block whose text is a
+    // free-form error string (e.g. "Tool execution failed: …"). That text must be wrapped as an
+    // object so the wire/persisted output is never a bare string the client cannot destructure.
+    AgentEventMapper mapper = new AgentEventMapper(ctx("run-err"), FIXED_CLOCK);
+    String agentscopeError = "Tool execution failed: Input length = 1";
+    List<AgentRunEvent> events =
+        List.of(
+                new ToolResultStartEvent("reply", "call-1", "search_file"),
+                new ToolResultTextDeltaEvent("reply", "call-1", "search_file", agentscopeError),
+                new ToolResultEndEvent("reply", "call-1", "search_file", ToolResultState.SUCCESS))
+            .stream()
+            .map(mapper::toEvent)
+            .flatMap(Optional::stream)
+            .toList();
+
+    AgentRunEvent.ToolOutputAvailable output =
+        events.stream()
+            .filter(AgentRunEvent.ToolOutputAvailable.class::isInstance)
+            .map(AgentRunEvent.ToolOutputAvailable.class::cast)
+            .findFirst()
+            .orElseThrow();
+    assertThat(output.error()).isFalse();
+    assertThat(output.outputJson())
+        .isEqualTo("{\"error\":\"Tool execution failed: Input length = 1\"}");
+  }
+
+  @Test
+  void arrayToolResultIsPreservedNotWrapped() {
+    // Some tools return a JSON array (e.g. the ClickHouse rows array surfaced by dataArrayJson).
+    // Arrays are valid structured output and must round-trip unchanged — never wrapped as
+    // {error}/{value}, which would break clients iterating with .map().
+    AgentEventMapper mapper = new AgentEventMapper(ctx("run-arr"), FIXED_CLOCK);
+    List<AgentRunEvent> events =
+        List.of(
+                new ToolResultStartEvent("reply", "call-1", "execute_sql"),
+                new ToolResultTextDeltaEvent(
+                    "reply", "call-1", "execute_sql", "[{\"a\":1},{\"a\":2}]"),
+                new ToolResultEndEvent("reply", "call-1", "execute_sql", ToolResultState.SUCCESS))
+            .stream()
+            .map(mapper::toEvent)
+            .flatMap(Optional::stream)
+            .toList();
+    AgentRunEvent.ToolOutputAvailable output =
+        events.stream()
+            .filter(AgentRunEvent.ToolOutputAvailable.class::isInstance)
+            .map(AgentRunEvent.ToolOutputAvailable.class::cast)
+            .findFirst()
+            .orElseThrow();
+    assertThat(output.outputJson()).isEqualTo("[{\"a\":1},{\"a\":2}]");
+  }
+
+  @Test
   void pausedAgentResultDoesNotCompleteRun() {
     for (GenerateReason reason :
         List.of(

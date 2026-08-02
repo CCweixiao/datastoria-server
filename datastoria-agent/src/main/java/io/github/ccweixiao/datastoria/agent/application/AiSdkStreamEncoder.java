@@ -291,17 +291,35 @@ public final class AiSdkStreamEncoder {
     }
   }
 
-  /** Unwraps the extra JSON-string layer produced by AgentScope for Java String tool results. */
+  /**
+   * Parses a tool's {@code outputJson} for the wire. AgentScope wraps Java {@code String} tool
+   * results in an extra JSON-string layer, unwrapped here. As a final gate the result is guaranteed
+   * to be a JSON object: free text (e.g. an upstream error string that bypassed normalisation) is
+   * surfaced as {@code {"error": …}} and any other non-object becomes {@code {"value": …}}, so the
+   * client never receives a bare string it cannot destructure.
+   */
   private com.fasterxml.jackson.databind.JsonNode parseToolOutputJson(String value) {
     com.fasterxml.jackson.databind.JsonNode parsed = parseJson(value);
-    if (!parsed.isTextual() || parsed.textValue() == null || parsed.textValue().isBlank()) {
+    if (parsed.isTextual() && parsed.textValue() != null && !parsed.textValue().isBlank()) {
+      try {
+        parsed = mapper.readTree(parsed.textValue());
+      } catch (JsonProcessingException ignored) {
+        // keep parsed as the textual node; the guard below wraps it
+      }
+    }
+    if (parsed != null && (parsed.isObject() || parsed.isArray())) {
       return parsed;
     }
-    try {
-      return mapper.readTree(parsed.textValue());
-    } catch (JsonProcessingException ignored) {
-      return parsed;
+    if (parsed == null || parsed.isNull() || parsed.isMissingNode()) {
+      return mapper.createObjectNode();
     }
+    ObjectNode wrapped = mapper.createObjectNode();
+    if (parsed.isTextual()) {
+      wrapped.put("error", parsed.textValue());
+    } else {
+      wrapped.set("value", parsed);
+    }
+    return wrapped;
   }
 
   /** Builds the AI SDK v6 {@code LanguageModelUsage}-shaped object (matches Node A01 output). */
