@@ -137,7 +137,10 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   @Override
   @Transactional
   public void createDraft(
-      ApprovalRequest request, List<ApprovalItem> items, ApprovalEvent createdEvent) {
+      ApprovalRequest request,
+      List<ApprovalItem> items,
+      String idempotencyKey,
+      ApprovalEvent createdEvent) {
     jdbc.update(
         """
         INSERT INTO ds_approval_request (
@@ -145,19 +148,38 @@ public class JdbcApprovalRepository implements ApprovalRepository {
           type_definition_checksum, title, summary, applicant_user_id, applicant_display_name,
           source_session_id, source_run_id, connection_id, connection_name, status,
           content_json, content_version, content_digest, execution_mode, execution_attempt,
-          revision, created_at, updated_at)
+          idempotency_key, revision, created_at, updated_at)
         VALUES (
           :id, :tenantId, :requestNo, 'CLICKHOUSE_DDL', :workOrderTypeKey,
           :workOrderTypeRevision, :typeDefinitionChecksum, :title, :summary,
           :applicantUserId, :applicantDisplayName, :sourceSessionId, :sourceRunId,
           :connectionId, :connectionName, :status, :contentJson, :contentVersion,
-          :contentDigest, :executionMode, :executionAttempt, :revision, :createdAt, :updatedAt)
+          :contentDigest, :executionMode, :executionAttempt, :idempotencyKey,
+          :revision, :createdAt, :updatedAt)
         """,
-        requestParameters(request));
+        requestParameters(request).addValue("idempotencyKey", idempotencyKey));
     for (ApprovalItem item : items) {
       insertItem(item);
     }
     insertEvent(createdEvent);
+  }
+
+  @Override
+  public Optional<ApprovalDetail> findDetailByIdempotencyKey(
+      String tenantId, String applicantUserId, String idempotencyKey) {
+    List<String> ids =
+        jdbc.queryForList(
+            """
+            SELECT id FROM ds_approval_request
+            WHERE tenant_id = :tenantId AND applicant_user_id = :applicantUserId
+              AND idempotency_key = :idempotencyKey AND deleted_at IS NULL
+            """,
+            Map.of(
+                "tenantId", tenantId,
+                "applicantUserId", applicantUserId,
+                "idempotencyKey", idempotencyKey),
+            String.class);
+    return ids.isEmpty() ? Optional.empty() : findDetail(tenantId, ids.get(0));
   }
 
   @Override

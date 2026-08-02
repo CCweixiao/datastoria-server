@@ -34,7 +34,14 @@ public interface ApprovalRepository {
       String checksum,
       String actorUserId);
 
-  void createDraft(ApprovalRequest request, List<ApprovalItem> items, ApprovalEvent createdEvent);
+  void createDraft(
+      ApprovalRequest request,
+      List<ApprovalItem> items,
+      String idempotencyKey,
+      ApprovalEvent createdEvent);
+
+  Optional<ApprovalDetail> findDetailByIdempotencyKey(
+      String tenantId, String applicantUserId, String idempotencyKey);
 
   Optional<ApprovalDetail> findDetail(String tenantId, String requestId);
 

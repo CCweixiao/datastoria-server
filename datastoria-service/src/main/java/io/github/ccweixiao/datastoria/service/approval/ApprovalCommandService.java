@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -98,30 +99,50 @@ public class ApprovalCommandService {
 
   public Mono<ApprovalDetail> submit(
       String requestId, ApprovalTransitionRequest command, Identity identity) {
-    return Mono.fromCallable(
-            () -> {
-              validateTransition(command);
-              ApprovalDetail detail = requireVisible(requestId, identity, false);
+    validateTransition(command);
+    return Mono.fromCallable(() -> requireVisible(requestId, identity, false))
+        .subscribeOn(jdbcScheduler)
+        .flatMap(
+            detail -> {
               ApprovalRequest request = detail.request();
               if (!request.contentDigest().equals(command.contentDigest())) {
-                throw new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED);
+                return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
               }
-              try {
-                if (!repository.submitWithResourceClaims(
-                    request.tenantId(),
-                    request.id(),
-                    command.revision(),
-                    List.copyOf(resourceKeys(request, detail.items())),
-                    identity.userId(),
-                    event(request, identity, "SUBMITTED", "DDL approval submitted", null))) {
-                  throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
-                }
-              } catch (DataIntegrityViolationException exception) {
-                throw new ConflictException(ApiErrorCode.APPROVAL_RESOURCE_CONFLICT);
+              ApprovalTypeDefinition current =
+                  catalog.requireEnabled(request.tenantId(), request.workOrderTypeKey());
+              if (current.definitionRevision() != request.workOrderTypeRevision()
+                  || !current.checksum().equals(request.typeDefinitionChecksum())) {
+                return Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED));
               }
-              return requireVisible(requestId, identity, false);
+              return revalidate(detail, current, identity).thenReturn(detail);
             })
-        .subscribeOn(jdbcScheduler);
+        .flatMap(
+            detail ->
+                Mono.fromCallable(
+                        () -> {
+                          ApprovalRequest request = detail.request();
+                          try {
+                            if (!repository.submitWithResourceClaims(
+                                request.tenantId(),
+                                request.id(),
+                                command.revision(),
+                                List.copyOf(resourceKeys(request, detail.items())),
+                                identity.userId(),
+                                event(
+                                    request,
+                                    identity,
+                                    "SUBMITTED",
+                                    "DDL approval submitted",
+                                    null))) {
+                              throw new ConflictException(
+                                  ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+                            }
+                          } catch (DataIntegrityViolationException exception) {
+                            throw new ConflictException(ApiErrorCode.APPROVAL_RESOURCE_CONFLICT);
+                          }
+                          return requireVisible(requestId, identity, false);
+                        })
+                    .subscribeOn(jdbcScheduler));
   }
 
   public Mono<ApprovalDetail> review(
@@ -152,27 +173,34 @@ public class ApprovalCommandService {
       String requestId, ApprovalTransitionRequest command, Identity identity) {
     requireAdmin(identity);
     validateRevision(command);
-    return Mono.fromCallable(
-            () -> {
-              ApprovalDetail detail = requireVisible(requestId, identity, true);
-              int attempt =
-                  repository.beginExecution(
-                      identity.tenantId(),
-                      requestId,
-                      command.revision(),
-                      identity.userId(),
-                      event(
-                          detail.request(),
-                          identity,
-                          "EXECUTION_STARTED",
-                          "Manual DDL execution started",
-                          null));
-              if (attempt < 0) {
-                throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
-              }
-              return new ExecutionContext(detail, attempt);
-            })
+    return Mono.fromCallable(() -> requireVisible(requestId, identity, true))
         .subscribeOn(jdbcScheduler)
+        .flatMap(
+            detail ->
+                revalidate(detail, frozenDefinition(detail.request()), identity).thenReturn(detail))
+        .flatMap(
+            detail ->
+                Mono.fromCallable(
+                        () -> {
+                          int attempt =
+                              repository.beginExecution(
+                                  identity.tenantId(),
+                                  requestId,
+                                  command.revision(),
+                                  identity.userId(),
+                                  event(
+                                      detail.request(),
+                                      identity,
+                                      "EXECUTION_STARTED",
+                                      "Manual DDL execution started",
+                                      null));
+                          if (attempt < 0) {
+                            throw new ConflictException(
+                                ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+                          }
+                          return new ExecutionContext(detail, attempt);
+                        })
+                    .subscribeOn(jdbcScheduler))
         .flatMap(
             context ->
                 Flux.fromIterable(context.detail().items())
@@ -281,10 +309,12 @@ public class ApprovalCommandService {
       content.put("workOrderTypeKey", definition.typeKey());
       content.put("workOrderTypeRevision", definition.definitionRevision());
       content.put("generationRuleChecksum", definition.checksum());
+      content.put("generatorKey", definition.generatorKey());
       content.put("executionMode", "MANUAL_TRIGGER");
       content.set("intent", command.intent());
       content.set("generationRule", mapper.readTree(definition.generationRuleJson()));
       content.set("statements", mapper.valueToTree(plan.statements()));
+      content.set("ruleSummaries", mapper.valueToTree(plan.ruleSummaries()));
       String contentJson = mapper.writeValueAsString(content);
       String digest = sha256(contentJson);
       ApprovalRequest request =
@@ -323,32 +353,89 @@ public class ApprovalCommandService {
           plan.statements().stream()
               .map(statement -> toItem(requestId, identity.tenantId(), statement, now))
               .toList();
-      repository.createDraft(
-          request,
-          items,
-          event(request, identity, "DRAFT_CREATED", "DDL approval draft created", null));
-      return new DdlApprovalPrepareResponse(
-          requestId,
-          requestNo,
-          0,
-          digest,
-          plan.statements().stream()
-              .map(
-                  statement ->
-                      new DdlApprovalPrepareResponse.PreparedStatement(
-                          statement.ordinal(),
-                          statement.operationKind().name(),
-                          statement.sql(),
-                          statement.riskLevel(),
-                          statement.warnings()))
-              .toList(),
-          plan.ruleSummaries(),
-          true);
+      String idempotencyKey = prepareIdempotencyKey(command);
+      if (idempotencyKey != null) {
+        var existing =
+            repository.findDetailByIdempotencyKey(
+                identity.tenantId(), identity.userId(), idempotencyKey);
+        if (existing.isPresent()) return preparedResponse(existing.get());
+      }
+      try {
+        repository.createDraft(
+            request,
+            items,
+            idempotencyKey,
+            event(request, identity, "DRAFT_CREATED", "DDL approval draft created", null));
+      } catch (DataIntegrityViolationException exception) {
+        if (idempotencyKey == null) throw exception;
+        return repository
+            .findDetailByIdempotencyKey(identity.tenantId(), identity.userId(), idempotencyKey)
+            .map(this::preparedResponse)
+            .orElseThrow(() -> exception);
+      }
+      return preparedResponse(new ApprovalDetail(request, items, List.of()));
     } catch (RuntimeException exception) {
       throw exception;
     } catch (Exception exception) {
       throw new IllegalStateException("Unable to create approval content snapshot", exception);
     }
+  }
+
+  private DdlApprovalPrepareResponse preparedResponse(ApprovalDetail detail) {
+    try {
+      JsonNode content = mapper.readTree(detail.request().contentJson());
+      List<String> summaries =
+          mapper.convertValue(
+              content.path("ruleSummaries"),
+              mapper.getTypeFactory().constructCollectionType(List.class, String.class));
+      List<DdlApprovalPrepareResponse.PreparedStatement> statements =
+          detail.items().stream()
+              .map(
+                  item -> {
+                    try {
+                      List<String> warnings =
+                          mapper.readValue(
+                              item.warningsJson(),
+                              mapper
+                                  .getTypeFactory()
+                                  .constructCollectionType(List.class, String.class));
+                      return new DdlApprovalPrepareResponse.PreparedStatement(
+                          item.ordinal(),
+                          item.operationKind().name(),
+                          item.sqlText(),
+                          item.riskLevel(),
+                          warnings);
+                    } catch (Exception exception) {
+                      throw new IllegalStateException(
+                          "Unable to read frozen DDL warnings", exception);
+                    }
+                  })
+              .toList();
+      return new DdlApprovalPrepareResponse(
+          detail.request().id(),
+          detail.request().requestNo(),
+          detail.request().revision(),
+          detail.request().contentDigest(),
+          statements,
+          summaries,
+          true);
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new IllegalStateException("Unable to read approval content snapshot", exception);
+    }
+  }
+
+  private String prepareIdempotencyKey(DdlApprovalPrepareRequest command) throws Exception {
+    if (isBlank(command.sourceRunId())) return null;
+    ObjectNode canonical = mapper.createObjectNode();
+    canonical.put("sourceRunId", command.sourceRunId().trim());
+    canonical.put("connectionId", command.connectionId().trim());
+    canonical.put("workOrderTypeKey", command.workOrderTypeKey().trim());
+    canonical.put("title", command.title().trim());
+    canonical.put("summary", trimToNull(command.summary()));
+    canonical.set("intent", command.intent());
+    return "prepare:" + sha256(mapper.writeValueAsString(canonical));
   }
 
   private ApprovalItem toItem(
@@ -459,6 +546,92 @@ public class ApprovalCommandService {
       return Mono.error(PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST));
     }
     return schemaInspector.inspect(command.connectionId(), database, table, identity);
+  }
+
+  private Mono<Void> revalidate(
+      ApprovalDetail detail, ApprovalTypeDefinition definition, Identity identity) {
+    try {
+      JsonNode content = mapper.readTree(detail.request().contentJson());
+      JsonNode intent = content.path("intent");
+      String typeKey = content.path("workOrderTypeKey").asText();
+      if (!detail.request().workOrderTypeKey().equals(typeKey)
+          || !detail
+              .request()
+              .typeDefinitionChecksum()
+              .equals(content.path("generationRuleChecksum").asText())) {
+        return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
+      }
+      DdlApprovalPrepareRequest frozenCommand =
+          new DdlApprovalPrepareRequest(
+              detail.request().connectionId(),
+              typeKey,
+              detail.request().title(),
+              null,
+              intent,
+              null,
+              null);
+      return schema(frozenCommand, identity)
+          .map(schema -> compiler.compile(intent, definition, schema))
+          .flatMap(
+              plan ->
+                  frozenPlanMatches(plan, detail.items())
+                      ? Mono.empty()
+                      : Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED)));
+    } catch (RuntimeException exception) {
+      return Mono.error(exception);
+    } catch (Exception exception) {
+      return Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED));
+    }
+  }
+
+  private ApprovalTypeDefinition frozenDefinition(ApprovalRequest request) {
+    try {
+      JsonNode content = mapper.readTree(request.contentJson());
+      String generatorKey = content.path("generatorKey").asText();
+      JsonNode generationRule = content.path("generationRule");
+      if (generatorKey.isBlank() || !generationRule.isObject()) {
+        throw new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED);
+      }
+      return new ApprovalTypeDefinition(
+          "frozen-" + request.id(),
+          request.tenantId(),
+          request.workOrderTypeKey(),
+          "CLICKHOUSE_DDL",
+          "{}",
+          "{}",
+          generatorKey,
+          "[]",
+          mapper.writeValueAsString(generationRule),
+          null,
+          "{}",
+          "FROZEN",
+          request.workOrderTypeRevision(),
+          request.typeDefinitionChecksum(),
+          request.applicantUserId(),
+          request.applicantUserId(),
+          null,
+          request.createdAt(),
+          request.updatedAt(),
+          null);
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED);
+    }
+  }
+
+  private static boolean frozenPlanMatches(CompiledDdlPlan plan, List<ApprovalItem> frozenItems) {
+    if (plan.statements().size() != frozenItems.size()) return false;
+    for (int index = 0; index < frozenItems.size(); index++) {
+      CompiledDdlStatement compiled = plan.statements().get(index);
+      ApprovalItem frozen = frozenItems.get(index);
+      if (compiled.ordinal() != frozen.ordinal()
+          || compiled.operationKind() != frozen.operationKind()
+          || !normalizeSql(compiled.sql()).equals(normalizeSql(frozen.sqlText()))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private ApprovalDetail requireVisible(String requestId, Identity identity, boolean adminAccess) {
