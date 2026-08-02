@@ -151,6 +151,17 @@ class DdlPlanCompilerTest {
   }
 
   @Test
+  void addIndexRejectsTypeOutsideConfiguredAllowList() {
+    assertRuleViolation(
+        "add_index",
+        """
+        {"database":"analytics","table":"events","index":"payload_set",
+         "column":"payload","indexType":"set","granularity":4}
+        """,
+        new DdlSchemaSnapshot(Set.of("payload"), Set.of()));
+  }
+
+  @Test
   void identifiersAndTypesCannotInjectAdditionalStatements() {
     assertRuleViolation(
         "add_column",
@@ -190,7 +201,9 @@ class DdlPlanCompilerTest {
         "{}",
         generator,
         "[]",
-        "{}",
+        "add_index".equals(generator)
+            ? "{\"allowedIndexTypes\":[\"minmax\",\"bloom_filter\"],\"maxGranularity\":8192}"
+            : "{}",
         null,
         "{}",
         "ENABLED",

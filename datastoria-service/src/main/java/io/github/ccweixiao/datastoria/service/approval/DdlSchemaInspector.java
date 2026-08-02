@@ -43,7 +43,8 @@ public class DdlSchemaInspector {
   public Mono<DdlSchemaSnapshot> inspect(
       String connectionId, String database, String table, Identity identity) {
     return connections
-        .query(connectionId, QUERY, Map.of("database", database, "table", table), identity)
+        .query(
+            connectionId, QUERY, Map.of("param_database", database, "param_table", table), identity)
         .map(this::parse);
   }
 

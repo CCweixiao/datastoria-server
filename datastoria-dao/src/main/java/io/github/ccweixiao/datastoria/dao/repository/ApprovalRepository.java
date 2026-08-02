@@ -19,6 +19,21 @@ public interface ApprovalRepository {
 
   Optional<ApprovalTypeDefinition> findEnabledType(String tenantId, String typeKey);
 
+  List<ApprovalTypeDefinition> findTypes(String tenantId);
+
+  Optional<ApprovalTypeDefinition> findType(String tenantId, String typeKey);
+
+  boolean updateType(
+      String tenantId,
+      String typeKey,
+      long expectedRevision,
+      String nameI18nJson,
+      String descriptionI18nJson,
+      String generationRuleJson,
+      String status,
+      String checksum,
+      String actorUserId);
+
   void createDraft(ApprovalRequest request, List<ApprovalItem> items, ApprovalEvent createdEvent);
 
   Optional<ApprovalDetail> findDetail(String tenantId, String requestId);
@@ -35,5 +50,40 @@ public interface ApprovalRepository {
       String reviewerUserId,
       String reviewerDisplayName,
       String reviewComment,
+      ApprovalEvent event);
+
+  boolean submitWithResourceClaims(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      List<String> resourceKeys,
+      String actorUserId,
+      ApprovalEvent event);
+
+  int beginExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      String actorUserId,
+      ApprovalEvent event);
+
+  String createExecution(
+      String tenantId, String requestId, String itemId, int attemptNo, int ordinal, String queryId);
+
+  void finishExecution(
+      String tenantId,
+      String executionId,
+      boolean succeeded,
+      long durationMs,
+      String errorCode,
+      String safeMessage);
+
+  void finishRequestExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      ApprovalStatus expectedStatus,
+      ApprovalStatus targetStatus,
+      String actorUserId,
       ApprovalEvent event);
 }

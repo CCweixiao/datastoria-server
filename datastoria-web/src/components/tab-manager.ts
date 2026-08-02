@@ -17,7 +17,8 @@ export type TabType =
   | "custom-dashboard"
   | "query-log"
   | "span-log"
-  | "system-table";
+  | "system-table"
+  | "approval-center";
 
 export interface BaseTabInfo {
   id: string;
@@ -81,6 +82,10 @@ export interface CustomDashboardTabInfo extends BaseTabInfo {
   dashboardName?: string;
 }
 
+export interface ApprovalCenterTabInfo extends BaseTabInfo {
+  type: "approval-center";
+}
+
 export type TabInfo =
   | QueryTabInfo
   | TableTabInfo
@@ -91,7 +96,8 @@ export type TabInfo =
   | QueryLogTabInfo
   | SpanLogTabInfo
   | SystemTableTabInfo
-  | CustomDashboardTabInfo;
+  | CustomDashboardTabInfo
+  | ApprovalCenterTabInfo;
 
 /**
  * Event detail for active tab changes

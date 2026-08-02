@@ -56,3 +56,14 @@ operations:
   - { method: GET, path: "/api/me/state/{}", callSite: lib/user-state-client.ts }
   - { method: PUT, path: "/api/me/state/{}/{}", callSite: lib/user-state-client.ts }
   - { method: DELETE, path: "/api/me/state/{}/{}", callSite: lib/user-state-client.ts }
+  - { method: GET, path: /api/approvals, callSite: lib/approval-client.ts }
+  - { method: GET, path: "/api/approvals/{}", callSite: lib/approval-client.ts }
+  - { method: POST, path: "/api/approvals/{}/submit", callSite: lib/approval-client.ts }
+  - { method: POST, path: "/api/admin/approvals/{}/approve", callSite: lib/approval-client.ts }
+  - { method: POST, path: "/api/admin/approvals/{}/reject", callSite: lib/approval-client.ts }
+  - { method: POST, path: "/api/admin/approvals/{}/execute", callSite: lib/approval-client.ts }
+  - { method: POST, path: "/api/admin/approvals/{}/close", callSite: lib/approval-client.ts }
+  - { method: GET, path: /api/approval-types/clickhouse-ddl/capabilities, callSite: lib/approval-client.ts }
+  - { method: POST, path: /api/approval-types/clickhouse-ddl/prepare, callSite: lib/approval-client.ts }
+  - { method: GET, path: /api/admin/approval-types/clickhouse-ddl, callSite: lib/approval-client.ts }
+  - { method: PUT, path: "/api/admin/approval-types/clickhouse-ddl/{}", callSite: lib/approval-client.ts }

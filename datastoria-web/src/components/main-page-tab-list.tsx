@@ -29,6 +29,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Database,
   LayoutDashboard,
   Monitor,
@@ -84,6 +85,11 @@ const SpanLogInspectorTabLazy = dynamic(
     import("@/components/span-log-inspector/span-log-inspector-tab").then(
       (m) => m.SpanLogInspectorTab
     ),
+  { ssr: false, loading: () => <TabChunkLoading /> }
+);
+
+const ApprovalCenterTabLazy = dynamic(
+  () => import("@/components/approval/approval-center-tab").then((m) => m.ApprovalCenterTab),
   { ssr: false, loading: () => <TabChunkLoading /> }
 );
 
@@ -146,6 +152,8 @@ const MainPageTabPanel = memo(function MainPageTabPanel({
     content = (
       <CustomDashboardTabLazy dashboardId={tab.dashboardId} dashboardName={tab.dashboardName} />
     );
+  } else if (tab.type === "approval-center") {
+    content = <ApprovalCenterTabLazy />;
   }
 
   return (
@@ -313,6 +321,7 @@ function EmptyTabPlaceholderComponent() {
 export const MainPageTabList = memo(function MainPageTabList({
   selectedConnection,
 }: MainPageTabListProps) {
+  const { t } = useUiPreferences();
   // Chat panel state - used to switch from tabWidth to panel mode when a tab is opened
   const { displayMode, setDisplayMode } = useChatPanel();
 
@@ -778,6 +787,8 @@ export const MainPageTabList = memo(function MainPageTabList({
             label: tab.dashboardName ?? "Dashboard",
             icon: LayoutDashboard,
           };
+        } else if (tab.type === "approval-center") {
+          return { id: tab.id, label: t("approval.title"), icon: ClipboardCheck };
         }
         return null;
       })
@@ -785,7 +796,7 @@ export const MainPageTabList = memo(function MainPageTabList({
         (item): item is { id: string; label: string; icon: LucideIcon; fullLabel?: string } =>
           item !== null
       );
-  }, [sortedTabs]);
+  }, [sortedTabs, t]);
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full w-full flex flex-col">

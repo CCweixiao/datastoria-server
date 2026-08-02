@@ -38,6 +38,7 @@ import { signOut, type AuthSession } from "@/lib/auth-client";
 import {
   BookOpen,
   ChevronRight,
+  ClipboardCheck,
   Database,
   HelpCircle,
   History,
@@ -372,6 +373,21 @@ export function AppSidebar() {
             {isConnectionAvailable && <DashboardsSidebarMenuItem />}
 
             {isConnectionAvailable && <SystemTableIntrospectionSidebarMenuItem />}
+
+            {isConnectionAvailable && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="default"
+                  tooltip={t("sidebar.workOrders")}
+                  onClick={() =>
+                    TabManager.openTab({ id: "approval-center", type: "approval-center" })
+                  }
+                >
+                  <ClipboardCheck className="h-5 w-5" />
+                  <span>{t("sidebar.workOrders")}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
 
             <SettingsSidebarMenuItem />
             <PermissionGuard roles={["ADMIN"]}>

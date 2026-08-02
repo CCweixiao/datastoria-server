@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalEvent;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalItem;
@@ -74,6 +75,63 @@ public class JdbcApprovalRepository implements ApprovalRepository {
             Map.of("tenantId", tenantId, "typeKey", typeKey),
             JdbcApprovalRepository::mapType);
     return rows.stream().findFirst();
+  }
+
+  @Override
+  public List<ApprovalTypeDefinition> findTypes(String tenantId) {
+    return jdbc.query(
+        "SELECT * FROM ds_approval_type_definition WHERE tenant_id = :tenantId ORDER BY type_key",
+        Map.of("tenantId", tenantId),
+        JdbcApprovalRepository::mapType);
+  }
+
+  @Override
+  public Optional<ApprovalTypeDefinition> findType(String tenantId, String typeKey) {
+    return jdbc
+        .query(
+            "SELECT * FROM ds_approval_type_definition WHERE tenant_id = :tenantId AND type_key = :typeKey",
+            Map.of("tenantId", tenantId, "typeKey", typeKey),
+            JdbcApprovalRepository::mapType)
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public boolean updateType(
+      String tenantId,
+      String typeKey,
+      long expectedRevision,
+      String nameI18nJson,
+      String descriptionI18nJson,
+      String generationRuleJson,
+      String status,
+      String checksum,
+      String actorUserId) {
+    Instant now = Instant.now();
+    return jdbc.update(
+            """
+            UPDATE ds_approval_type_definition
+            SET name_i18n_json = :nameI18nJson, description_i18n_json = :descriptionI18nJson,
+              generation_rule_json = :generationRuleJson, status = :status, checksum = :checksum,
+              definition_revision = definition_revision + 1, updated_by = :actorUserId,
+              enabled_by = CASE WHEN :status = 'ENABLED' THEN :actorUserId ELSE enabled_by END,
+              enabled_at = CASE WHEN :status = 'ENABLED' THEN :now ELSE enabled_at END,
+              updated_at = :now
+            WHERE tenant_id = :tenantId AND type_key = :typeKey
+              AND definition_revision = :expectedRevision
+            """,
+            new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("typeKey", typeKey)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("nameI18nJson", nameI18nJson)
+                .addValue("descriptionI18nJson", descriptionI18nJson)
+                .addValue("generationRuleJson", generationRuleJson)
+                .addValue("status", status)
+                .addValue("checksum", checksum)
+                .addValue("actorUserId", actorUserId)
+                .addValue("now", timestamp(now)))
+        == 1;
   }
 
   @Override
@@ -190,6 +248,184 @@ public class JdbcApprovalRepository implements ApprovalRepository {
       return true;
     }
     return false;
+  }
+
+  @Override
+  @Transactional
+  public boolean submitWithResourceClaims(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      List<String> resourceKeys,
+      String actorUserId,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET status = 'SUBMITTED', submitted_at = :now, revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :requestId AND revision = :expectedRevision
+              AND status = 'DRAFT' AND deleted_at IS NULL
+            """,
+            new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("requestId", requestId)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("now", timestamp(now)));
+    if (affected != 1) {
+      return false;
+    }
+    for (String resourceKey : resourceKeys.stream().distinct().sorted().toList()) {
+      jdbc.update(
+          """
+          INSERT INTO ds_approval_resource_claim
+            (id, tenant_id, request_id, resource_key, claim_kind, active_key, created_at)
+          VALUES (:id, :tenantId, :requestId, :resourceKey, 'DDL_TARGET', 'ACTIVE', :createdAt)
+          """,
+          new MapSqlParameterSource()
+              .addValue("id", Ulid.next())
+              .addValue("tenantId", tenantId)
+              .addValue("requestId", requestId)
+              .addValue("resourceKey", resourceKey)
+              .addValue("createdAt", timestamp(now)));
+    }
+    insertEvent(event);
+    return true;
+  }
+
+  @Override
+  @Transactional
+  public int beginExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      String actorUserId,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET status = 'RUNNING', execution_attempt = execution_attempt + 1,
+              latest_execution_status = 'RUNNING', execution_owner = :actorUserId,
+              revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :requestId AND revision = :expectedRevision
+              AND status = 'APPROVED' AND execution_mode = 'MANUAL_TRIGGER' AND deleted_at IS NULL
+            """,
+            new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("requestId", requestId)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("actorUserId", actorUserId)
+                .addValue("now", timestamp(now)));
+    if (affected != 1) {
+      return -1;
+    }
+    insertEvent(event);
+    return jdbc.queryForObject(
+        "SELECT execution_attempt FROM ds_approval_request WHERE tenant_id = :tenantId AND id = :requestId",
+        Map.of("tenantId", tenantId, "requestId", requestId),
+        Integer.class);
+  }
+
+  @Override
+  public String createExecution(
+      String tenantId,
+      String requestId,
+      String itemId,
+      int attemptNo,
+      int ordinal,
+      String queryId) {
+    Instant now = Instant.now();
+    String id = Ulid.next();
+    jdbc.update(
+        """
+        INSERT INTO ds_approval_execution
+          (id, tenant_id, request_id, item_id, attempt_no, ordinal, status, query_id,
+           started_at, created_at, updated_at)
+        VALUES (:id, :tenantId, :requestId, :itemId, :attemptNo, :ordinal, 'RUNNING',
+          :queryId, :now, :now, :now)
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", id)
+            .addValue("tenantId", tenantId)
+            .addValue("requestId", requestId)
+            .addValue("itemId", itemId)
+            .addValue("attemptNo", attemptNo)
+            .addValue("ordinal", ordinal)
+            .addValue("queryId", queryId)
+            .addValue("now", timestamp(now)));
+    return id;
+  }
+
+  @Override
+  public void finishExecution(
+      String tenantId,
+      String executionId,
+      boolean succeeded,
+      long durationMs,
+      String errorCode,
+      String safeMessage) {
+    Instant now = Instant.now();
+    jdbc.update(
+        """
+        UPDATE ds_approval_execution
+        SET status = :status, finished_at = :now, duration_ms = :durationMs,
+          error_code = :errorCode, safe_message = :safeMessage, updated_at = :now
+        WHERE tenant_id = :tenantId AND id = :executionId AND status = 'RUNNING'
+        """,
+        new MapSqlParameterSource()
+            .addValue("status", succeeded ? "SUCCEEDED" : "FAILED")
+            .addValue("now", timestamp(now))
+            .addValue("durationMs", durationMs)
+            .addValue("errorCode", errorCode)
+            .addValue("safeMessage", safeMessage)
+            .addValue("tenantId", tenantId)
+            .addValue("executionId", executionId));
+  }
+
+  @Override
+  @Transactional
+  public void finishRequestExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      ApprovalStatus expectedStatus,
+      ApprovalStatus targetStatus,
+      String actorUserId,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET status = :targetStatus, latest_execution_status = :targetStatus,
+              execution_owner = NULL, execution_lease_until = NULL, finished_at = :now,
+              revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :requestId AND status = :expectedStatus
+              AND revision = :expectedRevision
+            """,
+            new MapSqlParameterSource()
+                .addValue("targetStatus", targetStatus.name())
+                .addValue("expectedStatus", expectedStatus.name())
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("now", timestamp(now))
+                .addValue("tenantId", tenantId)
+                .addValue("requestId", requestId));
+    if (affected != 1) {
+      throw new IllegalStateException("Approval execution state changed concurrently");
+    }
+    if (targetStatus == ApprovalStatus.SUCCEEDED || targetStatus == ApprovalStatus.CANCELLED) {
+      jdbc.update(
+          """
+          UPDATE ds_approval_resource_claim
+          SET active_key = NULL, released_at = :now
+          WHERE tenant_id = :tenantId AND request_id = :requestId AND active_key = 'ACTIVE'
+          """,
+          Map.of("now", timestamp(now), "tenantId", tenantId, "requestId", requestId));
+    }
+    insertEvent(event);
   }
 
   private void insertItem(ApprovalItem item) {

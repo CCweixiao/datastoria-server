@@ -6,9 +6,13 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +28,7 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequest;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareResponse;
 import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
@@ -35,6 +40,7 @@ import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
@@ -94,19 +100,25 @@ public class ApprovalCommandService {
       String requestId, ApprovalTransitionRequest command, Identity identity) {
     return Mono.fromCallable(
             () -> {
+              validateTransition(command);
               ApprovalDetail detail = requireVisible(requestId, identity, false);
               ApprovalRequest request = detail.request();
               if (!request.contentDigest().equals(command.contentDigest())) {
                 throw new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED);
               }
-              transition(
-                  request,
-                  command.revision(),
-                  ApprovalStatus.DRAFT,
-                  ApprovalStatus.SUBMITTED,
-                  identity,
-                  null,
-                  "SUBMITTED");
+              try {
+                if (!repository.submitWithResourceClaims(
+                    request.tenantId(),
+                    request.id(),
+                    command.revision(),
+                    List.copyOf(resourceKeys(request, detail.items())),
+                    identity.userId(),
+                    event(request, identity, "SUBMITTED", "DDL approval submitted", null))) {
+                  throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+                }
+              } catch (DataIntegrityViolationException exception) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_RESOURCE_CONFLICT);
+              }
               return requireVisible(requestId, identity, false);
             })
         .subscribeOn(jdbcScheduler);
@@ -136,6 +148,87 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler);
   }
 
+  public Mono<ApprovalDetail> execute(
+      String requestId, ApprovalTransitionRequest command, Identity identity) {
+    requireAdmin(identity);
+    validateRevision(command);
+    return Mono.fromCallable(
+            () -> {
+              ApprovalDetail detail = requireVisible(requestId, identity, true);
+              int attempt =
+                  repository.beginExecution(
+                      identity.tenantId(),
+                      requestId,
+                      command.revision(),
+                      identity.userId(),
+                      event(
+                          detail.request(),
+                          identity,
+                          "EXECUTION_STARTED",
+                          "Manual DDL execution started",
+                          null));
+              if (attempt < 0) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+              }
+              return new ExecutionContext(detail, attempt);
+            })
+        .subscribeOn(jdbcScheduler)
+        .flatMap(
+            context ->
+                Flux.fromIterable(context.detail().items())
+                    .concatMap(
+                        item ->
+                            executeItem(
+                                context.detail().request(), item, context.attempt(), identity))
+                    .then(
+                        Mono.fromCallable(
+                                () -> {
+                                  finishExecutionRequest(
+                                      context.detail().request(), true, identity, null);
+                                  return requireVisible(requestId, identity, true);
+                                })
+                            .subscribeOn(jdbcScheduler))
+                    .onErrorResume(
+                        ExecutionFailedException.class,
+                        failure ->
+                            Mono.fromCallable(
+                                    () -> {
+                                      finishExecutionRequest(
+                                          context.detail().request(),
+                                          false,
+                                          identity,
+                                          failure.getMessage());
+                                      return requireVisible(requestId, identity, true);
+                                    })
+                                .subscribeOn(jdbcScheduler)));
+  }
+
+  public Mono<ApprovalDetail> closeFailed(
+      String requestId, ApprovalTransitionRequest command, Identity identity) {
+    requireAdmin(identity);
+    validateRevision(command);
+    return Mono.fromCallable(
+            () -> {
+              ApprovalDetail detail = requireVisible(requestId, identity, true);
+              ApprovalRequest request = detail.request();
+              repository.finishRequestExecution(
+                  request.tenantId(),
+                  request.id(),
+                  command.revision(),
+                  ApprovalStatus.FAILED,
+                  ApprovalStatus.CANCELLED,
+                  identity.userId(),
+                  event(
+                      request,
+                      identity,
+                      "FAILED_EXECUTION_CLOSED",
+                      "Failed DDL execution closed by administrator",
+                      command.comment()));
+              return requireVisible(requestId, identity, true);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
   public Mono<ApprovalDetail> detail(String requestId, Identity identity) {
     return Mono.fromCallable(() -> requireVisible(requestId, identity, identity.isAdmin()))
         .subscribeOn(jdbcScheduler);
@@ -156,6 +249,19 @@ public class ApprovalCommandService {
     return connections
         .findById(connectionId, identity)
         .thenReturn(catalog.listEnabled(identity.tenantId(), connectionId))
+        .subscribeOn(jdbcScheduler);
+  }
+
+  public Mono<List<ApprovalTypeDefinition>> listTypeDefinitions(Identity identity) {
+    requireAdmin(identity);
+    return Mono.fromCallable(() -> catalog.listAll(identity.tenantId())).subscribeOn(jdbcScheduler);
+  }
+
+  public Mono<ApprovalTypeDefinition> updateTypeDefinition(
+      String typeKey, ApprovalTypeUpdateRequest command, Identity identity) {
+    requireAdmin(identity);
+    return Mono.fromCallable(
+            () -> catalog.update(identity.tenantId(), typeKey, command, identity.userId()))
         .subscribeOn(jdbcScheduler);
   }
 
@@ -267,6 +373,82 @@ public class ApprovalCommandService {
     }
   }
 
+  private Mono<Void> executeItem(
+      ApprovalRequest request, ApprovalItem item, int attempt, Identity identity) {
+    String queryId = "approval-" + request.id() + "-" + attempt + "-" + item.ordinal();
+    return Mono.fromCallable(
+            () ->
+                repository.createExecution(
+                    request.tenantId(), request.id(), item.id(), attempt, item.ordinal(), queryId))
+        .subscribeOn(jdbcScheduler)
+        .flatMap(
+            executionId -> {
+              long started = System.nanoTime();
+              return connections
+                  .query(
+                      request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
+                  .then(
+                      Mono.<Void>fromRunnable(
+                              () ->
+                                  repository.finishExecution(
+                                      request.tenantId(),
+                                      executionId,
+                                      true,
+                                      elapsedMillis(started),
+                                      null,
+                                      null))
+                          .subscribeOn(jdbcScheduler))
+                  .onErrorResume(
+                      exception ->
+                          Mono.<Void>fromRunnable(
+                                  () ->
+                                      repository.finishExecution(
+                                          request.tenantId(),
+                                          executionId,
+                                          false,
+                                          elapsedMillis(started),
+                                          exception.getClass().getSimpleName(),
+                                          "ClickHouse rejected approval item #" + item.ordinal()))
+                              .subscribeOn(jdbcScheduler)
+                              .then(
+                                  Mono.<Void>error(
+                                      new ExecutionFailedException(
+                                          "DDL item #" + item.ordinal() + " failed"))));
+            });
+  }
+
+  private void finishExecutionRequest(
+      ApprovalRequest request, boolean succeeded, Identity identity, String detail) {
+    ApprovalStatus target = succeeded ? ApprovalStatus.SUCCEEDED : ApprovalStatus.FAILED;
+    repository.finishRequestExecution(
+        request.tenantId(),
+        request.id(),
+        request.revision() + 1,
+        ApprovalStatus.RUNNING,
+        target,
+        identity.userId(),
+        event(
+            request,
+            identity,
+            "EXECUTION_" + target.name(),
+            succeeded ? "DDL execution succeeded" : "DDL execution failed",
+            detail));
+  }
+
+  private Set<String> resourceKeys(ApprovalRequest request, List<ApprovalItem> items) {
+    try {
+      Set<String> keys = new LinkedHashSet<>();
+      for (ApprovalItem item : items) {
+        for (String objectRef : mapper.readValue(item.objectRefsJson(), String[].class)) {
+          keys.add("clickhouse/" + request.connectionId() + "/" + objectRef.toLowerCase());
+        }
+      }
+      return keys;
+    } catch (Exception exception) {
+      throw new IllegalStateException("Unable to read frozen DDL resource references", exception);
+    }
+  }
+
   private Mono<DdlSchemaSnapshot> schema(DdlApprovalPrepareRequest command, Identity identity) {
     if ("CLICKHOUSE_CREATE_TABLE".equals(command.workOrderTypeKey())) {
       return Mono.just(DdlSchemaSnapshot.EMPTY);
@@ -338,6 +520,31 @@ public class ApprovalCommandService {
         || command.intent() == null
         || !command.intent().isObject()) {
       throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+  }
+
+  private static void validateTransition(ApprovalTransitionRequest command) {
+    validateRevision(command);
+    if (isBlank(command.contentDigest())) {
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+  }
+
+  private static void validateRevision(ApprovalTransitionRequest command) {
+    if (command == null || command.revision() < 0) {
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+  }
+
+  private static long elapsedMillis(long started) {
+    return Math.max(0, (System.nanoTime() - started) / 1_000_000L);
+  }
+
+  private record ExecutionContext(ApprovalDetail detail, int attempt) {}
+
+  private static final class ExecutionFailedException extends RuntimeException {
+    private ExecutionFailedException(String message) {
+      super(message);
     }
   }
 

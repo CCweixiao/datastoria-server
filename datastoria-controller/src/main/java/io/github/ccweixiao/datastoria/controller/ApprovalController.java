@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,6 +17,7 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequest;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalWorkOrderTypeResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareResponse;
@@ -91,6 +93,39 @@ public class ApprovalController {
       @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
     return IdentityContext.current()
         .flatMap(identity -> service.review(id, request, false, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @PostMapping("/admin/approvals/{id}/execute")
+  @AdminAccess
+  public Mono<ResponseEntity<ApprovalDetail>> execute(
+      @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.execute(id, request, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @PostMapping("/admin/approvals/{id}/close")
+  @AdminAccess
+  public Mono<ResponseEntity<ApprovalDetail>> closeFailed(
+      @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.closeFailed(id, request, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @GetMapping("/admin/approval-types/clickhouse-ddl")
+  @AdminAccess
+  public Mono<ResponseEntity<List<ApprovalTypeDefinition>>> typeDefinitions() {
+    return IdentityContext.current().flatMap(service::listTypeDefinitions).map(ResponseEntity::ok);
+  }
+
+  @PutMapping("/admin/approval-types/clickhouse-ddl/{typeKey}")
+  @AdminAccess
+  public Mono<ResponseEntity<ApprovalTypeDefinition>> updateTypeDefinition(
+      @PathVariable String typeKey, @RequestBody ApprovalTypeUpdateRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.updateTypeDefinition(typeKey, request, identity))
         .map(ResponseEntity::ok);
   }
 

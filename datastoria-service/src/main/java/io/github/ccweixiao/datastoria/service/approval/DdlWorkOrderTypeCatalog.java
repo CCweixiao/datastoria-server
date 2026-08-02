@@ -5,14 +5,18 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
+import io.github.ccweixiao.datastoria.common.error.ConflictException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
 
@@ -39,6 +43,113 @@ public class DdlWorkOrderTypeCatalog {
         .findEnabledType(tenantId, typeKey)
         .orElseThrow(
             () -> PlainTextException.badRequest(ApiErrorCode.APPROVAL_WORK_ORDER_TYPE_UNSUPPORTED));
+  }
+
+  public List<ApprovalTypeDefinition> listAll(String tenantId) {
+    ensureInitialDefinitions(tenantId);
+    return repository.findTypes(tenantId);
+  }
+
+  public ApprovalTypeDefinition update(
+      String tenantId, String typeKey, ApprovalTypeUpdateRequest command, String actorUserId) {
+    ensureInitialDefinitions(tenantId);
+    if (command == null
+        || command.revision() < 1
+        || isBlank(command.nameEn())
+        || isBlank(command.nameZhCn())
+        || isBlank(command.descriptionEn())
+        || isBlank(command.descriptionZhCn())
+        || isBlank(command.generationRuleJson())) {
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+    ApprovalTypeDefinition current =
+        repository
+            .findType(tenantId, typeKey)
+            .orElseThrow(
+                () ->
+                    PlainTextException.badRequest(
+                        ApiErrorCode.APPROVAL_WORK_ORDER_TYPE_UNSUPPORTED));
+    try {
+      JsonNode rules = mapper.readTree(command.generationRuleJson());
+      validateSafeRules(current.generatorKey(), rules);
+      String normalizedRules = mapper.writeValueAsString(rules);
+      String names =
+          mapper.writeValueAsString(
+              java.util.Map.of("en", command.nameEn().trim(), "zh-CN", command.nameZhCn().trim()));
+      String descriptions =
+          mapper.writeValueAsString(
+              java.util.Map.of(
+                  "en", command.descriptionEn().trim(), "zh-CN", command.descriptionZhCn().trim()));
+      String checksum =
+          sha256(
+              current.typeKey()
+                  + "\n"
+                  + current.generatorKey()
+                  + "\n"
+                  + current.allowedOperationKindsJson()
+                  + "\n"
+                  + normalizedRules);
+      if (!repository.updateType(
+          tenantId,
+          typeKey,
+          command.revision(),
+          names,
+          descriptions,
+          normalizedRules,
+          command.enabled() ? "ENABLED" : "DISABLED",
+          checksum,
+          actorUserId)) {
+        throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+      }
+      return repository.findType(tenantId, typeKey).orElseThrow();
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw PlainTextException.badRequest(ApiErrorCode.DDL_RULE_VIOLATION);
+    }
+  }
+
+  private static void validateSafeRules(String generatorKey, JsonNode rules) {
+    if (!rules.isObject()) {
+      throw PlainTextException.badRequest(ApiErrorCode.DDL_RULE_VIOLATION);
+    }
+    boolean valid =
+        switch (generatorKey) {
+          case "create_local_distributed_table" -> "_local"
+                  .equals(rules.path("localSuffix").asText())
+              && "_all".equals(rules.path("distributedSuffix").asText())
+              && rules.path("requireCluster").asBoolean(false);
+          case "add_column" -> rules.path("requireMissingColumn").asBoolean(false);
+          case "modify_column", "drop_column" -> !rules.path("allowPromptOverride").asBoolean(true)
+              && containsAllProtectedKeys(rules.path("protectKeys"));
+          case "add_index" -> validIndexRules(rules);
+          default -> false;
+        };
+    if (!valid) {
+      throw PlainTextException.badRequest(ApiErrorCode.DDL_RULE_VIOLATION);
+    }
+  }
+
+  private static boolean containsAllProtectedKeys(JsonNode values) {
+    if (!values.isArray()) return false;
+    Set<String> keys = new java.util.HashSet<>();
+    values.forEach(value -> keys.add(value.asText()));
+    return keys.containsAll(Set.of("sorting_key", "primary_key", "partition_key", "sampling_key"));
+  }
+
+  private static boolean validIndexRules(JsonNode rules) {
+    Set<String> supported = Set.of("minmax", "set", "bloom_filter", "tokenbf_v1", "ngrambf_v1");
+    JsonNode values = rules.path("allowedIndexTypes");
+    if (!values.isArray() || values.isEmpty()) return false;
+    for (JsonNode value : values) {
+      if (!supported.contains(value.asText())) return false;
+    }
+    int max = rules.path("maxGranularity").asInt(0);
+    return max >= 1 && max <= 8192;
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.isBlank();
   }
 
   private void ensureInitialDefinitions(String tenantId) {

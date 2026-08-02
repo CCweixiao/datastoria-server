@@ -5,12 +5,15 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
 import io.github.ccweixiao.datastoria.common.domain.approval.DdlOperationKind;
 
 @Component
 public class AddIndexDescriptor extends AbstractDdlDescriptor {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   @Override
   public String generatorKey() {
@@ -25,7 +28,13 @@ public class AddIndexDescriptor extends AbstractDdlDescriptor {
     requireExistingColumn(schema, column);
     String indexType = rawIdentifier(requiredText(intent, "indexType"));
     int granularity = intent.path("granularity").asInt(0);
-    if (granularity < 1 || granularity > 8192) {
+    JsonNode rules = rules(definition);
+    boolean allowedType = false;
+    for (JsonNode value : rules.path("allowedIndexTypes")) {
+      allowedType |= indexType.equals(value.asText());
+    }
+    int maxGranularity = rules.path("maxGranularity").asInt(0);
+    if (!allowedType || granularity < 1 || granularity > maxGranularity) {
       throw io.github.ccweixiao.datastoria.common.error.PlainTextException.badRequest(
           io.github.ccweixiao.datastoria.common.error.ApiErrorCode.DDL_RULE_VIOLATION);
     }
@@ -69,5 +78,14 @@ public class AddIndexDescriptor extends AbstractDdlDescriptor {
             "PRECONDITION");
     return new CompiledDdlPlan(
         List.of(add, materialize), List.of("indexTypeAndGranularityValidated"));
+  }
+
+  private static JsonNode rules(ApprovalTypeDefinition definition) {
+    try {
+      return JSON.readTree(definition.generationRuleJson());
+    } catch (Exception exception) {
+      throw io.github.ccweixiao.datastoria.common.error.PlainTextException.badRequest(
+          io.github.ccweixiao.datastoria.common.error.ApiErrorCode.DDL_RULE_VIOLATION);
+    }
   }
 }
