@@ -61,6 +61,8 @@ public final class ApprovalAgentTools {
       @ToolParam(name = "work_order_type_key", required = true) String workOrderTypeKey,
       @ToolParam(name = "title", required = true) String title,
       @ToolParam(name = "summary", required = false) String summary,
+      @ToolParam(name = "draft_id", required = false) String draftId,
+      @ToolParam(name = "expected_revision", required = false) Long expectedRevision,
       @ToolParam(
               name = "intent",
               required = true,
@@ -74,7 +76,9 @@ public final class ApprovalAgentTools {
             summary,
             mapper.valueToTree(intent),
             sessionId,
-            runId);
+            runId,
+            draftId,
+            expectedRevision);
     return executionPolicy.guard(
         "prepare_ddl_approval", service.prepare(request, identity).map(this::json));
   }

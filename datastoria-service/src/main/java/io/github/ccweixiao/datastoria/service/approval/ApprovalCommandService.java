@@ -337,8 +337,23 @@ public class ApprovalCommandService {
       CompiledDdlPlan plan) {
     try {
       Instant now = Instant.now();
-      String requestId = Ulid.next();
-      String requestNo = "DDL-" + REQUEST_DATE.format(now) + "-" + Ulid.next();
+      String idempotencyKey = prepareIdempotencyKey(command);
+      if (idempotencyKey != null) {
+        var replay =
+            repository.findDetailByIdempotencyKey(
+                identity.tenantId(), identity.userId(), idempotencyKey);
+        if (replay.isPresent()) return preparedResponse(replay.get());
+      }
+      ApprovalDetail current =
+          isBlank(command.draftId()) ? null : requireVisible(command.draftId(), identity, false);
+      if (current != null && command.expectedRevision() == null) {
+        throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+      }
+      String requestId = current == null ? Ulid.next() : current.request().id();
+      String requestNo =
+          current == null
+              ? "DDL-" + REQUEST_DATE.format(now) + "-" + Ulid.next()
+              : current.request().requestNo();
       ObjectNode content = mapper.createObjectNode();
       content.put("connectionId", command.connectionId());
       content.put("connectionName", connection.name());
@@ -371,15 +386,15 @@ public class ApprovalCommandService {
               connection.name(),
               ApprovalStatus.DRAFT,
               contentJson,
-              1,
+              current == null ? 1 : current.request().contentVersion() + 1,
               digest,
               "MANUAL_TRIGGER",
               0,
               null,
               null,
               null,
-              0,
-              now,
+              current == null ? 0 : current.request().revision(),
+              current == null ? now : current.request().createdAt(),
               null,
               null,
               null,
@@ -389,25 +404,33 @@ public class ApprovalCommandService {
           plan.statements().stream()
               .map(statement -> toItem(requestId, identity.tenantId(), statement, now))
               .toList();
-      String idempotencyKey = prepareIdempotencyKey(command);
-      if (idempotencyKey != null) {
-        var existing =
-            repository.findDetailByIdempotencyKey(
-                identity.tenantId(), identity.userId(), idempotencyKey);
-        if (existing.isPresent()) return preparedResponse(existing.get());
-      }
       try {
-        repository.createDraft(
+        if (current == null) {
+          repository.createDraft(
+              request,
+              items,
+              idempotencyKey,
+              event(request, identity, "DRAFT_CREATED", "DDL approval draft created", null));
+        } else if (!repository.updateDraft(
             request,
+            command.expectedRevision(),
             items,
             idempotencyKey,
-            event(request, identity, "DRAFT_CREATED", "DDL approval draft created", null));
+            event(request, identity, "DRAFT_UPDATED", "DDL approval draft updated", null))) {
+          throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+        }
       } catch (DataIntegrityViolationException exception) {
         if (idempotencyKey == null) throw exception;
         return repository
             .findDetailByIdempotencyKey(identity.tenantId(), identity.userId(), idempotencyKey)
             .map(this::preparedResponse)
             .orElseThrow(() -> exception);
+      }
+      if (current != null) {
+        return preparedResponse(
+            repository
+                .findDetail(identity.tenantId(), request.id())
+                .orElseThrow(() -> new NotFoundException("ApprovalRequest", request.id())));
       }
       return preparedResponse(new ApprovalDetail(request, items, List.of()));
     } catch (RuntimeException exception) {
@@ -466,6 +489,10 @@ public class ApprovalCommandService {
     if (isBlank(command.sourceRunId())) return null;
     ObjectNode canonical = mapper.createObjectNode();
     canonical.put("sourceRunId", command.sourceRunId().trim());
+    canonical.put("draftId", trimToNull(command.draftId()));
+    if (command.expectedRevision() != null) {
+      canonical.put("expectedRevision", command.expectedRevision());
+    }
     canonical.put("connectionId", command.connectionId().trim());
     canonical.put("workOrderTypeKey", command.workOrderTypeKey().trim());
     canonical.put("title", command.title().trim());
@@ -668,6 +695,8 @@ public class ApprovalCommandService {
               null,
               intent,
               null,
+              null,
+              null,
               null);
       return schema(frozenCommand, identity)
           .map(schema -> compiler.compile(intent, definition, schema))
@@ -790,7 +819,9 @@ public class ApprovalCommandService {
         || isBlank(command.workOrderTypeKey())
         || isBlank(command.title())
         || command.intent() == null
-        || !command.intent().isObject()) {
+        || !command.intent().isObject()
+        || (isBlank(command.draftId()) != (command.expectedRevision() == null))
+        || (command.expectedRevision() != null && command.expectedRevision() < 0)) {
       throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
     }
   }

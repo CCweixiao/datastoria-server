@@ -45,6 +45,13 @@ public interface ApprovalRepository {
   Optional<ApprovalDetail> findDetailByIdempotencyKey(
       String tenantId, String applicantUserId, String idempotencyKey);
 
+  boolean updateDraft(
+      ApprovalRequest request,
+      long expectedRevision,
+      List<ApprovalItem> items,
+      String idempotencyKey,
+      ApprovalEvent updatedEvent);
+
   Optional<ApprovalDetail> findDetail(String tenantId, String requestId);
 
   List<ApprovalRequest> findRequests(

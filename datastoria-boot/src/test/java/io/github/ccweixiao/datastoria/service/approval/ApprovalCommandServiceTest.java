@@ -22,6 +22,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
@@ -139,8 +140,13 @@ class ApprovalCommandServiceTest {
     when(compiler.compile(any(), eq(definition), eq(DdlSchemaSnapshot.EMPTY)))
         .thenReturn(new CompiledDdlPlan(List.of(statement(1, "DDL ONE")), List.of("rule")));
     AtomicReference<ApprovalDetail> saved = new AtomicReference<>();
+    AtomicInteger idempotencyLookups = new AtomicInteger();
     when(repository.findDetailByIdempotencyKey(eq("tenant"), eq("admin"), anyString()))
-        .thenAnswer(invocation -> Optional.ofNullable(saved.get()));
+        .thenAnswer(
+            invocation ->
+                idempotencyLookups.getAndIncrement() == 1
+                    ? Optional.ofNullable(saved.get())
+                    : Optional.empty());
     org.mockito.Mockito.doAnswer(
             invocation -> {
               ApprovalRequest request = invocation.getArgument(0);
@@ -159,7 +165,9 @@ class ApprovalCommandServiceTest {
             null,
             new ObjectMapper().createObjectNode(),
             "session",
-            "run");
+            "run",
+            null,
+            null);
 
     var first = service.prepare(command, ADMIN).block();
     var replay = service.prepare(command, ADMIN).block();
@@ -167,6 +175,23 @@ class ApprovalCommandServiceTest {
     assertThat(replay.draftId()).isEqualTo(first.draftId());
     assertThat(replay.submittable()).isTrue();
     verify(repository, times(1)).createDraft(any(), any(), anyString(), any());
+
+    when(repository.findDetail("tenant", first.draftId()))
+        .thenAnswer(invocation -> Optional.of(saved.get()));
+    DdlApprovalPrepareRequest staleUpdate =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_TABLE",
+            "Changed title",
+            null,
+            new ObjectMapper().createObjectNode(),
+            "session",
+            "another-run",
+            first.draftId(),
+            0L);
+    assertThatThrownBy(() -> service.prepare(staleUpdate, ADMIN).block())
+        .hasMessageContaining("draft changed");
+    verify(repository, times(1)).updateDraft(any(), eq(0L), any(), anyString(), any());
   }
 
   private static ApprovalCommandService service(

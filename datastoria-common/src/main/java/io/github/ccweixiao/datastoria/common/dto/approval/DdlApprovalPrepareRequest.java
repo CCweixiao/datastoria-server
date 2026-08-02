@@ -9,4 +9,6 @@ public record DdlApprovalPrepareRequest(
     String summary,
     JsonNode intent,
     String sourceSessionId,
-    String sourceRunId) {}
+    String sourceRunId,
+    String draftId,
+    Long expectedRevision) {}

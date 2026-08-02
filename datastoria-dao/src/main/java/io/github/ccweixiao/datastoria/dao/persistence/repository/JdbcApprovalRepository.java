@@ -185,6 +185,45 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   }
 
   @Override
+  @Transactional
+  public boolean updateDraft(
+      ApprovalRequest request,
+      long expectedRevision,
+      List<ApprovalItem> items,
+      String idempotencyKey,
+      ApprovalEvent updatedEvent) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET work_order_type_key = :workOrderTypeKey,
+              work_order_type_revision = :workOrderTypeRevision,
+              type_definition_checksum = :typeDefinitionChecksum,
+              title = :title, summary = :summary,
+              source_session_id = :sourceSessionId, source_run_id = :sourceRunId,
+              connection_id = :connectionId, connection_name = :connectionName,
+              content_json = :contentJson, content_version = content_version + 1,
+              content_digest = :contentDigest, idempotency_key = :idempotencyKey,
+              revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :id
+              AND applicant_user_id = :applicantUserId
+              AND status = 'DRAFT' AND revision = :expectedRevision AND deleted_at IS NULL
+            """,
+            requestParameters(request)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("idempotencyKey", idempotencyKey)
+                .addValue("now", timestamp(now)));
+    if (affected != 1) return false;
+    jdbc.update(
+        "DELETE FROM ds_approval_item WHERE tenant_id = :tenantId AND request_id = :requestId",
+        Map.of("tenantId", request.tenantId(), "requestId", request.id()));
+    items.forEach(this::insertItem);
+    insertEvent(updatedEvent);
+    return true;
+  }
+
+  @Override
   public Optional<ApprovalDetail> findDetail(String tenantId, String requestId) {
     List<ApprovalRequest> requests =
         jdbc.query(
