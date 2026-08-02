@@ -189,7 +189,7 @@ public final class AgentEventMapper {
                 now(),
                 resultEnd.getToolCallId(),
                 resultEnd.getToolCallName(),
-                normalizeJson(
+                normalizeToolOutput(
                     toolOutputs
                         .getOrDefault(resultEnd.getToolCallId(), new StringBuilder("null"))
                         .toString()),
@@ -242,6 +242,25 @@ public final class AgentEventMapper {
       return json.writeValueAsString(json.readTree(value));
     } catch (Exception ignored) {
       return writeJson(value);
+    }
+  }
+
+  /**
+   * Normalises a tool's raw result text for the wire and for persistence. Any valid JSON (object,
+   * array, or primitive) is preserved verbatim — so this never alters the contract of a tool that
+   * returns structured JSON. Only free text is re-shaped: AgentScope absorbs a failed tool call
+   * into a SUCCESS-state result block whose text is a free-form error string (e.g. {@code "Tool
+   * execution failed: …"}), which would otherwise be serialised as a bare JSON string and crash
+   * clients that destructure {@code output} as an object. Such text becomes {@code {"error": …}}.
+   */
+  private String normalizeToolOutput(String value) {
+    if (value == null || value.isBlank()) {
+      return "{}";
+    }
+    try {
+      return writeJson(json.readTree(value));
+    } catch (Exception parseFailure) {
+      return writeJson(json.createObjectNode().put("error", value));
     }
   }
 

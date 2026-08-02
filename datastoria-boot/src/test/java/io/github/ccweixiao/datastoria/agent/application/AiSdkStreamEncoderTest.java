@@ -294,6 +294,59 @@ class AiSdkStreamEncoderTest {
   }
 
   @Test
+  void toolOutputFreeTextIsWrappedAsErrorObject() {
+    // An upstream error string that reaches the encoder as free text must be surfaced as an object,
+    // never a bare string the client would have to destructure with the `in` operator.
+    List<String> frames =
+        encodeAll(
+            List.of(
+                started(),
+                new AgentRunEvent.ToolOutputAvailable(
+                    "run_1",
+                    2,
+                    NOW,
+                    "call-1",
+                    "search_file",
+                    "Tool execution failed: Input length = 1",
+                    false,
+                    false)));
+    JsonNode output =
+        chunks(frames).stream()
+            .filter(c -> "tool-output-available".equals(type(c)))
+            .findFirst()
+            .orElseThrow()
+            .path("output");
+    assertThat(output.isObject()).as("free-text output must be an object, not a string").isTrue();
+    assertThat(output.path("error").asText()).isEqualTo("Tool execution failed: Input length = 1");
+  }
+
+  @Test
+  void toolOutputArrayIsPreservedOnWire() {
+    // A tool that returns a JSON array must reach the client as an array, not be wrapped.
+    List<String> frames =
+        encodeAll(
+            List.of(
+                started(),
+                new AgentRunEvent.ToolOutputAvailable(
+                    "run_1",
+                    2,
+                    NOW,
+                    "call-1",
+                    "execute_sql",
+                    "[{\"a\":1},{\"a\":2}]",
+                    false,
+                    false)));
+    JsonNode output =
+        chunks(frames).stream()
+            .filter(c -> "tool-output-available".equals(type(c)))
+            .findFirst()
+            .orElseThrow()
+            .path("output");
+    assertThat(output.isArray()).as("array output must stay an array, not be wrapped").isTrue();
+    assertThat(output).hasSize(2);
+  }
+
+  @Test
   void deniedAndFailedToolsNeverExposeRawOutput() {
     List<JsonNode> chunks =
         chunks(
