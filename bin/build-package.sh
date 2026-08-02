@@ -45,6 +45,7 @@ fi
 
 echo "Building backend and datastoria-web (API base: $PUBLIC_API_BASE)..."
 "$PROJECT_DIR/mvnw" -B -ntp -f "$PROJECT_DIR/pom.xml" clean package \
+  -DskipTests \
   -Ddatastoria.web.api-base-url="$PUBLIC_API_BASE"
 
 BACKEND_JAR="$(
