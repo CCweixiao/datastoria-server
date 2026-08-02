@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
 import io.github.ccweixiao.datastoria.common.config.SessionShareConfig;
-import io.github.ccweixiao.datastoria.common.domain.ChatMessage;
 import io.github.ccweixiao.datastoria.common.domain.ChatSession;
 import io.github.ccweixiao.datastoria.common.domain.SessionShare;
 import io.github.ccweixiao.datastoria.common.dto.AppUIMessage;
@@ -341,22 +340,17 @@ public class SessionService {
 
   private void upsertInitialMessages(
       ChatSession session, java.util.List<AppUIMessage> messages, Identity identity) {
-    long seq = 1L;
+    java.util.List<ChatMessageRepository.InitialMessage> batch =
+        new java.util.ArrayList<>(messages.size());
     for (AppUIMessage m : messages) {
-      ChatMessage toSave =
-          new ChatMessage(
+      batch.add(
+          new ChatMessageRepository.InitialMessage(
               m.id(),
-              session.tenantId(),
-              session.id(),
-              identity.userId(),
               m.role(),
               writeJson(sanitizePartsForPersistence(m.parts())),
-              m.metadata() == null ? null : writeJson(m.metadata()),
-              seq++,
-              null,
-              null);
-      messageRepo.save(toSave);
+              m.metadata() == null ? null : writeJson(m.metadata())));
     }
+    messageRepo.saveInitialMessages(session.tenantId(), session.id(), identity.userId(), batch);
   }
 
   private String writeJson(JsonNode node) {
