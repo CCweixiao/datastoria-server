@@ -2,6 +2,7 @@ import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import dynamic from "next/dynamic";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
+import { readToolOutputObject, type ToolOutputError } from "./tool-output";
 
 const ThemedSyntaxHighlighter = dynamic(
   () =>
@@ -73,7 +74,10 @@ function inferLanguage(filePath: string): string {
   }
 }
 
-function buildResolvedHeader(input: ReadFileInput, output?: ReadFileOutput): string {
+function buildResolvedHeader(
+  input: ReadFileInput,
+  output?: ReadFileOutput | ToolOutputError,
+): string {
   const path =
     output && "path" in output && typeof output.path === "string" && output.path.length > 0
       ? output.path
@@ -112,7 +116,7 @@ export const MessageToolReadFile = memo(function MessageToolReadFile({
   const toolPart = part as ToolPart;
   const state = toolPart.state;
   const input = (toolPart.input ?? {}) as ReadFileInput;
-  const output = toolPart.output as ReadFileOutput | undefined;
+  const output = readToolOutputObject<ReadFileOutput>(toolPart.output);
   const error =
     output && "error" in output && typeof output.error === "string" ? output.error : null;
   const content =
