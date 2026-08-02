@@ -79,7 +79,10 @@ export class SqlUtils {
    */
   public static prettyFormatQuery(query: string): string {
     try {
-      return formatSQL(query);
+      return formatSQL(query, {
+        language: "clickhouse",
+        expressionWidth: 32,
+      });
     } catch {
       return query;
     }

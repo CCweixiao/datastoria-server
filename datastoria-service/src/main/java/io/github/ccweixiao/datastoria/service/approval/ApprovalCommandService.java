@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
@@ -31,6 +33,8 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalPageResponse;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalSqlPlanUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareRequest;
@@ -42,6 +46,7 @@ import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
+import io.github.ccweixiao.datastoria.dao.repository.UserAccountRepository;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 
 import reactor.core.publisher.Flux;
@@ -55,6 +60,7 @@ public class ApprovalCommandService {
       DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
 
   private final ApprovalRepository repository;
+  private final UserAccountRepository users;
   private final DdlWorkOrderTypeCatalog catalog;
   private final DdlPlanCompiler compiler;
   private final DdlSchemaInspector schemaInspector;
@@ -64,6 +70,7 @@ public class ApprovalCommandService {
 
   public ApprovalCommandService(
       ApprovalRepository repository,
+      UserAccountRepository users,
       DdlWorkOrderTypeCatalog catalog,
       DdlPlanCompiler compiler,
       DdlSchemaInspector schemaInspector,
@@ -71,6 +78,7 @@ public class ApprovalCommandService {
       ObjectMapper mapper,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.repository = repository;
+    this.users = users;
     this.catalog = catalog;
     this.compiler = compiler;
     this.schemaInspector = schemaInspector;
@@ -159,9 +167,6 @@ public class ApprovalCommandService {
               }
               ApprovalDetail detail = requireVisible(requestId, identity, true);
               ApprovalRequest request = detail.request();
-              if (request.applicantUserId().equals(identity.userId())) {
-                throw new ConflictException(ApiErrorCode.APPROVAL_SELF_REVIEW_NOT_ALLOWED);
-              }
               ApprovalStatus target = approve ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED;
               transition(
                   request,
@@ -174,6 +179,169 @@ public class ApprovalCommandService {
               return requireVisible(requestId, identity, true);
             })
         .subscribeOn(jdbcScheduler);
+  }
+
+  public Mono<ApprovalDetail> interrupt(
+      String requestId, ApprovalTransitionRequest command, Identity identity) {
+    validateRevision(command);
+    return Mono.fromCallable(
+            () -> {
+              ApprovalDetail detail = requireVisible(requestId, identity, false);
+              ApprovalRequest request = detail.request();
+              if (request.status() != ApprovalStatus.DRAFT
+                  && request.status() != ApprovalStatus.SUBMITTED) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_INVALID_STATE);
+              }
+              transition(
+                  request,
+                  command.revision(),
+                  request.status(),
+                  ApprovalStatus.CANCELLED,
+                  identity,
+                  null,
+                  "INTERRUPTED_BY_APPLICANT");
+              return requireVisible(requestId, identity, false);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
+  public Mono<ApprovalDetail> updateSqlPlan(
+      String requestId, ApprovalSqlPlanUpdateRequest command, Identity identity) {
+    requireAdmin(identity);
+    if (command == null || command.items() == null || command.items().isEmpty()) {
+      return Mono.error(PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST));
+    }
+    return Mono.fromCallable(
+            () -> {
+              ApprovalDetail detail = requireVisible(requestId, identity, true);
+              ApprovalRequest current = detail.request();
+              if (current.status() != ApprovalStatus.DRAFT
+                  && current.status() != ApprovalStatus.SUBMITTED) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_INVALID_STATE);
+              }
+              if (command.revision() != current.revision()
+                  || command.items().size() != detail.items().size()) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+              }
+              Map<String, String> sqlById =
+                  command.items().stream()
+                      .collect(
+                          java.util.stream.Collectors.toMap(
+                              ApprovalSqlPlanUpdateRequest.Item::id,
+                              item -> item.sqlText() == null ? "" : item.sqlText().trim()));
+              List<ApprovalItem> updatedItems =
+                  detail.items().stream().map(item -> updatedItem(item, sqlById)).toList();
+              ObjectNode content = (ObjectNode) mapper.readTree(current.contentJson());
+              content.put("manualSqlOverride", true);
+              ArrayNode statements = (ArrayNode) content.withArray("statements");
+              if (statements.size() != updatedItems.size()) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED);
+              }
+              for (int index = 0; index < updatedItems.size(); index++) {
+                ((ObjectNode) statements.get(index)).put("sql", updatedItems.get(index).sqlText());
+              }
+              String contentJson = mapper.writeValueAsString(content);
+              String digest = canonicalJsonDigest(content);
+              ApprovalRequest updatedRequest =
+                  new ApprovalRequest(
+                      current.id(),
+                      current.tenantId(),
+                      current.requestNo(),
+                      current.workOrderTypeKey(),
+                      current.workOrderTypeRevision(),
+                      current.typeDefinitionChecksum(),
+                      current.title(),
+                      current.summary(),
+                      current.applicantUserId(),
+                      current.applicantDisplayName(),
+                      current.sourceSessionId(),
+                      current.sourceRunId(),
+                      current.connectionId(),
+                      current.connectionName(),
+                      ApprovalStatus.DRAFT,
+                      contentJson,
+                      current.contentVersion() + 1,
+                      digest,
+                      current.executionMode(),
+                      current.executionAttempt(),
+                      null,
+                      null,
+                      null,
+                      current.revision(),
+                      current.createdAt(),
+                      null,
+                      null,
+                      null,
+                      null,
+                      Instant.now());
+              if (!repository.updateSqlPlan(
+                  updatedRequest,
+                  command.revision(),
+                  current.status(),
+                  updatedItems,
+                  event(
+                      current,
+                      identity,
+                      "SQL_PLAN_EDITED",
+                      "SQL plan edited by administrator",
+                      null))) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+              }
+              return requireVisible(requestId, identity, true);
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
+  private ApprovalItem updatedItem(ApprovalItem item, Map<String, String> sqlById) {
+    try {
+      String sql = sqlById.get(item.id());
+      if (sql == null || sql.isBlank()) {
+        throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+      }
+      validateManualSql(item, sql);
+      return new ApprovalItem(
+          item.id(),
+          item.tenantId(),
+          item.requestId(),
+          item.ordinal(),
+          item.operationKind(),
+          sql,
+          sha256(normalizeSql(sql)),
+          item.objectRefsJson(),
+          item.riskLevel(),
+          item.warningsJson(),
+          item.idempotencyStrategy(),
+          item.preconditionJson(),
+          item.createdAt());
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new IllegalStateException("Unable to update approval SQL", exception);
+    }
+  }
+
+  private void validateManualSql(ApprovalItem item, String sql) throws Exception {
+    String withoutTrailingTerminator = sql.stripTrailing().replaceFirst(";$", "");
+    if (withoutTrailingTerminator.contains(";")) {
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+    String normalized = normalizeSql(withoutTrailingTerminator).replace("`", "");
+    String expectedPrefix =
+        item.operationKind()
+                == io.github.ccweixiao.datastoria.common.domain.approval.DdlOperationKind
+                    .CREATE_TABLE
+            ? "CREATE TABLE "
+            : "ALTER TABLE ";
+    if (!normalized.toUpperCase(java.util.Locale.ROOT).startsWith(expectedPrefix)) {
+      throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+    }
+    for (String objectRef : mapper.readValue(item.objectRefsJson(), String[].class)) {
+      if (!normalized
+          .toLowerCase(java.util.Locale.ROOT)
+          .contains(objectRef.toLowerCase(java.util.Locale.ROOT))) {
+        throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+      }
+    }
   }
 
   public Mono<ApprovalDetail> execute(
@@ -272,14 +440,45 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler);
   }
 
-  public Mono<List<ApprovalRequest>> list(ApprovalStatus status, int limit, Identity identity) {
+  public Mono<ApprovalPageResponse> list(
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo,
+      int page,
+      int pageSize,
+      Identity identity) {
+    int normalizedPage = Math.max(1, page);
+    int normalizedPageSize = Math.max(1, Math.min(pageSize, 100));
+    String visibleApplicant = identity.isAdmin() ? null : identity.userId();
     return Mono.fromCallable(
-            () ->
-                repository.findRequests(
-                    identity.tenantId(),
-                    identity.isAdmin() ? null : identity.userId(),
-                    status,
-                    limit))
+            () -> {
+              long total =
+                  repository.countRequests(
+                      identity.tenantId(),
+                      visibleApplicant,
+                      statuses,
+                      workOrderTypeKey,
+                      applicant,
+                      keyword,
+                      createdFrom,
+                      createdTo);
+              List<ApprovalRequest> items =
+                  repository.findRequests(
+                      identity.tenantId(),
+                      visibleApplicant,
+                      statuses,
+                      workOrderTypeKey,
+                      applicant,
+                      keyword,
+                      createdFrom,
+                      createdTo,
+                      (normalizedPage - 1) * normalizedPageSize,
+                      normalizedPageSize);
+              return new ApprovalPageResponse(items, total, normalizedPage, normalizedPageSize);
+            })
         .subscribeOn(jdbcScheduler);
   }
 
@@ -374,7 +573,7 @@ public class ApprovalCommandService {
       content.set("statements", mapper.valueToTree(plan.statements()));
       content.set("ruleSummaries", mapper.valueToTree(plan.ruleSummaries()));
       String contentJson = mapper.writeValueAsString(content);
-      String digest = sha256(contentJson);
+      String digest = canonicalJsonDigest(content);
       ApprovalRequest request =
           new ApprovalRequest(
               requestId,
@@ -386,7 +585,7 @@ public class ApprovalCommandService {
               command.title().trim(),
               trimToNull(command.summary()),
               identity.userId(),
-              identity.userId(),
+              applicantDisplayName(identity),
               trimToNull(command.sourceSessionId()),
               trimToNull(command.sourceRunId()),
               command.connectionId(),
@@ -506,6 +705,13 @@ public class ApprovalCommandService {
     canonical.put("summary", trimToNull(command.summary()));
     canonical.set("intent", command.intent());
     return "prepare:" + sha256(mapper.writeValueAsString(canonical));
+  }
+
+  private String applicantDisplayName(Identity identity) {
+    return users
+        .findByTenantIdAndUserId(identity.tenantId(), identity.userId())
+        .map(account -> trimToNull(account.username()))
+        .orElse(identity.userId());
   }
 
   private ApprovalItem toItem(
@@ -681,10 +887,16 @@ public class ApprovalCommandService {
   private Mono<Void> revalidate(
       ApprovalDetail detail, ApprovalTypeDefinition definition, Identity identity) {
     try {
-      if (!sha256(detail.request().contentJson()).equals(detail.request().contentDigest())) {
+      if (!canonicalJsonDigest(mapper.readTree(detail.request().contentJson()))
+          .equals(detail.request().contentDigest())) {
         return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
       }
       JsonNode content = mapper.readTree(detail.request().contentJson());
+      if (content.path("manualSqlOverride").asBoolean(false)) {
+        return manualPlanMatches(content.path("statements"), detail.items())
+            ? Mono.empty()
+            : Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
+      }
       JsonNode intent = content.path("intent");
       String typeKey = content.path("workOrderTypeKey").asText();
       if (!detail.request().workOrderTypeKey().equals(typeKey)
@@ -769,6 +981,15 @@ public class ApprovalCommandService {
     return true;
   }
 
+  private static boolean manualPlanMatches(JsonNode statements, List<ApprovalItem> items) {
+    if (!statements.isArray() || statements.size() != items.size()) return false;
+    for (int index = 0; index < items.size(); index++) {
+      if (!normalizeSql(statements.get(index).path("sql").asText())
+          .equals(normalizeSql(items.get(index).sqlText()))) return false;
+    }
+    return true;
+  }
+
   private ApprovalDetail requireVisible(String requestId, Identity identity, boolean adminAccess) {
     ApprovalDetail detail =
         repository
@@ -794,8 +1015,12 @@ public class ApprovalCommandService {
         expectedRevision,
         expectedStatus,
         targetStatus,
-        targetStatus == ApprovalStatus.SUBMITTED ? null : actor.userId(),
-        targetStatus == ApprovalStatus.SUBMITTED ? null : actor.userId(),
+        targetStatus == ApprovalStatus.SUBMITTED || targetStatus == ApprovalStatus.CANCELLED
+            ? null
+            : actor.userId(),
+        targetStatus == ApprovalStatus.SUBMITTED || targetStatus == ApprovalStatus.CANCELLED
+            ? null
+            : actor.userId(),
         comment,
         event(request, actor, eventType, comment, null))) {
       throw new ConflictException(ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
@@ -874,6 +1099,31 @@ public class ApprovalCommandService {
     return HexFormat.of()
         .formatHex(
             MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  /**
+   * Hash JSON by value rather than by its database representation. MySQL's JSON type may reorder
+   * object properties and add whitespace when a document is read back, while arrays retain their
+   * business-significant order.
+   */
+  private String canonicalJsonDigest(JsonNode value) throws Exception {
+    return sha256(mapper.writeValueAsString(canonicalJson(value)));
+  }
+
+  private JsonNode canonicalJson(JsonNode value) {
+    if (value.isObject()) {
+      ObjectNode canonical = mapper.createObjectNode();
+      Set<String> names = new TreeSet<>();
+      value.fieldNames().forEachRemaining(names::add);
+      names.forEach(name -> canonical.set(name, canonicalJson(value.get(name))));
+      return canonical;
+    }
+    if (value.isArray()) {
+      ArrayNode canonical = mapper.createArrayNode();
+      value.forEach(element -> canonical.add(canonicalJson(element)));
+      return canonical;
+    }
+    return value;
   }
 
   private static boolean isBlank(String value) {

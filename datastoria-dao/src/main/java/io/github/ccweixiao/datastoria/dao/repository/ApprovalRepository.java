@@ -1,5 +1,6 @@
 package io.github.ccweixiao.datastoria.dao.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,7 +56,33 @@ public interface ApprovalRepository {
   Optional<ApprovalDetail> findDetail(String tenantId, String requestId);
 
   List<ApprovalRequest> findRequests(
-      String tenantId, String applicantUserId, ApprovalStatus status, int limit);
+      String tenantId,
+      String visibleApplicantUserId,
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo,
+      int offset,
+      int limit);
+
+  long countRequests(
+      String tenantId,
+      String visibleApplicantUserId,
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo);
+
+  boolean updateSqlPlan(
+      ApprovalRequest request,
+      long expectedRevision,
+      ApprovalStatus expectedStatus,
+      List<ApprovalItem> items,
+      ApprovalEvent event);
 
   boolean transition(
       String tenantId,

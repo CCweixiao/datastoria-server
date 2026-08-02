@@ -30,6 +30,18 @@ describe("SqlUtils.commentOutFormatClause", () => {
   });
 });
 
+describe("SqlUtils.prettyFormatQuery", () => {
+  it("formats ClickHouse DDL into compact readable lines", () => {
+    const formatted = SqlUtils.prettyFormatQuery(
+      "CREATE TABLE `default`.`events_local` ON CLUSTER `test_cluster` (`id` UInt64, `created_at` DateTime) ENGINE = ReplicatedMergeTree ORDER BY (`id`)"
+    );
+
+    expect(formatted).toContain("ON CLUSTER `test_cluster` (\n  `id` UInt64,");
+    expect(formatted).toContain("\n  `created_at` DateTime\n)");
+    expect(formatted).toContain("\nORDER BY\n");
+  });
+});
+
 describe("SqlUtils.toExplainSQL", () => {
   it("returns empty when input is empty or only whitespace", () => {
     expect(SqlUtils.toExplainSQL("ast", "")).toEqual({ explainSQL: "", rawSQL: "" });

@@ -32,6 +32,13 @@ export type ApprovalRequest = {
   updatedAt: string;
 };
 
+export type ApprovalPage = {
+  items: ApprovalRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type ApprovalItem = {
   id: string;
   ordinal: number;
@@ -74,13 +81,6 @@ export type ApprovalTypeDefinition = {
   definitionRevision: number;
 };
 
-export type PreparedApproval = {
-  draftId: string;
-  requestNo: string;
-  revision: number;
-  contentDigest: string;
-};
-
 export type ApprovalExecution = {
   id: string;
   itemId: string;
@@ -116,13 +116,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function listApprovals(status?: ApprovalStatus): Promise<ApprovalRequest[]> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
-  return request(`/api/approvals${query}`);
+export function listApprovals(options?: {
+  statuses?: ApprovalStatus[];
+  workOrderTypeKey?: string;
+  applicant?: string;
+  keyword?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<ApprovalPage> {
+  const parameters = new URLSearchParams({
+    page: String(options?.page ?? 1),
+    pageSize: String(options?.pageSize ?? 10),
+  });
+  options?.statuses?.forEach((status) => parameters.append("status", status));
+  if (options?.workOrderTypeKey) parameters.set("workOrderTypeKey", options.workOrderTypeKey);
+  if (options?.applicant) parameters.set("applicant", options.applicant);
+  if (options?.keyword) parameters.set("keyword", options.keyword);
+  if (options?.createdFrom) parameters.set("createdFrom", options.createdFrom);
+  if (options?.createdTo) parameters.set("createdTo", options.createdTo);
+  return request(`/api/approvals?${parameters}`);
 }
 
 export function getApproval(id: string): Promise<ApprovalDetail> {
   return request(`/api/approvals/${encodeURIComponent(id)}`);
+}
+
+export function updateApprovalSqlPlan(
+  id: string,
+  payload: { revision: number; items: Array<{ id: string; sqlText: string }> }
+): Promise<ApprovalDetail> {
+  return request(`/api/admin/approvals/${encodeURIComponent(id)}/sql-plan`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listApprovalExecutions(id: string): Promise<ApprovalExecution[]> {
@@ -171,25 +199,12 @@ export function updateApprovalTypeDefinition(
   });
 }
 
-export function prepareDdlApproval(payload: {
-  connectionId: string;
-  workOrderTypeKey: string;
-  title: string;
-  summary?: string;
-  intent: Record<string, unknown>;
-}): Promise<PreparedApproval> {
-  return request("/api/approval-types/clickhouse-ddl/prepare", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
 export function transitionApproval(
   id: string,
-  action: "submit" | "approve" | "reject" | "execute" | "close",
+  action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
   payload: { revision: number; contentDigest?: string; comment?: string }
 ): Promise<ApprovalDetail> {
-  const admin = action !== "submit";
+  const admin = action !== "submit" && action !== "interrupt";
   return request(`${admin ? "/api/admin" : "/api"}/approvals/${encodeURIComponent(id)}/${action}`, {
     method: "POST",
     body: JSON.stringify(payload),

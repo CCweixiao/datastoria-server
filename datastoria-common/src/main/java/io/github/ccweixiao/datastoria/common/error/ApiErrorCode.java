@@ -149,12 +149,6 @@ public enum ApiErrorCode {
       "The requested operation is not allowed in the current work order state.",
       "工单状态不允许此操作",
       "当前工单状态不允许执行所请求的操作。"),
-  APPROVAL_SELF_REVIEW_NOT_ALLOWED(
-      403,
-      "Self-approval is not allowed",
-      "Applicants cannot approve or reject their own work orders.",
-      "不允许审批自己的工单",
-      "申请人不能批准或驳回自己的工单。"),
   APPROVAL_RESOURCE_CONFLICT(
       409,
       "DDL resource is already claimed",

@@ -17,7 +17,6 @@ class ApprovalApiErrorCodeI18nTest {
             ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT,
             ApiErrorCode.APPROVAL_CONTENT_CHANGED,
             ApiErrorCode.APPROVAL_INVALID_STATE,
-            ApiErrorCode.APPROVAL_SELF_REVIEW_NOT_ALLOWED,
             ApiErrorCode.APPROVAL_RESOURCE_CONFLICT,
             ApiErrorCode.APPROVAL_DEPENDENCY_NOT_SUPPORTED,
             ApiErrorCode.DDL_OPERATION_UNSUPPORTED,

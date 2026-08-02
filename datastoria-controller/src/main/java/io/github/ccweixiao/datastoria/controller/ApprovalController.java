@@ -1,5 +1,6 @@
 package io.github.ccweixiao.datastoria.controller;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
@@ -15,9 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalExecution;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecution;
-import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalPageResponse;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalSqlPlanUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalWorkOrderTypeResponse;
@@ -57,11 +59,28 @@ public class ApprovalController {
   }
 
   @GetMapping("/approvals")
-  public Mono<ResponseEntity<List<ApprovalRequest>>> list(
-      @RequestParam(required = false) ApprovalStatus status,
-      @RequestParam(defaultValue = "50") int limit) {
+  public Mono<ResponseEntity<ApprovalPageResponse>> list(
+      @RequestParam(required = false, name = "status") List<ApprovalStatus> statuses,
+      @RequestParam(required = false) String workOrderTypeKey,
+      @RequestParam(required = false) String applicant,
+      @RequestParam(required = false) String keyword,
+      @RequestParam(required = false) Instant createdFrom,
+      @RequestParam(required = false) Instant createdTo,
+      @RequestParam(defaultValue = "1") int page,
+      @RequestParam(defaultValue = "10") int pageSize) {
     return IdentityContext.current()
-        .flatMap(identity -> service.list(status, limit, identity))
+        .flatMap(
+            identity ->
+                service.list(
+                    statuses,
+                    workOrderTypeKey,
+                    applicant,
+                    keyword,
+                    createdFrom,
+                    createdTo,
+                    page,
+                    pageSize,
+                    identity))
         .map(ResponseEntity::ok);
   }
 
@@ -80,6 +99,14 @@ public class ApprovalController {
         .map(ResponseEntity::ok);
   }
 
+  @PostMapping("/approvals/{id}/interrupt")
+  public Mono<ResponseEntity<ApprovalDetail>> interrupt(
+      @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.interrupt(id, request, identity))
+        .map(ResponseEntity::ok);
+  }
+
   @PostMapping("/admin/approvals/{id}/approve")
   @AdminAccess
   public Mono<ResponseEntity<ApprovalDetail>> approve(
@@ -95,6 +122,15 @@ public class ApprovalController {
       @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
     return IdentityContext.current()
         .flatMap(identity -> service.review(id, request, false, identity))
+        .map(ResponseEntity::ok);
+  }
+
+  @PutMapping("/admin/approvals/{id}/sql-plan")
+  @AdminAccess
+  public Mono<ResponseEntity<ApprovalDetail>> updateSqlPlan(
+      @PathVariable String id, @RequestBody ApprovalSqlPlanUpdateRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.updateSqlPlan(id, request, identity))
         .map(ResponseEntity::ok);
   }
 

@@ -41,6 +41,7 @@ import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequ
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareRequest;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
+import io.github.ccweixiao.datastoria.dao.repository.UserAccountRepository;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 
 import reactor.core.publisher.Mono;
@@ -49,6 +50,152 @@ import reactor.core.scheduler.Schedulers;
 class ApprovalCommandServiceTest {
 
   private static final Identity ADMIN = new Identity("tenant", "admin", Set.of("ROLE_ADMIN"));
+
+  @Test
+  void administratorCanApproveOwnSubmittedRequest() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "admin", 3);
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(submitted));
+    when(repository.transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.APPROVED),
+            eq("admin"),
+            eq("admin"),
+            eq("approved"),
+            any()))
+        .thenReturn(true);
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    service
+        .review("request", new ApprovalTransitionRequest(3, null, "approved"), true, ADMIN)
+        .block();
+
+    verify(repository)
+        .transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.APPROVED),
+            eq("admin"),
+            eq("admin"),
+            eq("approved"),
+            any());
+  }
+
+  @Test
+  void approvalListUsesDatabasePaginationWithoutAResultCap() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    when(repository.countRequests(
+            eq("tenant"), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null)))
+        .thenReturn(250L);
+    when(repository.findRequests(
+            eq("tenant"),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(20),
+            eq(10)))
+        .thenReturn(List.of(detail().request()));
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    var page = service.list(null, null, null, null, null, null, 3, 10, ADMIN).block();
+
+    assertThat(page).isNotNull();
+    assertThat(page.total()).isEqualTo(250);
+    assertThat(page.page()).isEqualTo(3);
+    assertThat(page.items()).hasSize(1);
+    verify(repository)
+        .findRequests(
+            eq("tenant"),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(null),
+            eq(20),
+            eq(10));
+  }
+
+  @Test
+  void applicantCanInterruptOwnSubmittedRequest() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "admin", 3);
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(submitted));
+    when(repository.transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.CANCELLED),
+            eq(null),
+            eq(null),
+            eq(null),
+            any()))
+        .thenReturn(true);
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    service.interrupt("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
+
+    verify(repository)
+        .transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.CANCELLED),
+            eq(null),
+            eq(null),
+            eq(null),
+            any());
+  }
+
+  @Test
+  void administratorCannotInterruptAnotherApplicantsRequest() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(detail(ApprovalStatus.SUBMITTED, "another-user", 3)));
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    assertThatThrownBy(
+            () ->
+                service
+                    .interrupt("request", new ApprovalTransitionRequest(3, null, null), ADMIN)
+                    .block())
+        .hasMessageContaining("ApprovalRequest");
+
+    verify(repository, never())
+        .transition(anyString(), anyString(), anyLong(), any(), any(), any(), any(), any(), any());
+  }
 
   @Test
   void manualExecutionRunsFrozenItemsSequentiallyAndFinishesRequest() {
@@ -75,6 +222,7 @@ class ApprovalCommandServiceTest {
     ApprovalCommandService service =
         new ApprovalCommandService(
             repository,
+            userAccounts(),
             mock(DdlWorkOrderTypeCatalog.class),
             compiler,
             mock(DdlSchemaInspector.class),
@@ -174,6 +322,7 @@ class ApprovalCommandServiceTest {
 
     assertThat(replay.draftId()).isEqualTo(first.draftId());
     assertThat(replay.submittable()).isTrue();
+    assertThat(saved.get().request().applicantDisplayName()).isEqualTo("Administrator");
     verify(repository, times(1)).createDraft(any(), any(), anyString(), any());
 
     when(repository.findDetail("tenant", first.draftId()))
@@ -201,6 +350,7 @@ class ApprovalCommandServiceTest {
       ClickHouseConnectionService connections) {
     return new ApprovalCommandService(
         repository,
+        userAccounts(),
         catalog,
         compiler,
         mock(DdlSchemaInspector.class),
@@ -209,13 +359,30 @@ class ApprovalCommandServiceTest {
         Schedulers.immediate());
   }
 
+  private static UserAccountRepository userAccounts() {
+    UserAccountRepository users = mock(UserAccountRepository.class);
+    var account = mock(io.github.ccweixiao.datastoria.common.domain.UserAccount.class);
+    when(account.username()).thenReturn("Administrator");
+    when(users.findByTenantIdAndUserId("tenant", "admin")).thenReturn(Optional.of(account));
+    return users;
+  }
+
   private static ApprovalDetail detail() {
+    return detail(ApprovalStatus.APPROVED, "applicant", 3);
+  }
+
+  private static ApprovalDetail detail(
+      ApprovalStatus status, String applicantUserId, long revision) {
     Instant now = Instant.now();
     String content =
         """
         {"workOrderTypeKey":"CLICKHOUSE_CREATE_TABLE","generationRuleChecksum":"checksum",\
         "generatorKey":"test-generator","generationRule":{},"intent":{}}
         """;
+    String canonicalContent =
+        "{\"generationRule\":{},\"generationRuleChecksum\":\"checksum\","
+            + "\"generatorKey\":\"test-generator\",\"intent\":{},"
+            + "\"workOrderTypeKey\":\"CLICKHOUSE_CREATE_TABLE\"}";
     ApprovalRequest request =
         new ApprovalRequest(
             "request",
@@ -226,22 +393,22 @@ class ApprovalCommandServiceTest {
             "checksum",
             "Title",
             null,
-            "applicant",
+            applicantUserId,
             "Applicant",
             null,
             null,
             "connection",
             "Cluster",
-            ApprovalStatus.APPROVED,
+            status,
             content,
             1,
-            digest(content),
+            digest(canonicalContent),
             "MANUAL_TRIGGER",
             0,
             "reviewer",
             "Reviewer",
             null,
-            3,
+            revision,
             now,
             now,
             now,

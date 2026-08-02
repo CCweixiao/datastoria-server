@@ -248,23 +248,167 @@ public class JdbcApprovalRepository implements ApprovalRepository {
 
   @Override
   public List<ApprovalRequest> findRequests(
-      String tenantId, String applicantUserId, ApprovalStatus status, int limit) {
+      String tenantId,
+      String visibleApplicantUserId,
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo,
+      int offset,
+      int limit) {
     MapSqlParameterSource parameters =
-        new MapSqlParameterSource()
-            .addValue("tenantId", tenantId)
-            .addValue("applicantUserId", applicantUserId)
-            .addValue("status", status == null ? null : status.name())
-            .addValue("limit", Math.max(1, Math.min(limit, 200)));
+        requestSearchParameters(
+                tenantId,
+                visibleApplicantUserId,
+                statuses,
+                workOrderTypeKey,
+                applicant,
+                keyword,
+                createdFrom,
+                createdTo)
+            .addValue("offset", Math.max(0, offset))
+            .addValue("limit", Math.max(1, Math.min(limit, 100)));
     return jdbc.query(
         """
         SELECT * FROM ds_approval_request
         WHERE tenant_id = :tenantId AND deleted_at IS NULL
-          AND (:applicantUserId IS NULL OR applicant_user_id = :applicantUserId)
-          AND (:status IS NULL OR status = :status)
-        ORDER BY updated_at DESC, id DESC LIMIT :limit
+          AND (:visibleApplicantUserId IS NULL OR applicant_user_id = :visibleApplicantUserId)
+          AND (:statusesEmpty = 1 OR status IN (:statuses))
+          AND (:workOrderTypeKey IS NULL OR work_order_type_key = :workOrderTypeKey)
+          AND (:applicantContains IS NULL OR applicant_user_id LIKE :applicantContains
+            OR applicant_display_name LIKE :applicantContains)
+          AND (:keywordContains IS NULL OR request_no LIKE :keywordContains
+            OR title LIKE :keywordContains OR summary LIKE :keywordContains
+            OR connection_name LIKE :keywordContains
+            OR applicant_user_id LIKE :keywordContains
+            OR applicant_display_name LIKE :keywordContains)
+          AND (:createdFrom IS NULL OR created_at >= :createdFrom)
+          AND (:createdTo IS NULL OR created_at <= :createdTo)
+        ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset
         """,
         parameters,
         JdbcApprovalRepository::mapRequest);
+  }
+
+  @Override
+  public long countRequests(
+      String tenantId,
+      String visibleApplicantUserId,
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo) {
+    Long total =
+        jdbc.queryForObject(
+            """
+            SELECT COUNT(*) FROM ds_approval_request
+            WHERE tenant_id = :tenantId AND deleted_at IS NULL
+              AND (:visibleApplicantUserId IS NULL OR applicant_user_id = :visibleApplicantUserId)
+              AND (:statusesEmpty = 1 OR status IN (:statuses))
+              AND (:workOrderTypeKey IS NULL OR work_order_type_key = :workOrderTypeKey)
+              AND (:applicantContains IS NULL OR applicant_user_id LIKE :applicantContains
+                OR applicant_display_name LIKE :applicantContains)
+              AND (:keywordContains IS NULL OR request_no LIKE :keywordContains
+                OR title LIKE :keywordContains OR summary LIKE :keywordContains
+                OR connection_name LIKE :keywordContains
+                OR applicant_user_id LIKE :keywordContains
+                OR applicant_display_name LIKE :keywordContains)
+              AND (:createdFrom IS NULL OR created_at >= :createdFrom)
+              AND (:createdTo IS NULL OR created_at <= :createdTo)
+            """,
+            requestSearchParameters(
+                tenantId,
+                visibleApplicantUserId,
+                statuses,
+                workOrderTypeKey,
+                applicant,
+                keyword,
+                createdFrom,
+                createdTo),
+            Long.class);
+    return total == null ? 0 : total;
+  }
+
+  private static MapSqlParameterSource requestSearchParameters(
+      String tenantId,
+      String visibleApplicantUserId,
+      List<ApprovalStatus> statuses,
+      String workOrderTypeKey,
+      String applicant,
+      String keyword,
+      Instant createdFrom,
+      Instant createdTo) {
+    return new MapSqlParameterSource()
+        .addValue("tenantId", tenantId)
+        .addValue("visibleApplicantUserId", visibleApplicantUserId)
+        .addValue("statusesEmpty", statuses == null || statuses.isEmpty() ? 1 : 0)
+        .addValue(
+            "statuses",
+            statuses == null || statuses.isEmpty()
+                ? List.of("__ALL__")
+                : statuses.stream().map(Enum::name).toList())
+        .addValue("workOrderTypeKey", blankToNull(workOrderTypeKey))
+        .addValue("applicantContains", containsPattern(applicant))
+        .addValue("keywordContains", containsPattern(keyword))
+        .addValue("createdFrom", createdFrom == null ? null : timestamp(createdFrom))
+        .addValue("createdTo", createdTo == null ? null : timestamp(createdTo));
+  }
+
+  private static String containsPattern(String value) {
+    String normalized = blankToNull(value);
+    return normalized == null ? null : "%" + normalized + "%";
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
+  }
+
+  @Override
+  @Transactional
+  public boolean updateSqlPlan(
+      ApprovalRequest request,
+      long expectedRevision,
+      ApprovalStatus expectedStatus,
+      List<ApprovalItem> items,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET content_json = :contentJson, content_version = content_version + 1,
+              content_digest = :contentDigest, status = 'DRAFT', submitted_at = NULL,
+              reviewer_user_id = NULL, reviewer_display_name = NULL, review_comment = NULL,
+              revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :id AND revision = :expectedRevision
+              AND status = :expectedStatus AND deleted_at IS NULL
+            """,
+            requestParameters(request)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("expectedStatus", expectedStatus.name())
+                .addValue("now", timestamp(now)));
+    if (affected != 1) return false;
+    for (ApprovalItem item : items) {
+      jdbc.update(
+          """
+          UPDATE ds_approval_item
+          SET sql_text = :sqlText, normalized_sql_digest = :normalizedSqlDigest
+          WHERE tenant_id = :tenantId AND request_id = :requestId AND id = :id
+          """,
+          new MapSqlParameterSource()
+              .addValue("sqlText", item.sqlText())
+              .addValue("normalizedSqlDigest", item.normalizedSqlDigest())
+              .addValue("tenantId", item.tenantId())
+              .addValue("requestId", item.requestId())
+              .addValue("id", item.id()));
+    }
+    releaseResourceClaims(request.tenantId(), request.id(), now);
+    insertEvent(event);
+    return true;
   }
 
   @Override

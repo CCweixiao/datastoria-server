@@ -1,17 +1,43 @@
 "use client";
 
-import { DdlWorkOrderDialog } from "@/components/approval/ddl-work-order-dialog";
 import { useAuthSession } from "@/components/auth-session-provider";
 import { useChatPanel } from "@/components/chat/view/use-chat-panel";
 import { useConnection } from "@/components/connection/connection-context";
+import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
 import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -22,6 +48,7 @@ import {
   listApprovalTypeDefinitions,
   listApprovalTypes,
   transitionApproval,
+  updateApprovalSqlPlan,
   updateApprovalTypeDefinition,
   type ApprovalDetail,
   type ApprovalExecution,
@@ -31,22 +58,34 @@ import {
   type ApprovalType,
   type ApprovalTypeDefinition,
 } from "@/lib/approval-client";
+import { SqlUtils } from "@/lib/sql-utils";
 import {
   AlertCircle,
+  ArrowLeft,
+  CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleStop,
   ClipboardCheck,
   Clock3,
-  FilePlus2,
+  Code2,
+  Pencil,
   Play,
   RefreshCw,
+  RotateCcw,
+  Save,
+  Search,
   Send,
   Sparkles,
+  X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import type { DateRange } from "react-day-picker";
 
-const STATUS_FILTERS: Array<ApprovalStatus | "ALL"> = [
-  "ALL",
+const STATUS_FILTERS: ApprovalStatus[] = [
   "DRAFT",
   "SUBMITTED",
   "APPROVED",
@@ -54,7 +93,231 @@ const STATUS_FILTERS: Array<ApprovalStatus | "ALL"> = [
   "SUCCEEDED",
   "FAILED",
   "REJECTED",
+  "CANCELLED",
 ];
+
+const PAGE_SIZE = 10;
+const APPROVAL_TABLE_HEAD_CLASS =
+  "sticky top-0 z-20 h-11 whitespace-nowrap border-b bg-muted px-4 text-xs font-semibold text-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]";
+
+type FilterOption = { value: string; label: string };
+
+function ClearFilterButton({
+  label,
+  onClear,
+  className = "right-1",
+}: {
+  label: string;
+  onClear: () => void;
+  className?: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      className={`absolute top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full text-muted-foreground hover:text-foreground ${className}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClear();
+      }}
+    >
+      <X className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onValueChange,
+  clearLabel,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onValueChange: (value: string) => void;
+  clearLabel: string;
+}) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? value;
+  return (
+    <div className="relative min-w-0">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className={`relative h-9 w-full justify-start bg-background pl-3 font-normal text-foreground hover:bg-accent hover:text-accent-foreground ${value !== "ALL" ? "pr-16" : "pr-10"}`}
+            aria-label={label}
+          >
+            <span className="truncate">{selectedLabel}</span>
+            <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="z-[100] w-[var(--radix-dropdown-menu-trigger-width)] border-border bg-popover text-popover-foreground shadow-lg"
+        >
+          <DropdownMenuRadioGroup value={value} onValueChange={onValueChange}>
+            {options.map((option) => (
+              <DropdownMenuRadioItem
+                key={option.value}
+                value={option.value}
+                className="cursor-pointer focus:bg-accent focus:text-accent-foreground"
+              >
+                {option.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {value !== "ALL" ? (
+        <ClearFilterButton
+          label={clearLabel}
+          onClear={() => onValueChange("ALL")}
+          className="right-8"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function StatusMultiSelect({
+  values,
+  onValuesChange,
+  label,
+  allLabel,
+  clearLabel,
+  t,
+}: {
+  values: ApprovalStatus[];
+  onValuesChange: (values: ApprovalStatus[]) => void;
+  label: string;
+  allLabel: string;
+  clearLabel: string;
+  t: (key: `approval.status.${ApprovalStatus}`) => string;
+}) {
+  const summary =
+    values.length === 0
+      ? allLabel
+      : values.length === 1
+        ? t(`approval.status.${values[0]}`)
+        : `${t(`approval.status.${values[0]}`)} +${values.length - 1}`;
+
+  return (
+    <div className="relative min-w-0">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={label}
+            className={`relative h-9 w-full justify-start bg-background pl-3 font-normal ${values.length > 0 ? "pr-16" : "pr-10"}`}
+          >
+            <span className="truncate">{summary}</span>
+            <ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+          <DropdownMenuCheckboxItem
+            checked={values.length === 0}
+            onCheckedChange={() => onValuesChange([])}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {allLabel}
+          </DropdownMenuCheckboxItem>
+          {STATUS_FILTERS.map((status) => (
+            <DropdownMenuCheckboxItem
+              key={status}
+              checked={values.includes(status)}
+              onCheckedChange={(checked) =>
+                onValuesChange(
+                  checked ? [...values, status] : values.filter((current) => current !== status)
+                )
+              }
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t(`approval.status.${status}`)}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {values.length > 0 ? (
+        <ClearFilterButton
+          label={clearLabel}
+          onClear={() => onValuesChange([])}
+          className="right-8"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DateRangeFilter({
+  value,
+  onChange,
+  label,
+  placeholder,
+  locale,
+  clearLabel,
+}: {
+  value: DateRange | undefined;
+  onChange: (value: DateRange | undefined) => void;
+  label: string;
+  placeholder: string;
+  locale: string;
+  clearLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }),
+    [locale]
+  );
+  const summary = value?.from
+    ? value.to
+      ? `${dateFormatter.format(value.from)} — ${dateFormatter.format(value.to)}`
+      : dateFormatter.format(value.from)
+    : placeholder;
+
+  return (
+    <div className="relative min-w-0">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={label}
+            className="h-9 w-full justify-start bg-background px-3 pr-10 font-normal"
+          >
+            <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className={value?.from ? "truncate" : "truncate text-muted-foreground"}>
+              {summary}
+            </span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto p-0">
+          <Calendar
+            initialFocus
+            mode="range"
+            min={0}
+            defaultMonth={value?.from}
+            selected={value}
+            disabled={value?.from && !value.to ? { before: value.from } : undefined}
+            onSelect={(nextValue) => {
+              onChange(nextValue);
+              if (nextValue?.from && nextValue.to) setOpen(false);
+            }}
+            numberOfMonths={2}
+          />
+        </PopoverContent>
+      </Popover>
+      {value?.from ? (
+        <ClearFilterButton label={clearLabel} onClear={() => onChange(undefined)} />
+      ) : null}
+    </div>
+  );
+}
 
 function localizedJson(value: string): string {
   try {
@@ -76,57 +339,132 @@ function i18nValue(value: string, language: "en" | "zh-CN"): string {
 
 function StatusIcon({ status }: { status: ApprovalStatus }) {
   if (status === "SUCCEEDED") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  if (status === "FAILED" || status === "REJECTED")
+  if (status === "FAILED" || status === "REJECTED" || status === "CANCELLED")
     return <XCircle className="h-4 w-4 text-destructive" />;
   if (status === "RUNNING") return <RefreshCw className="h-4 w-4 animate-spin text-primary" />;
   return <Clock3 className="h-4 w-4 text-muted-foreground" />;
 }
 
 export function ApprovalCenterTab() {
-  const { t } = useUiPreferences();
+  const { locale, t } = useUiPreferences();
   const { user } = useAuthSession();
   const { connection } = useConnection();
   const { setDisplayMode } = useChatPanel();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+  const [requestTotal, setRequestTotal] = useState(0);
   const [types, setTypes] = useState<ApprovalType[]>([]);
   const [definitions, setDefinitions] = useState<ApprovalTypeDefinition[]>([]);
   const [selected, setSelected] = useState<ApprovalDetail | null>(null);
-  const [status, setStatus] = useState<ApprovalStatus | "ALL">("ALL");
+  const [statuses, setStatuses] = useState<ApprovalStatus[]>([]);
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [keyword, setKeyword] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange>();
+  const [page, setPage] = useState(1);
+  const deferredKeyword = useDeferredValue(keyword.trim());
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const isAdmin = user?.role === "ADMIN";
+  const createdFrom = dateRange?.from
+    ? new Date(
+        dateRange.from.getFullYear(),
+        dateRange.from.getMonth(),
+        dateRange.from.getDate()
+      ).toISOString()
+    : undefined;
+  const createdTo = dateRange?.to
+    ? new Date(
+        dateRange.to.getFullYear(),
+        dateRange.to.getMonth(),
+        dateRange.to.getDate(),
+        23,
+        59,
+        59,
+        999
+      ).toISOString()
+    : undefined;
 
   const reload = useCallback(async () => {
     if (!connection) return;
     setLoading(true);
     setError(null);
     try {
-      const [nextRequests, nextTypes, nextDefinitions] = await Promise.all([
-        listApprovals(status === "ALL" ? undefined : status),
-        listApprovalTypes(connection.connectionId),
-        isAdmin ? listApprovalTypeDefinitions() : Promise.resolve([]),
-      ]);
-      setRequests(nextRequests);
-      setTypes(nextTypes);
-      setDefinitions(nextDefinitions);
+      const nextPage = await listApprovals({
+        statuses: statuses.length === 0 ? undefined : statuses,
+        workOrderTypeKey: typeFilter === "ALL" ? undefined : typeFilter,
+        keyword: deferredKeyword || undefined,
+        createdFrom,
+        createdTo,
+        page,
+        pageSize: PAGE_SIZE,
+      });
+      setRequests(nextPage.items);
+      setRequestTotal(nextPage.total);
       if (selected) setSelected(await getApproval(selected.request.id));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("approval.error.load"));
     } finally {
       setLoading(false);
     }
-  }, [connection, isAdmin, selected?.request.id, status, t]);
+  }, [
+    connection,
+    createdFrom,
+    createdTo,
+    deferredKeyword,
+    page,
+    selected?.request.id,
+    statuses,
+    t,
+    typeFilter,
+  ]);
 
   useEffect(() => {
-    void reload();
-  }, [connection?.connectionId, status]);
+    const timer = window.setTimeout(() => void reload(), 250);
+    return () => window.clearTimeout(timer);
+  }, [reload]);
+
+  useEffect(() => {
+    if (!connection) return;
+    let cancelled = false;
+    void Promise.all([
+      listApprovalTypes(connection.connectionId),
+      isAdmin ? listApprovalTypeDefinitions() : Promise.resolve([]),
+    ])
+      .then(([nextTypes, nextDefinitions]) => {
+        if (!cancelled) {
+          setTypes(nextTypes);
+          setDefinitions(nextDefinitions);
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled)
+          setError(caught instanceof Error ? caught.message : t("approval.error.load"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection?.connectionId, isAdmin, t]);
 
   const typeNames = useMemo(
     () => new Map(types.map((type) => [type.typeKey, localizedJson(type.nameI18nJson)])),
     [types]
   );
+  const typeFilterOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "ALL", label: t("approval.filter.allTypes") },
+      ...types.map((type) => ({
+        value: type.typeKey,
+        label: typeNames.get(type.typeKey) ?? type.typeKey,
+      })),
+    ],
+    [t, typeNames, types]
+  );
+
+  const pageCount = Math.max(1, Math.ceil(requestTotal / PAGE_SIZE));
+  const pageRequests = requests;
+
+  useEffect(() => setPage(1), [statuses, typeFilter, keyword, createdFrom, createdTo]);
+  useEffect(() => setPage((current) => Math.min(current, pageCount)), [pageCount]);
 
   const openDetail = useCallback(
     async (id: string) => {
@@ -141,7 +479,10 @@ export function ApprovalCenterTab() {
   );
 
   const act = useCallback(
-    async (action: "submit" | "approve" | "reject" | "execute" | "close", comment?: string) => {
+    async (
+      action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
+      comment?: string
+    ) => {
       if (!selected) return;
       setActing(true);
       setError(null);
@@ -152,15 +493,37 @@ export function ApprovalCenterTab() {
           comment,
         });
         setSelected(next);
-        const nextRequests = await listApprovals(status === "ALL" ? undefined : status);
-        setRequests(nextRequests);
+        await reload();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : t("approval.error.action"));
       } finally {
         setActing(false);
       }
     },
-    [selected, status, t]
+    [reload, selected, t]
+  );
+
+  const saveSqlPlan = useCallback(
+    async (items: Array<{ id: string; sqlText: string }>) => {
+      if (!selected) return false;
+      setActing(true);
+      setError(null);
+      try {
+        const next = await updateApprovalSqlPlan(selected.request.id, {
+          revision: selected.request.revision,
+          items,
+        });
+        setSelected(next);
+        await reload();
+        return true;
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : t("approval.error.action"));
+        return false;
+      } finally {
+        setActing(false);
+      }
+    },
+    [reload, selected, t]
   );
 
   if (!connection) {
@@ -172,7 +535,7 @@ export function ApprovalCenterTab() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-muted/10">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-muted/10">
       <div className="flex items-center justify-between border-b bg-background px-5 py-3">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -185,10 +548,6 @@ export function ApprovalCenterTab() {
           <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             {t("approval.refresh")}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-            <FilePlus2 className="mr-2 h-4 w-4" />
-            {t("approval.create.new")}
           </Button>
           <Button size="sm" onClick={() => setDisplayMode("tabWidth")}>
             <Sparkles className="mr-2 h-4 w-4" />
@@ -204,113 +563,460 @@ export function ApprovalCenterTab() {
         </div>
       )}
 
-      <Tabs defaultValue="orders" className="flex min-h-0 flex-1 flex-col px-5 pt-3">
+      <Tabs defaultValue="orders" className="flex min-h-0 min-w-0 flex-1 flex-col px-5 pt-3">
         <TabsList className="w-fit">
           <TabsTrigger value="orders">{t("approval.orders")}</TabsTrigger>
           {isAdmin && <TabsTrigger value="types">{t("approval.types")}</TabsTrigger>}
         </TabsList>
-        <TabsContent value="orders" className="mt-3 min-h-0 flex-1">
-          <div className="grid h-full min-h-0 grid-cols-[minmax(320px,0.9fr)_minmax(440px,1.4fr)] gap-3">
-            <Card className="min-h-0 overflow-hidden">
-              <CardHeader className="space-y-3 pb-3">
-                <CardTitle className="text-sm">{t("approval.list")}</CardTitle>
-                <div className="flex flex-wrap gap-1">
-                  {STATUS_FILTERS.map((value) => (
-                    <Button
-                      key={value}
-                      size="sm"
-                      variant={status === value ? "secondary" : "ghost"}
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setStatus(value)}
-                    >
-                      {t(`approval.status.${value}`)}
-                    </Button>
-                  ))}
-                </div>
-              </CardHeader>
-              <CardContent className="h-[calc(100%-96px)] p-0">
-                <ScrollArea className="h-full">
-                  {loading ? (
-                    <p className="p-5 text-sm text-muted-foreground">{t("approval.loading")}</p>
-                  ) : requests.length === 0 ? (
-                    <p className="p-5 text-sm text-muted-foreground">{t("approval.empty")}</p>
-                  ) : (
-                    requests.map((request) => (
-                      <button
-                        key={request.id}
-                        type="button"
-                        onClick={() => void openDetail(request.id)}
-                        className={`w-full border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 ${selected?.request.id === request.id ? "bg-primary/5" : ""}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="truncate text-sm font-medium">{request.title}</span>
-                          <Badge variant="outline" className="shrink-0 gap-1">
-                            <StatusIcon status={request.status} />
-                            {t(`approval.status.${request.status}`)}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>
-                            {typeNames.get(request.workOrderTypeKey) ?? request.workOrderTypeKey}
-                          </span>
-                          <span>{request.requestNo}</span>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </ScrollArea>
-              </CardContent>
-            </Card>
+        <TabsContent value="orders" className="mt-3 min-h-0 min-w-0 flex-1 overflow-hidden">
+          {selected ? (
             <ApprovalDetailPanel
               detail={selected}
               isAdmin={isAdmin}
+              currentUserId={user?.id}
               acting={acting}
-              typeName={selected ? typeNames.get(selected.request.workOrderTypeKey) : undefined}
+              typeName={typeNames.get(selected.request.workOrderTypeKey)}
+              onBack={() => setSelected(null)}
               onAction={act}
+              onSaveSql={saveSqlPlan}
             />
-          </div>
+          ) : (
+            <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+              <CardHeader className="space-y-4 border-b pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">{t("approval.list")}</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {t("approval.list.total").replace("{count}", String(requestTotal))}
+                  </span>
+                </div>
+                <div className="grid gap-2 lg:grid-cols-[1.7fr_1fr_1fr_1.5fr_auto]">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-8 pr-9"
+                      value={keyword}
+                      onChange={(e) => setKeyword(e.target.value)}
+                      placeholder={t("approval.filter.keyword")}
+                    />
+                    {keyword ? (
+                      <ClearFilterButton
+                        label={t("approval.filter.clearKeyword")}
+                        onClear={() => setKeyword("")}
+                      />
+                    ) : null}
+                  </div>
+                  <FilterSelect
+                    label={t("approval.filter.type")}
+                    value={typeFilter}
+                    options={typeFilterOptions}
+                    onValueChange={setTypeFilter}
+                    clearLabel={t("approval.filter.clearType")}
+                  />
+                  <StatusMultiSelect
+                    values={statuses}
+                    onValuesChange={setStatuses}
+                    label={t("approval.filter.status")}
+                    allLabel={t("approval.filter.allStatuses")}
+                    clearLabel={t("approval.filter.clearStatus")}
+                    t={t}
+                  />
+                  <DateRangeFilter
+                    value={dateRange}
+                    onChange={setDateRange}
+                    label={t("approval.filter.dateRange")}
+                    placeholder={t("approval.filter.dateRange.placeholder")}
+                    locale={locale}
+                    clearLabel={t("approval.filter.clearDateRange")}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setKeyword("");
+                      setTypeFilter("ALL");
+                      setDateRange(undefined);
+                      setStatuses([]);
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    {t("approval.filter.reset")}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-auto p-0">
+                <Table containerClassName="overflow-visible" className="min-w-[1560px] table-fixed">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[300px]`}>
+                        {t("approval.column.id")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[340px]`}>
+                        {t("approval.column.title")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[160px]`}>
+                        {t("approval.column.type")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[220px]`}>
+                        {t("approval.column.applicant")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[140px]`}>
+                        {t("approval.column.status")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[200px]`}>
+                        {t("approval.column.createdAt")}
+                      </TableHead>
+                      <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[200px]`}>
+                        {t("approval.column.updatedAt")}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                          {t("approval.loading")}
+                        </TableCell>
+                      </TableRow>
+                    ) : pageRequests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                          {t("approval.empty")}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pageRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell>
+                            <button
+                              className="break-all text-left font-mono text-xs font-medium text-primary hover:underline"
+                              onClick={() => void openDetail(request.id)}
+                            >
+                              {request.requestNo}
+                            </button>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <div className="max-w-72">
+                              <div className="truncate font-medium">{request.title}</div>
+                              {request.summary ? (
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {request.summary}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-0 overflow-hidden">
+                            <span
+                              className="block max-w-full truncate"
+                              title={
+                                typeNames.get(request.workOrderTypeKey) ?? request.workOrderTypeKey
+                              }
+                            >
+                              {typeNames.get(request.workOrderTypeKey) ?? request.workOrderTypeKey}
+                            </span>
+                          </TableCell>
+                          <TableCell className="max-w-0 overflow-hidden">
+                            <span
+                              className="block max-w-full truncate"
+                              title={request.applicantDisplayName ?? request.applicantUserId}
+                            >
+                              {request.applicantDisplayName ?? request.applicantUserId}
+                            </span>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <Badge variant="outline" className="gap-1">
+                              <StatusIcon status={request.status} />
+                              {t(`approval.status.${request.status}`)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {new Date(request.createdAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {new Date(request.updatedAt).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+              <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+                <span>
+                  {t("approval.pagination.range")
+                    .replace("{from}", String(requestTotal ? (page - 1) * PAGE_SIZE + 1 : 0))
+                    .replace("{to}", String(Math.min(page * PAGE_SIZE, requestTotal)))
+                    .replace("{total}", String(requestTotal))}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={page <= 1}
+                    onClick={() => setPage((v) => v - 1)}
+                    aria-label={t("approval.pagination.previous")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span>
+                    {page} / {pageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={page >= pageCount}
+                    onClick={() => setPage((v) => v + 1)}
+                    aria-label={t("approval.pagination.next")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
         </TabsContent>
         {isAdmin && (
-          <TabsContent value="types" className="mt-3 min-h-0 flex-1">
-            <ScrollArea className="h-full">
-              <div className="grid gap-3 pb-5 md:grid-cols-2">
-                {definitions.map((definition) => (
-                  <TypeDefinitionEditor
-                    key={definition.typeKey}
-                    definition={definition}
-                    onSaved={(updated) =>
-                      setDefinitions((current) =>
-                        current.map((item) => (item.typeKey === updated.typeKey ? updated : item))
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </ScrollArea>
+          <TabsContent value="types" className="mt-3 min-h-0 min-w-0 flex-1 overflow-hidden">
+            <TypeDefinitionsManager
+              definitions={definitions}
+              onSaved={(updated) =>
+                setDefinitions((current) =>
+                  current.map((item) => (item.typeKey === updated.typeKey ? updated : item))
+                )
+              }
+            />
           </TabsContent>
         )}
       </Tabs>
-      <DdlWorkOrderDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        connectionId={connection.connectionId}
-        cluster={connection.cluster ?? undefined}
-        types={types}
-        onCreated={(requestId) => {
-          void reload();
-          void openDetail(requestId);
-        }}
-      />
     </div>
+  );
+}
+
+const TYPE_PAGE_SIZE = 8;
+
+function TypeDefinitionsManager({
+  definitions,
+  onSaved,
+}: {
+  definitions: ApprovalTypeDefinition[];
+  onSaved: (definition: ApprovalTypeDefinition) => void;
+}) {
+  const { t } = useUiPreferences();
+  const [keyword, setKeyword] = useState("");
+  const [status, setStatus] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState<ApprovalTypeDefinition | null>(null);
+  const deferredKeyword = useDeferredValue(keyword.trim().toLocaleLowerCase());
+  const statusOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: "ALL", label: t("approval.type.filter.allStatuses") },
+      { value: "ENABLED", label: t("approval.type.enabled") },
+      { value: "DISABLED", label: t("approval.type.disabled") },
+    ],
+    [t]
+  );
+  const filtered = useMemo(
+    () =>
+      definitions.filter((definition) => {
+        if (status !== "ALL" && definition.status !== status) return false;
+        if (!deferredKeyword) return true;
+        const searchable = [
+          definition.typeKey,
+          definition.generatorKey,
+          localizedJson(definition.nameI18nJson),
+          i18nValue(definition.nameI18nJson, "en"),
+          i18nValue(definition.nameI18nJson, "zh-CN"),
+        ]
+          .join(" ")
+          .toLocaleLowerCase();
+        return searchable.includes(deferredKeyword);
+      }),
+    [definitions, deferredKeyword, status]
+  );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / TYPE_PAGE_SIZE));
+  const pageItems = filtered.slice((page - 1) * TYPE_PAGE_SIZE, page * TYPE_PAGE_SIZE);
+
+  useEffect(() => setPage(1), [deferredKeyword, status]);
+  useEffect(() => setPage((current) => Math.min(current, pageCount)), [pageCount]);
+
+  return (
+    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+      <CardHeader className="space-y-3 border-b pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">{t("approval.type.list")}</CardTitle>
+          <span className="text-xs text-muted-foreground">
+            {t("approval.type.total").replace("{count}", String(filtered.length))}
+          </span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(260px,1fr)_220px]">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8 pr-9"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder={t("approval.type.filter.keyword")}
+            />
+            {keyword ? (
+              <ClearFilterButton
+                label={t("approval.type.filter.clearKeyword")}
+                onClear={() => setKeyword("")}
+              />
+            ) : null}
+          </div>
+          <FilterSelect
+            label={t("approval.type.filter.status")}
+            value={status}
+            options={statusOptions}
+            onValueChange={setStatus}
+            clearLabel={t("approval.type.filter.clearStatus")}
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="min-h-0 flex-1 overflow-auto p-0">
+        <Table containerClassName="overflow-visible" className="min-w-[900px] table-fixed">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[190px]`}>
+                {t("approval.type.column.name")}
+              </TableHead>
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[220px]`}>
+                {t("approval.type.column.key")}
+              </TableHead>
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[200px]`}>
+                {t("approval.type.column.generator")}
+              </TableHead>
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[100px]`}>
+                {t("approval.type.column.status")}
+              </TableHead>
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[70px]`}>
+                {t("approval.revision")}
+              </TableHead>
+              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[100px] text-right`}>
+                {t("approval.type.column.actions")}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pageItems.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
+                  {t("approval.type.empty")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              pageItems.map((definition) => (
+                <TableRow key={definition.typeKey}>
+                  <TableCell className="max-w-0 overflow-hidden">
+                    <div
+                      className="truncate font-medium"
+                      title={localizedJson(definition.nameI18nJson)}
+                    >
+                      {localizedJson(definition.nameI18nJson)}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {i18nValue(definition.descriptionI18nJson, "zh-CN")}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-0 overflow-hidden font-mono text-xs">
+                    <span className="block truncate" title={definition.typeKey}>
+                      {definition.typeKey}
+                    </span>
+                  </TableCell>
+                  <TableCell className="max-w-0 overflow-hidden font-mono text-xs">
+                    <span className="block truncate" title={definition.generatorKey}>
+                      {definition.generatorKey}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={definition.status === "ENABLED" ? "outline" : "secondary"}>
+                      {definition.status === "ENABLED"
+                        ? t("approval.type.enabled")
+                        : t("approval.type.disabled")}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground">
+                    {definition.definitionRevision}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="sm" onClick={() => setEditing(definition)}>
+                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                      {t("approval.type.edit")}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+      <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+        <span>
+          {t("approval.pagination.range")
+            .replace("{from}", String(filtered.length ? (page - 1) * TYPE_PAGE_SIZE + 1 : 0))
+            .replace("{to}", String(Math.min(page * TYPE_PAGE_SIZE, filtered.length)))
+            .replace("{total}", String(filtered.length))}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => current - 1)}
+            aria-label={t("approval.pagination.previous")}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span>
+            {page} / {pageCount}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={page >= pageCount}
+            onClick={() => setPage((current) => current + 1)}
+            aria-label={t("approval.pagination.next")}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        {editing ? (
+          <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("approval.type.editTitle")}</DialogTitle>
+              <DialogDescription>
+                {localizedJson(editing.nameI18nJson)} · {editing.typeKey}
+              </DialogDescription>
+            </DialogHeader>
+            <TypeDefinitionEditor
+              key={`${editing.typeKey}-${editing.definitionRevision}`}
+              definition={editing}
+              onSaved={(updated) => {
+                onSaved(updated);
+                setEditing(null);
+              }}
+              onCancel={() => setEditing(null)}
+            />
+          </DialogContent>
+        ) : null}
+      </Dialog>
+    </Card>
   );
 }
 
 function TypeDefinitionEditor({
   definition,
   onSaved,
+  onCancel,
 }: {
   definition: ApprovalTypeDefinition;
   onSaved: (definition: ApprovalTypeDefinition) => void;
+  onCancel: () => void;
 }) {
   const { t } = useUiPreferences();
   const [nameEn, setNameEn] = useState(i18nValue(definition.nameI18nJson, "en"));
@@ -325,6 +1031,15 @@ function TypeDefinitionEditor({
   const [enabled, setEnabled] = useState(definition.status === "ENABLED");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const formatRules = () => {
+    try {
+      setRules(JSON.stringify(JSON.parse(rules), null, 2));
+      setError(null);
+    } catch {
+      setError(t("approval.type.rules.invalid"));
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -348,28 +1063,23 @@ function TypeDefinitionEditor({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm">{localizedJson(definition.nameI18nJson)}</CardTitle>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {definition.typeKey} · {definition.generatorKey}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor={`${definition.typeKey}-enabled`} className="text-xs">
-              {t("approval.type.enabled")}
-            </Label>
-            <Switch
-              id={`${definition.typeKey}-enabled`}
-              checked={enabled}
-              onCheckedChange={setEnabled}
-            />
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+        <div className="font-mono text-xs text-muted-foreground">
+          {definition.generatorKey} · {t("approval.revision")} {definition.definitionRevision}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Label htmlFor={`${definition.typeKey}-enabled`} className="text-xs">
+            {t("approval.type.enabled")}
+          </Label>
+          <Switch
+            id={`${definition.typeKey}-enabled`}
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
+        </div>
+      </div>
+      <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-xs">{t("approval.type.nameEn")}</Label>
@@ -397,63 +1107,89 @@ function TypeDefinitionEditor({
           </div>
         </div>
         <div>
-          <Label className="text-xs">{t("approval.type.rules")}</Label>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div>
+              <Label className="text-xs">{t("approval.type.rules")}</Label>
+              <p className="text-xs text-muted-foreground">{t("approval.type.rules.help")}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={formatRules}>
+              {t("approval.type.rules.format")}
+            </Button>
+          </div>
           <Textarea
-            className="min-h-28 font-mono text-xs"
+            className="min-h-40 font-mono text-xs leading-5"
             value={rules}
             onChange={(event) => setRules(event.target.value)}
           />
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {t("approval.revision")}: {definition.definitionRevision}
-          </span>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            {t("approval.sql.cancel")}
+          </Button>
           <Button size="sm" disabled={saving} onClick={() => void save()}>
             {saving ? t("approval.type.saving") : t("approval.type.save")}
           </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </DialogFooter>
+      </div>
+    </div>
   );
 }
 
 function ApprovalDetailPanel({
   detail,
   isAdmin,
+  currentUserId,
   acting,
   typeName,
+  onBack,
   onAction,
+  onSaveSql,
 }: {
-  detail: ApprovalDetail | null;
+  detail: ApprovalDetail;
   isAdmin: boolean;
+  currentUserId?: string;
   acting: boolean;
   typeName?: string;
+  onBack: () => void;
   onAction: (
-    action: "submit" | "approve" | "reject" | "execute" | "close",
+    action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
     comment?: string
   ) => void;
+  onSaveSql: (items: Array<{ id: string; sqlText: string }>) => Promise<boolean>;
 }) {
   const { t } = useUiPreferences();
   const [comment, setComment] = useState("");
-  if (!detail)
-    return (
-      <Card className="flex items-center justify-center text-sm text-muted-foreground">
-        {t("approval.select")}
-      </Card>
-    );
+  const [editingSql, setEditingSql] = useState(false);
+  const [editedSql, setEditedSql] = useState<Record<string, string>>({});
   const request = detail.request;
+  const canEditSql = isAdmin && (request.status === "DRAFT" || request.status === "SUBMITTED");
+  const formattedSqlById = useMemo(
+    () => new Map(detail.items.map((item) => [item.id, SqlUtils.prettyFormatQuery(item.sqlText)])),
+    [detail.items]
+  );
+  const beginEditing = () => {
+    setEditedSql(Object.fromEntries(detail.items.map((item) => [item.id, item.sqlText])));
+    setEditingSql(true);
+  };
+  const saveSql = async () => {
+    const saved = await onSaveSql(
+      detail.items.map((item) => ({ id: item.id, sqlText: editedSql[item.id] ?? item.sqlText }))
+    );
+    if (saved) setEditingSql(false);
+  };
   return (
-    <Card className="min-h-0 overflow-hidden">
-      <ScrollArea className="h-full">
-        <CardHeader className="border-b">
+    <Card className="h-full min-h-0 min-w-0 max-w-full overflow-hidden">
+      <div className="h-full min-w-0 overflow-y-auto overflow-x-hidden">
+        <CardHeader className="space-y-3 border-b bg-gradient-to-r from-primary/[0.06] via-background to-background p-4">
+          <Button variant="ghost" size="sm" className="mb-1 w-fit -ml-2" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t("approval.backToList")}
+          </Button>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>{request.title}</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {request.requestNo} · {typeName ?? request.workOrderTypeKey} ·{" "}
-                {request.connectionName}
-              </p>
+              <CardTitle className="text-xl">{request.title}</CardTitle>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{request.requestNo}</p>
             </div>
             <Badge className="gap-1" variant="outline">
               <StatusIcon status={request.status} />
@@ -461,6 +1197,21 @@ function ApprovalDetailPanel({
             </Badge>
           </div>
           {request.summary && <p className="text-sm text-muted-foreground">{request.summary}</p>}
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailMeta
+              label={t("approval.column.type")}
+              value={typeName ?? request.workOrderTypeKey}
+            />
+            <DetailMeta
+              label={t("approval.column.applicant")}
+              value={request.applicantDisplayName ?? request.applicantUserId}
+            />
+            <DetailMeta label={t("approval.detail.connection")} value={request.connectionName} />
+            <DetailMeta
+              label={t("approval.column.createdAt")}
+              value={new Date(request.createdAt).toLocaleString()}
+            />
+          </div>
           {isAdmin && (request.status === "SUBMITTED" || request.status === "FAILED") && (
             <div className="space-y-1 pt-2">
               <Label htmlFor={`approval-comment-${request.id}`} className="text-xs">
@@ -482,6 +1233,18 @@ function ApprovalDetailPanel({
                 {t("approval.submit")}
               </Button>
             )}
+            {request.applicantUserId === currentUserId &&
+              (request.status === "DRAFT" || request.status === "SUBMITTED") && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={acting}
+                  onClick={() => onAction("interrupt")}
+                >
+                  <CircleStop className="mr-2 h-4 w-4" />
+                  {t("approval.interrupt")}
+                </Button>
+              )}
             {isAdmin && request.status === "SUBMITTED" && (
               <>
                 <Button size="sm" disabled={acting} onClick={() => onAction("approve", comment)}>
@@ -518,49 +1281,160 @@ function ApprovalDetailPanel({
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-5 p-5">
+        <CardContent className="min-w-0 space-y-4 p-4">
           <section>
-            <h3 className="mb-2 text-sm font-semibold">{t("approval.sqlPlan")}</h3>
-            <div className="space-y-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <Code2 className="h-4 w-4 text-primary" />
+                  {t("approval.sqlPlan")}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("approval.sqlPlan.description")}
+                </p>
+              </div>
+              {canEditSql ? (
+                editingSql ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setEditingSql(false)}>
+                      {t("approval.sql.cancel")}
+                    </Button>
+                    <Button size="sm" disabled={acting} onClick={() => void saveSql()}>
+                      <Save className="mr-2 h-4 w-4" />
+                      {t("approval.sql.save")}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={beginEditing}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    {t("approval.sql.edit")}
+                  </Button>
+                )
+              ) : null}
+            </div>
+            {editingSql ? (
+              <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                {t("approval.sql.editNotice")}
+              </div>
+            ) : null}
+            <div className="min-w-0 space-y-3">
               {detail.items.map((item) => (
-                <div key={item.id} className="overflow-hidden rounded-md border">
-                  <div className="flex justify-between bg-muted/50 px-3 py-2 text-xs">
-                    <span>
+                <div
+                  key={item.id}
+                  className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5 text-xs">
+                    <span className="font-medium">
                       #{item.ordinal} · {item.operationKind}
                     </span>
-                    <Badge variant="secondary">{item.riskLevel}</Badge>
+                    <div className="flex items-center gap-2">
+                      {editingSql ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7"
+                          onClick={() =>
+                            setEditedSql((current) => ({
+                              ...current,
+                              [item.id]: SqlUtils.prettyFormatQuery(
+                                current[item.id] ?? item.sqlText
+                              ),
+                            }))
+                          }
+                        >
+                          {t("approval.sql.format")}
+                        </Button>
+                      ) : null}
+                      <Badge variant="secondary">{item.riskLevel}</Badge>
+                    </div>
                   </div>
-                  <pre className="overflow-x-auto whitespace-pre-wrap p-3 font-mono text-xs leading-5">
-                    {item.sqlText}
-                  </pre>
-                </div>
-              ))}
-            </div>
-          </section>
-          {isAdmin && <ExecutionHistory requestId={request.id} />}
-          <section>
-            <h3 className="mb-2 text-sm font-semibold">{t("approval.timeline")}</h3>
-            <div className="space-y-3 border-l pl-4">
-              {detail.events.map((event) => (
-                <div key={event.id}>
-                  <div className="text-sm font-medium">{event.eventType}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {event.actorDisplayName} · {new Date(event.createdAt).toLocaleString()}
-                  </div>
-                  {event.safeMessage && (
-                    <div className="text-xs text-muted-foreground">{event.safeMessage}</div>
+                  {editingSql ? (
+                    <Textarea
+                      className="min-h-52 resize-y rounded-none border-0 font-mono text-xs leading-6 focus-visible:ring-0"
+                      value={editedSql[item.id] ?? item.sqlText}
+                      onChange={(event) =>
+                        setEditedSql((current) => ({ ...current, [item.id]: event.target.value }))
+                      }
+                    />
+                  ) : (
+                    <div className="max-w-full overflow-x-auto overscroll-x-contain">
+                      <ThemedSyntaxHighlighter
+                        language="sql"
+                        showLineNumbers
+                        wrapLongLines={false}
+                        customStyle={{
+                          margin: 0,
+                          padding: "0.875rem",
+                          fontSize: "12px",
+                          lineHeight: "1.55",
+                          width: "max-content",
+                          minWidth: "100%",
+                        }}
+                      >
+                        {formattedSqlById.get(item.id) ?? item.sqlText}
+                      </ThemedSyntaxHighlighter>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
           </section>
+          {isAdmin && (
+            <ExecutionHistory requestId={request.id} requestRevision={request.revision} />
+          )}
+          <section>
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              {t("approval.timeline")}
+            </h3>
+            <div className="relative ml-2 space-y-0 border-l border-border pl-6">
+              {[...detail.events].reverse().map((event, index) => (
+                <div key={event.id} className="relative pb-6 last:pb-0">
+                  <span
+                    className={`absolute -left-[31px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-background ${index === 0 ? "bg-primary" : "bg-muted-foreground/40"}`}
+                  />
+                  <div className="rounded-lg border bg-card p-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-medium">{event.eventType}</div>
+                      <time className="text-xs text-muted-foreground">
+                        {new Date(event.createdAt).toLocaleString()}
+                      </time>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {event.actorDisplayName || t("approval.timeline.system")}
+                    </div>
+                    {event.safeMessage ? (
+                      <div className="mt-2 text-xs text-muted-foreground">{event.safeMessage}</div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </CardContent>
-      </ScrollArea>
+      </div>
     </Card>
   );
 }
 
-function ExecutionHistory({ requestId }: { requestId: string }) {
+function DetailMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-background/70 px-3 py-2">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-medium" title={value}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ExecutionHistory({
+  requestId,
+  requestRevision,
+}: {
+  requestId: string;
+  requestRevision: number;
+}) {
   const { t } = useUiPreferences();
   const [executions, setExecutions] = useState<ApprovalExecution[]>([]);
   const [nodes, setNodes] = useState<Record<string, ApprovalNodeExecution[]>>({});
@@ -594,7 +1468,7 @@ function ExecutionHistory({ requestId }: { requestId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [requestId, t]);
+  }, [requestId, requestRevision, t]);
 
   return (
     <section>
