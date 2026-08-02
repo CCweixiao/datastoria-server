@@ -141,7 +141,7 @@ export function ApprovalCenterTab() {
   );
 
   const act = useCallback(
-    async (action: "submit" | "approve" | "reject" | "execute" | "close") => {
+    async (action: "submit" | "approve" | "reject" | "execute" | "close", comment?: string) => {
       if (!selected) return;
       setActing(true);
       setError(null);
@@ -149,6 +149,7 @@ export function ApprovalCenterTab() {
         const next = await transitionApproval(selected.request.id, action, {
           revision: selected.request.revision,
           contentDigest: selected.request.contentDigest,
+          comment,
         });
         setSelected(next);
         const nextRequests = await listApprovals(status === "ALL" ? undefined : status);
@@ -428,9 +429,13 @@ function ApprovalDetailPanel({
   isAdmin: boolean;
   acting: boolean;
   typeName?: string;
-  onAction: (action: "submit" | "approve" | "reject" | "execute" | "close") => void;
+  onAction: (
+    action: "submit" | "approve" | "reject" | "execute" | "close",
+    comment?: string
+  ) => void;
 }) {
   const { t } = useUiPreferences();
+  const [comment, setComment] = useState("");
   if (!detail)
     return (
       <Card className="flex items-center justify-center text-sm text-muted-foreground">
@@ -456,6 +461,20 @@ function ApprovalDetailPanel({
             </Badge>
           </div>
           {request.summary && <p className="text-sm text-muted-foreground">{request.summary}</p>}
+          {isAdmin && (request.status === "SUBMITTED" || request.status === "FAILED") && (
+            <div className="space-y-1 pt-2">
+              <Label htmlFor={`approval-comment-${request.id}`} className="text-xs">
+                {t("approval.reviewComment")}
+              </Label>
+              <Textarea
+                id={`approval-comment-${request.id}`}
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder={t("approval.reviewComment.placeholder")}
+                className="min-h-20"
+              />
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-2">
             {request.status === "DRAFT" && (
               <Button size="sm" disabled={acting} onClick={() => onAction("submit")}>
@@ -465,15 +484,15 @@ function ApprovalDetailPanel({
             )}
             {isAdmin && request.status === "SUBMITTED" && (
               <>
-                <Button size="sm" disabled={acting} onClick={() => onAction("approve")}>
+                <Button size="sm" disabled={acting} onClick={() => onAction("approve", comment)}>
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   {t("approval.approve")}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={acting}
-                  onClick={() => onAction("reject")}
+                  disabled={acting || !comment.trim()}
+                  onClick={() => onAction("reject", comment)}
                 >
                   <XCircle className="mr-2 h-4 w-4" />
                   {t("approval.reject")}
@@ -490,8 +509,8 @@ function ApprovalDetailPanel({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={acting}
-                onClick={() => onAction("close")}
+                disabled={acting || !comment.trim()}
+                onClick={() => onAction("close", comment)}
               >
                 <XCircle className="mr-2 h-4 w-4" />
                 {t("approval.closeFailed")}

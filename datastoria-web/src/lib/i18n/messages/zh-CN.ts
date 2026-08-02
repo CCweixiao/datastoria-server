@@ -733,6 +733,8 @@ export const zhCN: Record<MessageKey, string> = {
   "approval.reject": "拒绝",
   "approval.execute": "手工执行",
   "approval.closeFailed": "关闭失败执行",
+  "approval.reviewComment": "审批意见",
+  "approval.reviewComment.placeholder": "请说明审批决定或失败处理结果…",
   "approval.sqlPlan": "冻结的 SQL 计划",
   "approval.timeline": "审计时间线",
   "approval.execution.title": "执行明细",

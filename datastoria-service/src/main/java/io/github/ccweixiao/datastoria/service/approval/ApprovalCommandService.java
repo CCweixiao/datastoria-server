@@ -153,6 +153,10 @@ public class ApprovalCommandService {
     return Mono.fromCallable(
             () -> {
               requireAdmin(identity);
+              validateRevision(command);
+              if (!approve && isBlank(command.comment())) {
+                throw PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST);
+              }
               ApprovalDetail detail = requireVisible(requestId, identity, true);
               ApprovalRequest request = detail.request();
               if (request.applicantUserId().equals(identity.userId())) {
@@ -238,6 +242,9 @@ public class ApprovalCommandService {
       String requestId, ApprovalTransitionRequest command, Identity identity) {
     requireAdmin(identity);
     validateRevision(command);
+    if (isBlank(command.comment())) {
+      return Mono.error(PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST));
+    }
     return Mono.fromCallable(
             () -> {
               ApprovalDetail detail = requireVisible(requestId, identity, true);

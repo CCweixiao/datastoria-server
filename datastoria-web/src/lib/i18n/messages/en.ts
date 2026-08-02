@@ -799,6 +799,8 @@ export const en = {
   "approval.reject": "Reject",
   "approval.execute": "Execute manually",
   "approval.closeFailed": "Close failed execution",
+  "approval.reviewComment": "Review comment",
+  "approval.reviewComment.placeholder": "Explain the decision or reconciliation outcome…",
   "approval.sqlPlan": "Frozen SQL plan",
   "approval.timeline": "Audit timeline",
   "approval.execution.title": "Execution details",
