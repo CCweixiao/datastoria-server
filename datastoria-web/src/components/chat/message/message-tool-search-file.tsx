@@ -1,6 +1,7 @@
 import type { AppUIMessage, ToolPart } from "@/lib/ai/ai-types";
 import { memo } from "react";
 import { CollapsiblePart } from "./collapsible-part";
+import { readToolOutputObject } from "./tool-output";
 
 type SearchFileInput = {
   query?: string;
@@ -25,7 +26,7 @@ export const MessageToolSearchFile = memo(function MessageToolSearchFile({
   const toolPart = part as ToolPart;
   const state = toolPart.state;
   const input = (toolPart.input ?? {}) as SearchFileInput;
-  const output = toolPart.output as SearchFileOutput | undefined;
+  const output = readToolOutputObject<SearchFileOutput>(toolPart.output);
 
   const matchCount =
     output && "matches" in output && Array.isArray(output.matches) ? output.matches.length : null;
