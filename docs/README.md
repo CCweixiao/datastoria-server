@@ -38,6 +38,8 @@ docs/
 - [AgentScope Java AI Agent 架构](architecture/agent-runtime.md)：Run、模型、Tool、Skill、
   HITL、Checkpoint、SSE 和重启恢复的完整实现链路。
 - [Harness Agent 详细设计](design/harness-agent.md)：运行时的设计约束、权限与验证门。
+- [通用审批与 ClickHouse DDL 工单设计](design/ddl-approval-workflow.md)：持久化审批、DDL
+  规则与风险、资源冲突、顺序执行、幂等重试和集群节点日志。
 
 ## 权威性约定
 
