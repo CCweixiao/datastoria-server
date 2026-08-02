@@ -81,7 +81,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(ConflictException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleConflict(
       ConflictException ex) {
-    return ResponseEntity.status(HttpStatus.CONFLICT).body(problems.forError(ex.code()));
+    return ResponseEntity.status(ex.code().status()).body(problems.forError(ex.code()));
   }
 
   @ExceptionHandler(RevisionConflictException.class)
