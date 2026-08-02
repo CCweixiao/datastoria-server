@@ -40,6 +40,8 @@ docs/
 - [Harness Agent 详细设计](design/harness-agent.md)：运行时的设计约束、权限与验证门。
 - [通用审批与 ClickHouse DDL 工单设计](design/ddl-approval-workflow.md)：持久化审批、DDL
   规则与风险、资源冲突、顺序执行、幂等重试和集群节点日志。
+- [Agent 驱动的 DDL 工单对话流设计](design/ddl-approval-agent-driven-flow.md)：intent 声明式
+  schema、字段澄清、前置依赖级联与提交确认闸门的对话流演进。
 
 ## 权威性约定
 
