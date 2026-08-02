@@ -1,0 +1,35 @@
+package io.github.ccweixiao.datastoria.common.domain.approval;
+
+import java.time.Instant;
+
+public record ApprovalRequest(
+    String id,
+    String tenantId,
+    String requestNo,
+    String workOrderTypeKey,
+    long workOrderTypeRevision,
+    String typeDefinitionChecksum,
+    String title,
+    String summary,
+    String applicantUserId,
+    String applicantDisplayName,
+    String sourceSessionId,
+    String sourceRunId,
+    String connectionId,
+    String connectionName,
+    ApprovalStatus status,
+    String contentJson,
+    long contentVersion,
+    String contentDigest,
+    String executionMode,
+    int executionAttempt,
+    String reviewerUserId,
+    String reviewerDisplayName,
+    String reviewComment,
+    long revision,
+    Instant createdAt,
+    Instant submittedAt,
+    Instant approvedAt,
+    Instant rejectedAt,
+    Instant finishedAt,
+    Instant updatedAt) {}

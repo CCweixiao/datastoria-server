@@ -124,7 +124,73 @@ public enum ApiErrorCode {
       "Connection mismatch",
       "Session connectionId mismatch.",
       "连接不匹配",
-      "会话的 connectionId 不匹配。");
+      "会话的 connectionId 不匹配。"),
+  APPROVAL_WORK_ORDER_TYPE_UNSUPPORTED(
+      400,
+      "Unsupported work order type",
+      "This work order type is not enabled or is not supported for the selected connection.",
+      "不支持的工单类型",
+      "该工单类型未启用，或不支持所选连接。"),
+  APPROVAL_DRAFT_REVISION_CONFLICT(
+      409,
+      "Draft revision conflict",
+      "The work order draft changed. Load the latest revision before saving again.",
+      "工单草稿版本冲突",
+      "工单草稿已发生变化，请加载最新版本后再保存。"),
+  APPROVAL_CONTENT_CHANGED(
+      409,
+      "Approval content changed",
+      "The work order content no longer matches the reviewed digest and must be prepared again.",
+      "工单内容已变化",
+      "工单内容与已审核摘要不一致，必须重新生成。"),
+  APPROVAL_INVALID_STATE(
+      409,
+      "Invalid work order state",
+      "The requested operation is not allowed in the current work order state.",
+      "工单状态不允许此操作",
+      "当前工单状态不允许执行所请求的操作。"),
+  APPROVAL_SELF_REVIEW_NOT_ALLOWED(
+      403,
+      "Self-approval is not allowed",
+      "Applicants cannot approve or reject their own work orders.",
+      "不允许审批自己的工单",
+      "申请人不能批准或驳回自己的工单。"),
+  APPROVAL_RESOURCE_CONFLICT(
+      409,
+      "DDL resource is already claimed",
+      "Another active work order already claims one of the requested database resources.",
+      "DDL 资源已被占用",
+      "另一个活动工单已占用本次变更涉及的数据库资源。"),
+  APPROVAL_DEPENDENCY_NOT_SUPPORTED(
+      409,
+      "Cross-work-order dependency is not supported",
+      "A required object is being created by another active work order. Submit this request after it finishes.",
+      "暂不支持跨工单依赖",
+      "所需对象正在由另一个活动工单创建，请等待其完成后再提交。"),
+  DDL_OPERATION_UNSUPPORTED(
+      400,
+      "Unsupported DDL operation",
+      "The SQL cannot be classified as an enabled and supported DDL operation.",
+      "不支持的 DDL 操作",
+      "该 SQL 无法识别为已启用且受支持的 DDL 操作。"),
+  DDL_RULE_VIOLATION(
+      400,
+      "DDL rule validation failed",
+      "The generated DDL violates one or more mandatory work order rules.",
+      "DDL 规则校验失败",
+      "生成的 DDL 违反了一项或多项强制工单规则。"),
+  DDL_REVALIDATION_REQUIRED(
+      409,
+      "DDL revalidation required",
+      "The target schema changed after approval. Prepare and submit a new work order version.",
+      "需要重新校验 DDL",
+      "目标 Schema 在审批后发生变化，请重新生成并提交工单版本。"),
+  APPROVAL_EXECUTION_FAILED(
+      502,
+      "DDL execution failed",
+      "The approved DDL could not be completed. Review the safe execution details before retrying.",
+      "DDL 执行失败",
+      "已批准的 DDL 未能完成，请检查安全执行详情后再重试。");
 
   private final int status;
   private final String titleEn;
