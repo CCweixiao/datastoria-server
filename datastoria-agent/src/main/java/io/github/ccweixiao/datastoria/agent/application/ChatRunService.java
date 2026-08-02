@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentRunCapabilities;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentRuntimeConfig;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentToolExecutionPolicy;
+import io.github.ccweixiao.datastoria.agent.runtime.ApprovalAgentTools;
 import io.github.ccweixiao.datastoria.agent.runtime.ApprovalResumeRequest;
 import io.github.ccweixiao.datastoria.agent.runtime.ClickHouseAgentTools;
 import io.github.ccweixiao.datastoria.agent.runtime.HumanInteractionAgentTools;
@@ -63,6 +64,7 @@ import io.github.ccweixiao.datastoria.dao.repository.ChatSessionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ModelRepository;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 import io.github.ccweixiao.datastoria.service.RcaTemplateCatalog;
+import io.github.ccweixiao.datastoria.service.approval.ApprovalCommandService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -131,6 +133,7 @@ public class ChatRunService {
   private final SlashCommandExpander slashCommandExpander;
   private final ClickHouseConnectionService clickHouseConnectionService;
   private final RcaTemplateCatalog rcaTemplateCatalog;
+  private final ApprovalCommandService approvalCommandService;
   private final ModelAdapterProvider modelAdapterProvider;
   private final ModelTitleGenerator titleGenerator;
   private final RunLifecycleRecorder lifecycleRecorder;
@@ -160,6 +163,7 @@ public class ChatRunService {
       SlashCommandExpander slashCommandExpander,
       ClickHouseConnectionService clickHouseConnectionService,
       RcaTemplateCatalog rcaTemplateCatalog,
+      ApprovalCommandService approvalCommandService,
       ModelAdapterProvider modelAdapterProvider,
       ModelTitleGenerator titleGenerator,
       RunLifecycleRecorder lifecycleRecorder,
@@ -185,6 +189,7 @@ public class ChatRunService {
     this.slashCommandExpander = slashCommandExpander;
     this.clickHouseConnectionService = clickHouseConnectionService;
     this.rcaTemplateCatalog = rcaTemplateCatalog;
+    this.approvalCommandService = approvalCommandService;
     this.modelAdapterProvider = modelAdapterProvider;
     this.titleGenerator = titleGenerator;
     this.lifecycleRecorder = lifecycleRecorder;
@@ -483,6 +488,14 @@ public class ChatRunService {
             clickHouseTools,
             new SqlWorkflowAgentTools(
                 adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
+            new ApprovalAgentTools(
+                approvalCommandService,
+                run.connectionId(),
+                run.sessionId(),
+                run.id(),
+                identity,
+                mapper,
+                toolPolicy),
             new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
             new HumanInteractionAgentTools()));
   }
@@ -709,6 +722,14 @@ public class ChatRunService {
                 clickHouseTools,
                 new SqlWorkflowAgentTools(
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
+                new ApprovalAgentTools(
+                    approvalCommandService,
+                    req.connectionId(),
+                    context.sessionId(),
+                    runId,
+                    identity,
+                    mapper,
+                    toolPolicy),
                 new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
                 new HumanInteractionAgentTools())),
         pins,

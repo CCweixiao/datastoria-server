@@ -34,17 +34,28 @@ class AgentToolRegistryTest {
             "generate_visualization",
             "search_file",
             "read_file",
-            "ask_user_question");
+            "ask_user_question",
+            "list_approval_work_order_types",
+            "prepare_ddl_approval",
+            "submit_ddl_approval",
+            "get_approval_status");
     var toolkit =
         registry.createToolkit(
             java.util.List.of(
                 new ClickHouseAgentTools(null, null, null),
                 new SqlWorkflowAgentTools(null, null, null),
+                new ApprovalAgentTools(null, null, null, null, null, null, null),
                 new RepositoryAgentTools(null),
                 new HumanInteractionAgentTools()));
     assertThat(toolkit.getToolNames()).isEqualTo(registry.availableToolNames());
     assertThat(toolkit.getToolGroup(AgentToolRegistry.READ_ONLY_GROUP).getTools())
         .containsExactlyInAnyOrder("get_tables", "explore_schema", "validate_sql");
+    assertThat(toolkit.getToolGroup("approval-workflow").getTools())
+        .containsExactlyInAnyOrder(
+            "list_approval_work_order_types",
+            "prepare_ddl_approval",
+            "submit_ddl_approval",
+            "get_approval_status");
   }
 
   @Test

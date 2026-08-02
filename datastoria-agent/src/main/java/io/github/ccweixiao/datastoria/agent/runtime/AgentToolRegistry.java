@@ -36,6 +36,12 @@ public class AgentToolRegistry {
           "search_file",
           "read_file",
           "ask_user_question");
+  private static final List<String> APPROVAL_TOOLS =
+      List.of(
+          "list_approval_work_order_types",
+          "prepare_ddl_approval",
+          "submit_ddl_approval",
+          "get_approval_status");
 
   private final Set<String> availableToolNames;
 
@@ -45,6 +51,7 @@ public class AgentToolRegistry {
     register(catalog, new SqlWorkflowAgentTools(null, null, null));
     register(catalog, new RepositoryAgentTools(null));
     register(catalog, new HumanInteractionAgentTools());
+    register(catalog, new ApprovalAgentTools(null, null, null, null, null, null, null));
     availableToolNames = Set.copyOf(catalog.getToolNames());
   }
 
@@ -68,10 +75,15 @@ public class AgentToolRegistry {
     ensureGroup(toolkit, READ_ONLY_GROUP, "Read-only ClickHouse discovery and SQL validation");
     ensureGroup(toolkit, EXTENDED_GROUP, "Extended ClickHouse analysis tools");
     ensureGroup(toolkit, "workflow", "SQL workflow, visualization, and repository inspection");
+    ensureGroup(
+        toolkit,
+        "approval-workflow",
+        "Generate and submit constrained ClickHouse DDL approval drafts");
     toolkit.registerTool(tools);
     addExisting(toolkit, READ_ONLY_GROUP, READ_ONLY_TOOLS);
     addExisting(toolkit, EXTENDED_GROUP, EXTENDED_TOOLS);
     addExisting(toolkit, "workflow", WORKFLOW_TOOLS);
+    addExisting(toolkit, "approval-workflow", APPROVAL_TOOLS);
   }
 
   private static void ensureGroup(Toolkit toolkit, String name, String description) {
