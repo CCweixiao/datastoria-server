@@ -93,11 +93,17 @@ class FrontendMigrationBoundaryTest {
   @Test
   void optionalClickHouseLogTablesAreDetectedWithoutThrowingOnMissingTables() throws IOException {
     String mainPage = Files.readString(FRONTEND.resolve("src/components/main-page.tsx"));
+    String metadataService =
+        Files.readString(
+            Path.of(
+                "datastoria-service/src/main/java/io/github/ccweixiao/datastoria/service/ClickHouseConnectionMetadataService.java"));
 
     assertThat(mainPage)
         .doesNotContain("hasColumnInTable('system', 'query_log'")
         .doesNotContain("hasColumnInTable('system', 'opentelemetry_span_log'")
         .doesNotContain("hasColumnInTable('system', 'part_log'")
+        .contains("connection.loadMetadata()");
+    assertThat(metadataService)
         .contains("table = 'query_log' AND name = 'hostname'")
         .contains("table = 'opentelemetry_span_log' AND name = 'hostname'")
         .contains("table = 'part_log' AND name = 'hostname'");
