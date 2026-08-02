@@ -18,4 +18,9 @@
         updated_at = #{updatedAt}
     WHERE tenant_id = #{tenantId} AND session_id = #{sessionId} AND id = #{id}
   </update>
+
+  <select id="maxSequence" resultType="java.lang.Long">
+    SELECT COALESCE(MAX(sequence), 0) FROM ds_chat_message
+    WHERE tenant_id = #{tenantId} AND session_id = #{sessionId}
+  </select>
 </mapper>

@@ -171,6 +171,32 @@ class RunLifecycleRecorderTest {
     }
 
     @Override
+    public void saveInitialMessages(
+        String tenantId,
+        String sessionId,
+        String userId,
+        List<ChatMessageRepository.InitialMessage> messages) {
+      long seq = 0L;
+      for (ChatMessage m : saved) {
+        seq = Math.max(seq, m.sequence());
+      }
+      for (ChatMessageRepository.InitialMessage m : messages) {
+        saved.add(
+            new ChatMessage(
+                m.id(),
+                tenantId,
+                sessionId,
+                userId,
+                m.role(),
+                m.partsJson(),
+                m.metadataJson(),
+                ++seq,
+                null,
+                null));
+      }
+    }
+
+    @Override
     public Optional<ChatMessage> findById(String id, String tenantId, String sessionId) {
       return Optional.empty();
     }
