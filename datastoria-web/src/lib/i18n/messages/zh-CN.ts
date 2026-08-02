@@ -76,6 +76,7 @@ export const zhCN: Record<MessageKey, string> = {
   "chat.daysAgo": "{count} 天前",
   "chat.earlier": "更早",
   "chat.chatOnly": "仅聊天",
+  "chat.currentCluster": "当前",
   "chat.clearSearch": "清除搜索",
   "chat.loading": "加载中...",
   "chat.loadMore": "加载更多",
@@ -529,4 +530,170 @@ export const zhCN: Record<MessageKey, string> = {
   "zookeeper.unavailableDescription":
     "当前 ClickHouse 服务未配置 ZooKeeper，因此无法浏览 system.zookeeper。",
   "zookeeper.loadFailed": "加载 ZooKeeper 节点失败。",
+  "monitor.cluster.group.status": "集群概览",
+  "monitor.cluster.group.cpu": "CPU",
+  "monitor.cluster.group.memory": "内存",
+  "monitor.cluster.group.io": "IO",
+  "monitor.cluster.group.thread": "线程",
+  "monitor.cluster.group.selects": "查询读取",
+  "monitor.cluster.group.inserts": "数据写入",
+  "monitor.cluster.group.locks": "锁",
+  "monitor.cluster.group.cache": "缓存",
+  "monitor.cluster.group.mergeMutation": "合并与变更",
+  "monitor.cluster.group.network": "网络",
+  "monitor.cluster.group.zookeeper": "ZooKeeper",
+  "monitor.cluster.processSelectListLock.title": "SELECT 列表锁",
+  "monitor.cluster.processSelectListLock.description":
+    "展示各副本处理 SELECT 列表时的锁活动，用于排查查询分析和执行期间的锁竞争。",
+  "monitor.cluster.contextLockWait.description":
+    "展示各副本当前等待 Context Lock 的数量，用于识别正在发生的锁竞争。",
+  "monitor.cluster.contextLockWaitMicroseconds.description":
+    "展示等待 Context Lock 的累计耗时；持续增长表示锁竞争正在影响查询工作。",
+  "monitor.cluster.rwLockAcquiredReadLocks.description":
+    "展示各副本获取读锁的次数，可结合写锁等待情况分析读写竞争。",
+  "monitor.cluster.rwLockAcquiredWriteLocks.description":
+    "展示各副本获取写锁的次数；突增通常伴随元数据操作或密集写入。",
+  "monitor.cluster.rwLockReadersWaitMilliseconds.description":
+    "展示读操作等待读写锁的时间；数值较高表示读操作受到锁竞争阻塞。",
+  "monitor.cluster.rwLockWritersWaitMilliseconds.description":
+    "展示写操作等待读写锁的时间；数值较高表示写侧操作出现延迟。",
+  "monitor.cluster.uncompressedCacheHits.description":
+    "展示由未压缩数据缓存直接响应的读取次数，可结合 Miss 指标评估缓存效果。",
+  "monitor.cluster.uncompressedCacheMisses.description":
+    "展示未命中未压缩数据缓存的读取次数；持续未命中可能增加数据解压开销。",
+  "monitor.cluster.uncompressedCacheWeightLost.description":
+    "展示因权重限制从未压缩缓存淘汰的数据量；持续增长表示缓存换入换出频繁或存在内存压力。",
+  "monitor.cluster.markCacheHits.description":
+    "展示 Mark 查找命中缓存的次数；命中通常可以降低索引读取开销。",
+  "monitor.cluster.markCacheMisses.description":
+    "展示 Mark 查找未命中缓存的次数；持续未命中可能增加查询 IO 延迟。",
+  "monitor.cluster.queryCacheHits.description":
+    "展示由查询结果缓存直接返回的查询次数，从而避免重复执行。",
+  "monitor.cluster.queryCacheMisses.description":
+    "展示未命中查询结果缓存的查询次数，可结合 Hit 指标评估缓存价值。",
+  "monitor.cluster.cpuUsage.description":
+    "展示各副本消耗的 CPU 时间，并以每个时间窗口内平均使用的 CPU 核数表示。",
+  "monitor.cluster.cpuWait.description": "展示任务等待 CPU 调度的时间；持续升高可能表示 CPU 竞争。",
+  "monitor.cluster.readFileSystem.description": "展示文件系统层统计的读取吞吐量。",
+  "monitor.cluster.readDisk.description": "展示各副本每秒从存储设备读取的字节数。",
+  "monitor.cluster.writeFileSystem.description": "展示文件系统层统计的写入吞吐量。",
+  "monitor.cluster.writeDisk.description": "展示各副本每秒写入存储设备的字节数。",
+  "monitor.cluster.ioWait.description":
+    "展示等待 IO 完成的时间；持续升高可能表示存储饱和或延迟较高。",
+  "monitor.cluster.memoryTracking.description":
+    "展示各副本由 ClickHouse 跟踪的内存使用量，用于识别持续的内存增长和压力。",
+  "monitor.cluster.globalThread.description": "展示各副本全局线程池的线程总数。",
+  "monitor.cluster.globalThreadActive.description":
+    "展示各副本全局线程池的活跃线程数，可结合线程总数判断线程池是否趋于饱和。",
+  "monitor.cluster.networkReceiveBytes.description": "展示各副本的网络接收吞吐量。",
+  "monitor.cluster.networkReceiveElapsed.description":
+    "展示网络数据接收累计耗时；持续增长可能表示网络链路较慢或负载较高。",
+  "monitor.cluster.networkSendBytes.description": "展示各副本的网络发送吞吐量。",
+  "monitor.cluster.networkSendElapsed.description":
+    "展示网络数据发送累计耗时；持续增长可能表示存在背压或下游消费较慢。",
+  "monitor.cluster.selectQueries.description": "展示各副本的 SELECT 查询活动趋势。",
+  "monitor.cluster.failedQueries.description":
+    "展示失败查询活动；突增有助于定位查询错误集中发生的时间段。",
+  "monitor.cluster.selectedRows.description": "展示查询每秒读取的行数。",
+  "monitor.cluster.selectedBytes.description": "展示各副本的查询读取吞吐量。",
+  "monitor.cluster.selectedParts.description": "展示每个采样窗口内查询选中的数据 Part 数。",
+  "monitor.cluster.selectedPartsTotal.description": "展示查询选择阶段检查的候选 Part 总数。",
+  "monitor.cluster.selectedRanges.description": "展示查询读取选中的索引范围数。",
+  "monitor.cluster.selectedMarks.description": "展示查询读取选中的 Mark 数。",
+  "monitor.cluster.selectedMarksTotal.description": "展示查询选择阶段检查的候选 Mark 总数。",
+  "monitor.cluster.insertQueries.description": "展示各副本的 INSERT 查询活动。",
+  "monitor.cluster.insertRows.description": "展示各副本每秒写入的行数。",
+  "monitor.cluster.insertBytes.description": "展示各副本的数据写入吞吐量。",
+  "monitor.cluster.insertQueryTime.description": "展示每个采样窗口内处理 INSERT 查询的耗时。",
+  "monitor.cluster.asyncInsertQuery.description": "展示异步 INSERT 查询活动。",
+  "monitor.cluster.asyncInsertBytes.description": "展示异步写入的数据吞吐量。",
+  "monitor.cluster.asyncInsertRows.description": "展示每秒异步写入的行数。",
+  "monitor.cluster.mergedRows.description": "展示后台合并每秒处理的行数。",
+  "monitor.cluster.mergedBytes.description": "展示后台合并每秒处理的未压缩数据量。",
+  "monitor.cluster.backgroundFetchesPoolTask.description": "展示后台 Fetch 线程池中的活跃任务数。",
+  "monitor.cluster.backgroundFetchesPoolSize.description": "展示后台 Fetch 线程池的容量。",
+  "monitor.cluster.backgroundMessageBrokerPoolTask.description":
+    "展示复制表使用的后台消息代理调度任务数。",
+  "monitor.cluster.backgroundMergeMutationPoolSize.description":
+    "展示各副本后台合并与 Mutation 线程池的容量。",
+  "monitor.cluster.replicatedPartFailedFetches.description":
+    "展示复制 Part 获取失败次数；突增可能表示复制网络或源 Part 存在问题。",
+  "monitor.cluster.replicatedPartFetches.description": "展示从其他副本获取复制 Part 的次数。",
+  "monitor.cluster.replicatedPartFetchesOfMerged.description":
+    "展示直接获取已合并 Part、而不是在本地执行合并的次数。",
+  "monitor.cluster.replicatedPartMerges.description": "展示复制表执行的 Part 合并次数。",
+  "monitor.cluster.replicatedPartMutations.description": "展示复制表执行的 Mutation 次数。",
+  "monitor.cluster.zookeeperBytesSent.description":
+    "展示每秒发送到 ZooKeeper 或 ClickHouse Keeper 的数据量。",
+  "monitor.cluster.zookeeperBytesReceived.description":
+    "展示每秒从 ZooKeeper 或 ClickHouse Keeper 接收的数据量。",
+  "monitor.cluster.zookeeperTransactions.description": "展示当前监控范围内协调服务的事务活动。",
+  "monitor.cluster.zookeeperWait.description": "展示等待协调服务操作完成的累计耗时。",
+  "monitor.cluster.zookeeperCheck.description": "展示 ZooKeeper Check 操作次数。",
+  "monitor.cluster.zookeeperClose.description": "展示 ZooKeeper 会话关闭操作次数。",
+  "monitor.cluster.zookeeperCreate.description": "展示 ZooKeeper 节点创建操作次数。",
+  "monitor.cluster.zookeeperExists.description": "展示 ZooKeeper 节点存在性检查次数。",
+  "monitor.cluster.zookeeperGet.description": "展示 ZooKeeper 节点读取操作次数。",
+  "monitor.cluster.zookeeperHardwareExceptions.description":
+    "展示 ZooKeeper 底层传输或硬件异常次数。",
+  "monitor.cluster.zookeeperInit.description": "展示 ZooKeeper 会话初始化操作次数。",
+  "monitor.cluster.zookeeperList.description": "展示 ZooKeeper 子节点列表查询次数。",
+  "monitor.cluster.zookeeperMulti.description": "展示 ZooKeeper Multi 请求次数。",
+  "monitor.cluster.zookeeperOtherExceptions.description":
+    "展示未归类为硬件异常或用户异常的 ZooKeeper 异常。",
+  "monitor.cluster.zookeeperReconfig.description": "展示 ZooKeeper 重配置操作次数。",
+  "monitor.cluster.zookeeperRemove.description": "展示 ZooKeeper 节点删除操作次数。",
+  "monitor.cluster.zookeeperSet.description": "展示 ZooKeeper 节点更新操作次数。",
+  "monitor.cluster.zookeeperSync.description": "展示 ZooKeeper 同步操作次数。",
+  "monitor.cluster.zookeeperUserExceptions.description":
+    "展示由无效请求或应用层条件导致的 ZooKeeper 异常。",
+  "monitor.cluster.zookeeperWatchResponse.description":
+    "展示 ZooKeeper 或 ClickHouse Keeper 发出的 Watch 通知次数。",
+  "monitor.node.group.overview": "节点概览",
+  "monitor.node.group.queries": "节点查询",
+  "monitor.node.group.merges": "节点合并",
+  "monitor.node.group.replication": "节点复制",
+  "monitor.node.group.cpu": "节点 CPU",
+  "monitor.node.group.memory": "节点内存",
+  "monitor.node.group.io": "节点 IO",
+  "monitor.node.group.memoryAndIo": "节点内存与 IO",
+  "monitor.node.group.queryMetrics": "节点查询指标",
+  "monitor.node.group.insertMetrics": "节点写入指标",
+  "monitor.node.group.mergeMetrics": "节点合并指标",
+  "monitor.node.group.system": "节点系统指标",
+  "monitor.node.group.zookeeper": "节点 ZooKeeper 指标",
+  "monitor.node.cpuUsage.description": "展示当前节点上 ClickHouse 消耗的 CPU 核数。",
+  "monitor.node.cpuWait.description": "展示当前节点任务等待 CPU 调度的时间。",
+  "monitor.node.cpuUserspace.description": "展示当前节点标准化后的用户态 CPU 使用率。",
+  "monitor.node.cpuKernel.description": "展示当前节点标准化后的内核态 CPU 使用率。",
+  "monitor.node.ioWait.description": "展示当前节点等待 IO 完成的时间。",
+  "monitor.node.readDisk.description": "展示当前节点从存储设备读取的数据量。",
+  "monitor.node.readFilesystem.description": "展示当前节点的文件系统读取活动。",
+  "monitor.node.memoryTracking.description": "展示当前节点由 ClickHouse 跟踪的内存使用量。",
+  "monitor.node.memoryCaches.description":
+    "展示当前节点 ClickHouse 内存缓存的使用量，不包含文件系统缓存。",
+  "monitor.node.queries.description": "展示当前节点的查询活动趋势。",
+  "monitor.node.queriesRunning.description": "展示当前节点并发运行的查询数。",
+  "monitor.node.selectedBytes.description": "展示当前节点查询读取的数据量。",
+  "monitor.node.selectedRows.description": "展示当前节点查询读取的行数。",
+  "monitor.node.insertedRows.description": "展示当前节点写入的行数趋势。",
+  "monitor.node.mergesRunning.description": "展示当前节点并发运行的合并数。",
+  "monitor.node.mergeSourceParts.description": "展示当前节点参与合并的源 Part 数量。",
+  "monitor.node.maxPartsForPartition.description": "展示当前节点单个分区观测到的最大活动 Part 数。",
+  "monitor.node.loadAverage.description": "展示当前节点操作系统的 15 分钟平均负载。",
+  "monitor.node.networkConnections.description":
+    "展示当前节点并发的 TCP、MySQL、HTTP 和节点间连接数。",
+  "dashboard.error.unknownTable": "所需的系统表不可用，可能未启用或当前 ClickHouse 版本不支持。",
+  "dashboard.error.notEnoughPrivileges": "权限不足，请联系管理员授予所需权限。",
+  "monitor.table.projections.unsupported":
+    "当前 ClickHouse 版本不支持 Projection 监控，因为 system.projections 系统表不可用。",
+  "monitor.cluster.mergeSourceParts.title": "合并源 Part 数",
+  "monitor.cluster.mergeSourceParts.description":
+    "展示参与合并的源 Part 数量；持续升高可能表示合并压力较大或小 Part 过多。",
+  "monitor.cluster.zookeeperMultiRead.title": "ZooKeeper 批量读取",
+  "monitor.cluster.zookeeperMultiRead.description":
+    "展示当前监控范围内的 ZooKeeper 批量读取操作，用于了解协调服务的读取负载。",
+  "monitor.cluster.zookeeperMultiWrite.title": "ZooKeeper 批量写入",
+  "monitor.cluster.zookeeperMultiWrite.description":
+    "展示当前监控范围内的 ZooKeeper 批量写入操作；突增可能表示复制或元数据协调活动增加。",
 };

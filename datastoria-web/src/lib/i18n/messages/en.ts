@@ -78,6 +78,7 @@ export const en = {
   "chat.daysAgo": "{count}d ago",
   "chat.earlier": "Earlier",
   "chat.chatOnly": "Chat only",
+  "chat.currentCluster": "Current",
   "chat.clearSearch": "Clear search",
   "chat.loading": "Loading...",
   "chat.loadMore": "Load more",
@@ -565,6 +566,200 @@ export const en = {
   "zookeeper.unavailableDescription":
     "This ClickHouse server does not have ZooKeeper configured, so system.zookeeper cannot be browsed.",
   "zookeeper.loadFailed": "Failed to load ZooKeeper nodes.",
+  "monitor.cluster.group.status": "Cluster Dashboard",
+  "monitor.cluster.group.cpu": "CPU",
+  "monitor.cluster.group.memory": "Memory",
+  "monitor.cluster.group.io": "IO",
+  "monitor.cluster.group.thread": "Thread",
+  "monitor.cluster.group.selects": "Selects",
+  "monitor.cluster.group.inserts": "Inserts",
+  "monitor.cluster.group.locks": "Locks",
+  "monitor.cluster.group.cache": "Cache",
+  "monitor.cluster.group.mergeMutation": "Merge & Mutation",
+  "monitor.cluster.group.network": "Network",
+  "monitor.cluster.group.zookeeper": "ZooKeeper",
+  "monitor.cluster.processSelectListLock.title": "Process Select-List Locks",
+  "monitor.cluster.processSelectListLock.description":
+    "Shows select-list lock activity across replicas. Use it to investigate lock contention during query analysis and execution.",
+  "monitor.cluster.contextLockWait.description":
+    "Shows the number of context locks currently waiting across replicas. Use it to identify active lock contention.",
+  "monitor.cluster.contextLockWaitMicroseconds.description":
+    "Shows accumulated time spent waiting for context locks. Sustained growth indicates lock contention affecting query work.",
+  "monitor.cluster.rwLockAcquiredReadLocks.description":
+    "Shows acquired read locks across replicas. Use it to compare read-lock activity with writer waits.",
+  "monitor.cluster.rwLockAcquiredWriteLocks.description":
+    "Shows acquired write locks across replicas. Spikes can accompany metadata or write-intensive operations.",
+  "monitor.cluster.rwLockReadersWaitMilliseconds.description":
+    "Shows time readers spend waiting for read-write locks. High values indicate readers are being delayed by lock contention.",
+  "monitor.cluster.rwLockWritersWaitMilliseconds.description":
+    "Shows time writers spend waiting for read-write locks. High values indicate delayed write-side operations.",
+  "monitor.cluster.uncompressedCacheHits.description":
+    "Shows reads served by the uncompressed data cache. Compare with misses to evaluate cache effectiveness.",
+  "monitor.cluster.uncompressedCacheMisses.description":
+    "Shows reads not served by the uncompressed data cache. Sustained misses can increase decompression work.",
+  "monitor.cluster.uncompressedCacheWeightLost.description":
+    "Shows data evicted from the uncompressed cache by weight. Growth indicates cache turnover or memory pressure.",
+  "monitor.cluster.markCacheHits.description":
+    "Shows mark lookups served by the mark cache. High hit volume usually reduces index-reading overhead.",
+  "monitor.cluster.markCacheMisses.description":
+    "Shows mark lookups that require storage access. Sustained misses can increase query I/O latency.",
+  "monitor.cluster.queryCacheHits.description":
+    "Shows queries served from the query result cache, avoiding repeated execution.",
+  "monitor.cluster.queryCacheMisses.description":
+    "Shows queries not served from the query result cache. Compare with hits to evaluate cache usefulness.",
+  "monitor.cluster.cpuUsage.description":
+    "Shows CPU time consumed across replicas, expressed as average utilized cores over each interval.",
+  "monitor.cluster.cpuWait.description":
+    "Shows time work spends waiting to be scheduled on CPU. Sustained values can indicate CPU contention.",
+  "monitor.cluster.readFileSystem.description":
+    "Shows filesystem read throughput measured before lower-level disk accounting.",
+  "monitor.cluster.readDisk.description":
+    "Shows bytes read from storage devices per second across replicas.",
+  "monitor.cluster.writeFileSystem.description":
+    "Shows filesystem write throughput measured before lower-level disk accounting.",
+  "monitor.cluster.writeDisk.description":
+    "Shows bytes written to storage devices per second across replicas.",
+  "monitor.cluster.ioWait.description":
+    "Shows time spent waiting for IO completion. Sustained values can indicate storage saturation or latency.",
+  "monitor.cluster.memoryTracking.description":
+    "Shows ClickHouse-tracked memory in use across replicas. Use it to identify sustained memory growth and pressure.",
+  "monitor.cluster.globalThread.description":
+    "Shows the total number of global thread-pool threads across replicas.",
+  "monitor.cluster.globalThreadActive.description":
+    "Shows active global thread-pool threads across replicas. Compare with the total to identify thread-pool saturation.",
+  "monitor.cluster.networkReceiveBytes.description":
+    "Shows network receive throughput across replicas.",
+  "monitor.cluster.networkReceiveElapsed.description":
+    "Shows accumulated time spent receiving network data. Growth can indicate slow or heavily loaded network paths.",
+  "monitor.cluster.networkSendBytes.description": "Shows network send throughput across replicas.",
+  "monitor.cluster.networkSendElapsed.description":
+    "Shows accumulated time spent sending network data. Growth can indicate backpressure or slow consumers.",
+  "monitor.cluster.selectQueries.description":
+    "Shows SELECT query activity across replicas over time.",
+  "monitor.cluster.failedQueries.description":
+    "Shows failed query activity. Spikes help locate periods with elevated query errors.",
+  "monitor.cluster.selectedRows.description": "Shows rows read by queries per second.",
+  "monitor.cluster.selectedBytes.description": "Shows query read throughput across replicas.",
+  "monitor.cluster.selectedParts.description":
+    "Shows data parts selected by queries in each sampled interval.",
+  "monitor.cluster.selectedPartsTotal.description":
+    "Shows total candidate parts considered during query selection.",
+  "monitor.cluster.selectedRanges.description": "Shows index ranges selected for query reads.",
+  "monitor.cluster.selectedMarks.description": "Shows marks selected for query reads.",
+  "monitor.cluster.selectedMarksTotal.description":
+    "Shows total candidate marks considered during query selection.",
+  "monitor.cluster.insertQueries.description": "Shows INSERT query activity across replicas.",
+  "monitor.cluster.insertRows.description": "Shows rows inserted per second across replicas.",
+  "monitor.cluster.insertBytes.description": "Shows inserted data throughput across replicas.",
+  "monitor.cluster.insertQueryTime.description":
+    "Shows time spent processing INSERT queries in each sampled interval.",
+  "monitor.cluster.asyncInsertQuery.description": "Shows asynchronous INSERT query activity.",
+  "monitor.cluster.asyncInsertBytes.description": "Shows asynchronously inserted data throughput.",
+  "monitor.cluster.asyncInsertRows.description": "Shows asynchronously inserted rows per second.",
+  "monitor.cluster.mergedRows.description": "Shows rows processed by background merges per second.",
+  "monitor.cluster.mergedBytes.description":
+    "Shows uncompressed data processed by background merges per second.",
+  "monitor.cluster.backgroundFetchesPoolTask.description":
+    "Shows active tasks in the background fetch pool.",
+  "monitor.cluster.backgroundFetchesPoolSize.description":
+    "Shows configured or observed background fetch-pool capacity.",
+  "monitor.cluster.backgroundMessageBrokerPoolTask.description":
+    "Shows scheduled background message-broker tasks used by replicated tables.",
+  "monitor.cluster.backgroundMergeMutationPoolSize.description":
+    "Shows merge and mutation background-pool capacity across replicas.",
+  "monitor.cluster.replicatedPartFailedFetches.description":
+    "Shows failed replicated-part fetch operations. Spikes indicate replication transport or source-part problems.",
+  "monitor.cluster.replicatedPartFetches.description":
+    "Shows replicated parts fetched from other replicas.",
+  "monitor.cluster.replicatedPartFetchesOfMerged.description":
+    "Shows merged parts fetched instead of being merged locally.",
+  "monitor.cluster.replicatedPartMerges.description":
+    "Shows merge operations performed for replicated tables.",
+  "monitor.cluster.replicatedPartMutations.description":
+    "Shows mutation operations performed for replicated tables.",
+  "monitor.cluster.zookeeperBytesSent.description":
+    "Shows data sent to ZooKeeper or ClickHouse Keeper per second.",
+  "monitor.cluster.zookeeperBytesReceived.description":
+    "Shows data received from ZooKeeper or ClickHouse Keeper per second.",
+  "monitor.cluster.zookeeperTransactions.description":
+    "Shows coordination-service transaction activity for the monitored scope.",
+  "monitor.cluster.zookeeperWait.description":
+    "Shows accumulated time waiting for coordination-service operations.",
+  "monitor.cluster.zookeeperCheck.description": "Shows ZooKeeper check operations.",
+  "monitor.cluster.zookeeperClose.description": "Shows ZooKeeper session close operations.",
+  "monitor.cluster.zookeeperCreate.description": "Shows ZooKeeper node creation operations.",
+  "monitor.cluster.zookeeperExists.description": "Shows ZooKeeper existence-check operations.",
+  "monitor.cluster.zookeeperGet.description": "Shows ZooKeeper node read operations.",
+  "monitor.cluster.zookeeperHardwareExceptions.description":
+    "Shows low-level ZooKeeper transport or hardware exceptions.",
+  "monitor.cluster.zookeeperInit.description": "Shows ZooKeeper session initialization operations.",
+  "monitor.cluster.zookeeperList.description": "Shows ZooKeeper child-list operations.",
+  "monitor.cluster.zookeeperMulti.description": "Shows ZooKeeper multi-operation requests.",
+  "monitor.cluster.zookeeperOtherExceptions.description":
+    "Shows ZooKeeper exceptions not covered by the hardware or user categories.",
+  "monitor.cluster.zookeeperReconfig.description": "Shows ZooKeeper reconfiguration operations.",
+  "monitor.cluster.zookeeperRemove.description": "Shows ZooKeeper node removal operations.",
+  "monitor.cluster.zookeeperSet.description": "Shows ZooKeeper node update operations.",
+  "monitor.cluster.zookeeperSync.description": "Shows ZooKeeper synchronization operations.",
+  "monitor.cluster.zookeeperUserExceptions.description":
+    "Shows ZooKeeper errors caused by invalid requests or application-level conditions.",
+  "monitor.cluster.zookeeperWatchResponse.description":
+    "Shows watch notifications delivered by ZooKeeper or ClickHouse Keeper.",
+  "monitor.node.group.overview": "Node Dashboard",
+  "monitor.node.group.queries": "Node Queries",
+  "monitor.node.group.merges": "Node Merges",
+  "monitor.node.group.replication": "Node Replication",
+  "monitor.node.group.cpu": "Node CPU",
+  "monitor.node.group.memory": "Node Memory",
+  "monitor.node.group.io": "Node IO",
+  "monitor.node.group.memoryAndIo": "Node Memory & IO",
+  "monitor.node.group.queryMetrics": "Node Query Metrics",
+  "monitor.node.group.insertMetrics": "Node Insert Metrics",
+  "monitor.node.group.mergeMetrics": "Node Merge Metrics",
+  "monitor.node.group.system": "Node System",
+  "monitor.node.group.zookeeper": "Node ZooKeeper Metrics",
+  "monitor.node.cpuUsage.description": "Shows ClickHouse CPU consumption on this node in cores.",
+  "monitor.node.cpuWait.description":
+    "Shows time work on this node spends waiting for CPU scheduling.",
+  "monitor.node.cpuUserspace.description":
+    "Shows normalized userspace CPU utilization on this node.",
+  "monitor.node.cpuKernel.description": "Shows normalized kernel CPU utilization on this node.",
+  "monitor.node.ioWait.description": "Shows time this node spends waiting for IO completion.",
+  "monitor.node.readDisk.description": "Shows bytes read from storage by this node.",
+  "monitor.node.readFilesystem.description": "Shows filesystem read activity on this node.",
+  "monitor.node.memoryTracking.description":
+    "Shows memory currently tracked by ClickHouse on this node.",
+  "monitor.node.memoryCaches.description":
+    "Shows memory used by ClickHouse in-memory caches, excluding the filesystem cache.",
+  "monitor.node.queries.description": "Shows query activity on this node over time.",
+  "monitor.node.queriesRunning.description": "Shows concurrently running queries on this node.",
+  "monitor.node.selectedBytes.description": "Shows data read by queries on this node.",
+  "monitor.node.selectedRows.description": "Shows rows read by queries on this node.",
+  "monitor.node.insertedRows.description": "Shows rows inserted on this node over time.",
+  "monitor.node.mergesRunning.description": "Shows concurrently running merges on this node.",
+  "monitor.node.mergeSourceParts.description":
+    "Shows source parts participating in merges on this node.",
+  "monitor.node.maxPartsForPartition.description":
+    "Shows the largest active part count observed for a partition on this node.",
+  "monitor.node.loadAverage.description":
+    "Shows the operating-system 15-minute load average for this node.",
+  "monitor.node.networkConnections.description":
+    "Shows concurrent TCP, MySQL, HTTP, and interserver connections on this node.",
+  "dashboard.error.unknownTable":
+    "The required table is unavailable. It may be disabled or unsupported by the current ClickHouse version.",
+  "dashboard.error.notEnoughPrivileges":
+    "Insufficient privileges. Contact your administrator to grant the required permissions.",
+  "monitor.table.projections.unsupported":
+    "The current ClickHouse version does not support Projection monitoring because the system.projections table is unavailable.",
+  "monitor.cluster.mergeSourceParts.title": "Merge Source Parts",
+  "monitor.cluster.mergeSourceParts.description":
+    "Shows the number of source parts participating in merges. Sustained growth can indicate merge pressure or excessive small parts.",
+  "monitor.cluster.zookeeperMultiRead.title": "ZooKeeper Multi Read",
+  "monitor.cluster.zookeeperMultiRead.description":
+    "Shows batched ZooKeeper read operations for the monitored scope. Use it to understand coordination-service read workload.",
+  "monitor.cluster.zookeeperMultiWrite.title": "ZooKeeper Multi Write",
+  "monitor.cluster.zookeeperMultiWrite.description":
+    "Shows batched ZooKeeper write operations for the monitored scope. Spikes can indicate increased replication or metadata coordination activity.",
 } as const;
 
 export type MessageKey = keyof typeof en;

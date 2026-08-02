@@ -345,14 +345,14 @@ ORDER BY create_time DESC`,
                   sql: `
 SELECT
 T.name, 
-part.part_count, 
-part.rows, 
-part.on_disk_size, 
-part.uncompressed_size, 
-part.size_percent,
+ifNull(part.part_count, toUInt64(0)) AS part_count,
+ifNull(part.rows, toUInt64(0)) AS rows,
+ifNull(part.on_disk_size, toUInt64(0)) AS on_disk_size,
+ifNull(part.uncompressed_size, toUInt64(0)) AS uncompressed_size,
+ifNull(part.size_percent, toFloat64(0)) AS size_percent,
 T.engine, 
 T.metadata_modification_time,
-part.last_modification_time
+ifNull(part.last_modification_time, toDateTime(0)) AS last_modification_time
 FROM 
 system.tables AS T
 LEFT JOIN

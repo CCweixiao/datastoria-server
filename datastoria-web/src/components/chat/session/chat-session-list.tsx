@@ -430,18 +430,24 @@ function buildHistoryTree(
     return {
       id: connectionNodeId(connectionId),
       labelContent: (
-        <div className="flex min-w-0 items-center gap-2">
-          <span className={cn("truncate", !meta.isCurrent && "text-muted-foreground")}>
-            {meta.label}
-          </span>
-          {!meta.isCurrent && (
-            <span
-              aria-hidden="true"
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50"
-            />
-          )}
-        </div>
+        <span className={cn("truncate", !meta.isCurrent && "text-muted-foreground")}>
+          {meta.label}
+        </span>
       ),
+      tag: meta.isCurrent
+        ? () => (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary shadow-sm"
+              title={t("chat.currentCluster")}
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-primary ring-2 ring-primary/15"
+              />
+              {t("chat.currentCluster")}
+            </span>
+          )
+        : undefined,
       search: connectionSearchTerms,
       icon: Database,
       iconClassName: !meta.isCurrent ? "text-muted-foreground" : undefined,

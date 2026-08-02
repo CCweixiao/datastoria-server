@@ -3,6 +3,7 @@
 import { useConnection } from "@/components/connection/connection-context";
 import { useCustomDashboardActions } from "@/components/dashboard-tab/custom-dashboard-context";
 import { AskAIButton } from "@/components/shared/ask-ai-button";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog } from "@/components/shared/use-dialog";
 import { normalizeDynamicColumnAggregates } from "@/components/system-table-tab/dashboard-scope";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,30 +65,20 @@ export const SKELETON_FADE_DURATION = 150;
 
 const ErrorComponent = ({
   error,
-  errorCode,
   executedSql,
   shouldShowAskAI,
+  friendlyMessage,
 }: {
   error: string;
-  errorCode: string;
   executedSql: string;
   shouldShowAskAI: boolean;
+  friendlyMessage?: string;
 }) => {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center p-1 text-sm text-destructive gap-1">
-      {errorCode === ErrorCode.UNKNOWN_TABLE ? (
+      {friendlyMessage ? (
         <div className="text-center overflow-auto w-full max-h-full custom-scrollbar">
-          <p className="text-sm text-destructive">
-            The table is not found. Maybe it's not enabled or not supported by the current
-            ClickHouse version.
-          </p>
-        </div>
-      ) : errorCode === ErrorCode.NOT_ENOUGH_PRIVILEGES ? (
-        <div className="text-center overflow-auto w-full max-h-full custom-scrollbar">
-          <p className="text-sm text-destructive">
-            No enough privileges. Please contact your administrator to grant you necessary
-            permissions.
-          </p>
+          <p className="text-sm text-destructive">{friendlyMessage}</p>
         </div>
       ) : (
         <>
@@ -109,6 +100,32 @@ const normalizeVisualizationError = (message: string) => {
   }
   return message;
 };
+
+export function resolveDashboardErrorCode(
+  headerCode: string | undefined,
+  message: string,
+  data?: unknown
+): string {
+  if (headerCode?.trim()) {
+    return headerCode.trim();
+  }
+
+  let serializedData = "";
+  try {
+    serializedData = typeof data === "string" ? data : JSON.stringify(data ?? "");
+  } catch {
+    // Ignore non-serializable diagnostic data and continue with the error message.
+  }
+  const detail = `${message}\n${serializedData}`;
+
+  if (/(?:Code:\s*60\b|\bUNKNOWN_TABLE\b)/i.test(detail)) {
+    return ErrorCode.UNKNOWN_TABLE;
+  }
+  if (/(?:Code:\s*497\b|\bNOT_ENOUGH_PRIVILEGES\b)/i.test(detail)) {
+    return ErrorCode.NOT_ENOUGH_PRIVILEGES;
+  }
+  return "";
+}
 
 export function normalizeRefreshOptions(
   options: RefreshOptions | undefined
@@ -161,6 +178,7 @@ export const DashboardVisualizationPanel = forwardRef<
     | StatDescriptor;
 
   const { connection } = useConnection();
+  const { t } = useUiPreferences();
   const customDashboardActions = useCustomDashboardActions();
 
   // State - unified for all visualization types
@@ -464,7 +482,7 @@ export const DashboardVisualizationPanel = forwardRef<
         }
         if (err instanceof QueryError) {
           setError(normalizeVisualizationError(err.message));
-          setErrorCode(err.errorCode || "");
+          setErrorCode(resolveDashboardErrorCode(err.errorCode, err.message, err.data));
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";
           setError(normalizeVisualizationError(message));
@@ -857,9 +875,20 @@ export const DashboardVisualizationPanel = forwardRef<
             {error ? (
               ErrorComponent({
                 error,
-                errorCode,
                 executedSql,
-                shouldShowAskAI: error !== "no metrics",
+                shouldShowAskAI:
+                  error !== "no metrics" &&
+                  errorCode !== ErrorCode.UNKNOWN_TABLE &&
+                  errorCode !== ErrorCode.NOT_ENOUGH_PRIVILEGES,
+                friendlyMessage:
+                  errorCode === ErrorCode.UNKNOWN_TABLE
+                    ? t(
+                        typedDescriptor.unsupportedFeatureMessageKey ??
+                          "dashboard.error.unknownTable"
+                      )
+                    : errorCode === ErrorCode.NOT_ENOUGH_PRIVILEGES
+                      ? t("dashboard.error.notEnoughPrivileges")
+                      : undefined,
               })
             ) : typedDescriptor.type === "table" ? (
               <TableVisualization

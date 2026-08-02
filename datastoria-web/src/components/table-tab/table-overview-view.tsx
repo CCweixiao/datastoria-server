@@ -548,6 +548,7 @@ ORDER BY
             charts: [
               {
                 type: "table",
+                unsupportedFeatureMessageKey: "monitor.table.projections.unsupported",
                 titleOption: {
                   title: "",
                   align: "center",

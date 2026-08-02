@@ -1,4 +1,5 @@
 import type { FormatName, ObjectFormatter } from "@/lib/formatter";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 import type React from "react";
 
 export type SelectorUI = {
@@ -128,8 +129,10 @@ export interface QueryResponse {
 // Title Option interface
 export interface TitleOption {
   title: string;
+  titleKey?: MessageKey;
   link?: string;
   description?: string;
+  descriptionKey?: MessageKey;
 
   // Default to center
   align?: "left" | "center" | "right";
@@ -187,6 +190,9 @@ export interface PanelDescriptor {
   type: string; // "line" | "bar" | "area" | "pie" | "scatter" | "heatmap" | "table" | "transpose-table" | "stat" | "custom"
 
   titleOption?: TitleOption;
+
+  /** Friendly localized message shown when a required system table is unavailable. */
+  unsupportedFeatureMessageKey?: MessageKey;
 
   // If not given, it defaults to false
   collapsed?: boolean;

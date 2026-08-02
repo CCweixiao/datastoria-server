@@ -6,6 +6,7 @@ export const nodeZkMetricsDashboard: TimeseriesDescriptor[] = [
     type: "line",
     titleOption: {
       title: "ZooKeeper Bytes Received",
+      descriptionKey: "monitor.cluster.zookeeperBytesReceived.description",
       align: "center",
     },
     legendOption: {
@@ -33,6 +34,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Bytes Sent",
+      descriptionKey: "monitor.cluster.zookeeperBytesSent.description",
       align: "center",
     },
     legendOption: {
@@ -60,6 +62,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Check",
+      descriptionKey: "monitor.cluster.zookeeperCheck.description",
       align: "center",
     },
     legendOption: {
@@ -87,6 +90,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Close",
+      descriptionKey: "monitor.cluster.zookeeperClose.description",
       align: "center",
     },
     legendOption: {
@@ -114,6 +118,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Create",
+      descriptionKey: "monitor.cluster.zookeeperCreate.description",
       align: "center",
     },
     legendOption: {
@@ -141,6 +146,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Exists",
+      descriptionKey: "monitor.cluster.zookeeperExists.description",
       align: "center",
     },
     legendOption: {
@@ -168,6 +174,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Get",
+      descriptionKey: "monitor.cluster.zookeeperGet.description",
       align: "center",
     },
     legendOption: {
@@ -195,6 +202,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Hardware Exceptions",
+      descriptionKey: "monitor.cluster.zookeeperHardwareExceptions.description",
       align: "center",
     },
     legendOption: {
@@ -222,6 +230,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Init",
+      descriptionKey: "monitor.cluster.zookeeperInit.description",
       align: "center",
     },
     legendOption: {
@@ -249,6 +258,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper List",
+      descriptionKey: "monitor.cluster.zookeeperList.description",
       align: "center",
     },
     legendOption: {
@@ -276,6 +286,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Multi",
+      descriptionKey: "monitor.cluster.zookeeperMulti.description",
       align: "center",
     },
     legendOption: {
@@ -303,6 +314,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Multi Read",
+      descriptionKey: "monitor.cluster.zookeeperMultiRead.description",
       align: "center",
     },
     legendOption: {
@@ -330,6 +342,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Multi Write",
+      descriptionKey: "monitor.cluster.zookeeperMultiWrite.description",
       align: "center",
     },
     legendOption: {
@@ -357,6 +370,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Other Exceptions",
+      descriptionKey: "monitor.cluster.zookeeperOtherExceptions.description",
       align: "center",
     },
     legendOption: {
@@ -384,6 +398,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Reconfig",
+      descriptionKey: "monitor.cluster.zookeeperReconfig.description",
       align: "center",
     },
     legendOption: {
@@ -411,6 +426,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Remove",
+      descriptionKey: "monitor.cluster.zookeeperRemove.description",
       align: "center",
     },
     legendOption: {
@@ -438,6 +454,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Set",
+      descriptionKey: "monitor.cluster.zookeeperSet.description",
       align: "center",
     },
     legendOption: {
@@ -465,6 +482,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Sync",
+      descriptionKey: "monitor.cluster.zookeeperSync.description",
       align: "center",
     },
     legendOption: {
@@ -492,6 +510,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Transactions",
+      descriptionKey: "monitor.cluster.zookeeperTransactions.description",
       align: "center",
     },
     legendOption: {
@@ -519,6 +538,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper User Exceptions",
+      descriptionKey: "monitor.cluster.zookeeperUserExceptions.description",
       align: "center",
     },
     legendOption: {
@@ -546,6 +566,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Wait Microseconds",
+      descriptionKey: "monitor.cluster.zookeeperWait.description",
       align: "center",
     },
     legendOption: {
@@ -573,6 +594,7 @@ ORDER BY t WITH FILL STEP {rounding:UInt32}
     type: "line",
     titleOption: {
       title: "ZooKeeper Watch Response",
+      descriptionKey: "monitor.cluster.zookeeperWatchResponse.description",
       align: "center",
     },
     legendOption: {

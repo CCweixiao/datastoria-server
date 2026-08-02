@@ -1,6 +1,7 @@
 "use client";
 
 import FloatingProgressBar from "@/components/shared/floating-progress-bar";
+import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -9,8 +10,9 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { EllipsisVertical, RotateCw } from "lucide-react";
+import { CircleHelp, EllipsisVertical, RotateCw } from "lucide-react";
 import React, { useState } from "react";
 import type { TitleOption } from "./dashboard-model";
 import type { TimeSpan } from "./timespan-selector";
@@ -100,6 +102,7 @@ const DashboardPanelHeader = React.memo<DashboardPanelHeaderProps>(
     onRefresh,
     getDropdownItems,
   }) => {
+    const { t } = useUiPreferences();
     // Lazy load dropdown menu - only render when hovered to avoid deep provider stack
     const [shouldRenderDropdown, setShouldRenderDropdown] = useState(false);
     const hasActions = showRefreshButton || getDropdownItems;
@@ -188,13 +191,31 @@ const DashboardPanelHeader = React.memo<DashboardPanelHeaderProps>(
               "text-xs text-muted-foreground m-0 truncate"
             )}
           >
-            {titleOption.title}
+            <span>{titleOption.titleKey ? t(titleOption.titleKey) : titleOption.title}</span>
+            {(titleOption.descriptionKey || titleOption.description) && (
+              <TooltipProvider delayDuration={250}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="ml-1 inline-flex align-text-bottom"
+                      aria-label={
+                        titleOption.descriptionKey
+                          ? t(titleOption.descriptionKey)
+                          : titleOption.description
+                      }
+                    >
+                      <CircleHelp className="h-3 w-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[320px] whitespace-normal break-words text-left leading-relaxed">
+                    {titleOption.descriptionKey
+                      ? t(titleOption.descriptionKey)
+                      : titleOption.description}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </CardDescription>
-          {titleOption.description && (
-            <CardDescription className="text-xs mt-1 m-0 truncate">
-              {titleOption.description}
-            </CardDescription>
-          )}
         </div>
       </div>
     );
