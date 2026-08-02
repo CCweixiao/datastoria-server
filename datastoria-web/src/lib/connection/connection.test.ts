@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Connection } from "./connection";
+import { Connection, renderQueryTemplates } from "./connection";
 
 const mockGetContext = vi.fn();
 
@@ -226,6 +226,28 @@ describe("Connection query context parameters", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.query).toBe("SELECT * FROM clusterAllReplicas('auto_cluster', system.metric_log)");
+  });
+
+  it("renders cluster templates for dashboard display without issuing a query", () => {
+    const connection = Connection.create({
+      id: "connection-cluster",
+      name: "cluster",
+      url: "http://localhost:8123",
+      user: "default",
+      password: "",
+      cluster: "test_cluster",
+      editable: true,
+    });
+
+    expect(
+      renderQueryTemplates(
+        "SELECT * FROM {clusterAllReplicas:system.metric_log} WHERE cluster = '{cluster}'",
+        connection.cluster,
+        connection.metadata.detectedCluster
+      )
+    ).toBe(
+      "SELECT * FROM clusterAllReplicas('test_cluster', system.metric_log) WHERE cluster = 'test_cluster'"
+    );
   });
 
   it("falls back to the default cluster for cluster templates", async () => {

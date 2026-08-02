@@ -7,7 +7,7 @@ import { Dialog } from "@/components/shared/use-dialog";
 import { normalizeDynamicColumnAggregates } from "@/components/system-table-tab/dashboard-scope";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorCode } from "@/lib/clickhouse/clickhouse-error-parser";
-import { QueryError } from "@/lib/connection/connection";
+import { QueryError, renderQueryTemplates } from "@/lib/connection/connection";
 import { DateTimeExtension } from "@/lib/datetime-utils";
 import {
   forwardRef,
@@ -303,7 +303,12 @@ export const DashboardVisualizationPanel = forwardRef<
           finalSql = visualizationRefInternal.current.prepareDataFetchSql(finalSql, pageNumber);
         }
 
-        setExecutedSql(finalSql);
+        // Keep the SQL shown in errors, AI-fix prompts, and copy actions identical to the SQL
+        // sent to ClickHouse. queryOnNode still receives the template form so it can detect
+        // cluster functions and avoid routing the expanded query through a single target node.
+        setExecutedSql(
+          renderQueryTemplates(finalSql, connection.cluster, connection.metadata.detectedCluster)
+        );
 
         // Choose the right query method based on type
         const queryArgs = [

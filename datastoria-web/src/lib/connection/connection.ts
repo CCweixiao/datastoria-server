@@ -26,6 +26,37 @@ type ParsedSessionConnectionId = {
   cluster: string | null;
 };
 
+function resolveClusterQueryTemplates(
+  sql: string,
+  configuredCluster?: string,
+  detectedCluster?: string
+): [string, boolean] {
+  const effectiveCluster = configuredCluster?.trim() || detectedCluster?.trim() || "default";
+  const escapedCluster = effectiveCluster.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+  let usedClusterFunctions = false;
+
+  sql = sql.replace(/\{clusterAllReplicas:([^}]+)\}/g, (_match, tableName) => {
+    usedClusterFunctions = true;
+    return `clusterAllReplicas('${escapedCluster}', ${tableName})`;
+  });
+  sql = sql.replace(/\{cluster:([^}]+)\}/g, (_match, tableName) => {
+    usedClusterFunctions = true;
+    return `cluster('${escapedCluster}', ${tableName})`;
+  });
+  sql = sql.replace(/\{table:([^}]+)\}/g, (_match, tableName) => tableName);
+  sql = sql.replace(/\{cluster\}/g, escapedCluster);
+
+  return [sql, usedClusterFunctions];
+}
+
+export function renderQueryTemplates(
+  sql: string,
+  configuredCluster?: string,
+  detectedCluster?: string
+): string {
+  return resolveClusterQueryTemplates(sql, configuredCluster, detectedCluster)[0];
+}
+
 function parseSessionConnectionId(connectionId: string): ParsedSessionConnectionId | null {
   const separatorIndex = connectionId.indexOf("@");
   if (separatorIndex <= 0) {
@@ -648,31 +679,6 @@ export class Connection {
    * @returns [processedSql, hasClusterFunctions] - The processed SQL and whether cluster functions were added
    */
   private resolveClusterTemplates(sql: string): [string, boolean] {
-    const effectiveCluster =
-      this.cluster?.trim() || this.metadata.detectedCluster?.trim() || "default";
-    const escapedCluster = effectiveCluster.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
-    let usedClusterFunctions = false;
-
-    // Replace {clusterAllReplicas:table_name} patterns
-    sql = sql.replace(/\{clusterAllReplicas:([^}]+)\}/g, (_match, tableName) => {
-      usedClusterFunctions = true;
-      return `clusterAllReplicas('${escapedCluster}', ${tableName})`;
-    });
-
-    // Replace {cluster:table_name} patterns (note: different from simple {cluster})
-    sql = sql.replace(/\{cluster:([^}]+)\}/g, (_match, tableName) => {
-      usedClusterFunctions = true;
-      return `cluster('${escapedCluster}', ${tableName})`;
-    });
-
-    // Replace {table:table_name} patterns (no cluster wrapping)
-    sql = sql.replace(/\{table:([^}]+)\}/g, (_match, tableName) => {
-      return tableName;
-    });
-
-    // Replace {cluster} with the escaped cluster name (simple variable without colon).
-    sql = sql.replace(/\{cluster\}/g, escapedCluster);
-
-    return [sql, usedClusterFunctions];
+    return resolveClusterQueryTemplates(sql, this.cluster, this.metadata.detectedCluster);
   }
 }
