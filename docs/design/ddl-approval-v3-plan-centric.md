@@ -759,7 +759,13 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 
 | 项 | 性质 | 为何暂不落地 |
 | ---- | ---- | ---- |
-| **P2 RECONCILING 崩溃恢复** | 安全关键，需谨慎设计 | worker 崩溃后 RUNNING+租约过期的工单需恢复。朴素「租约过期即标 FAILED」会误杀慢 DDL（>10min）；正确做法是进 RECONCILING 态、用节点采集核对实际状态再决定续跑/失败——涉及 RECONCILING 状态机 + 人工动作，值得单独聚焦实现而非仓促收尾。当前：正常路径（无崩溃）完整可用。 |
-| **P3** EXPIRED/超时、声明式 branches 被执行器消费、`ApprovalProvider`、路由矩阵 | 刻意延后 | 见 §11，按需再开。 |
+| **P2 RECONCILING 崩溃恢复** | ✅ 已落地 | `RECONCILING` 状态；`executeItem` 按 item 续租约（只让真死的 worker 租约过期）；`reclaimStuck` sweep 把 RUNNING+过期租约→RECONCILING（worker tick 调）；retry/closeFailed 接受 RECONCILING。CAS 冲突跳过，不丢成功/不重复执行。 |
+| **P3 EXPIRED/超时** | ✅ 已落地 | `EXPIRED` 终态（释放 claim + finished_at）；`expireStale` 把 >7 天未推进的 APPROVED/QUEUED→EXPIRED（worker tick 调）。 |
+| **P3 声明式 branches** | 按需精化 | 当前 `CREATE TABLE` 无 `IF NOT EXISTS`，对象已存在时 **ClickHouse 已拒绝**（不覆盖，安全已有保障）；branches 只是把"CH 报错"升级为"更干净的 BLOCK 提示"，属 UX 精化非安全缺口。最有价值的 db-missing→auto-create 需新增 CREATE_DATABASE 类型 + 级联，是独立特性。 |
+| **P3 `ApprovalProvider` 抽象** | 按需（无第二 provider） | builtin 审批的"决策"就是管理员点击动作本身，无可抽的逻辑；接口只在出现外部 provider（钉钉/飞书/Jira）时才有意义。现在抽 = 空仪式（违反本文 §0.2 去过度抽象）。`external_*` 列已就位待用。 |
+| **P3 路由矩阵** | 按需（策略决策） | 「禁自批」会反转现有策略（现有测试 `administratorCanApproveOwnSubmittedRequest` 明确允许管理员自批，适合 dev/单管理员）；多签/紧急/按风险路由需要真实多租户需求驱动。当前 SINGLE 审批已可用。 |
+| **P3 intent schema 富结构** | 部分已有 | `requiredIntentFields`（字段名列表）已在 `ApprovalWorkOrderTypeResponse` 按 generatorKey 暴露——Agent 已知该传哪些字段。V2 的富结构（type/source/question）是进一步精化。 |
 
-**当前执行能力（全部落地并测试）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取执行）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + **真集群逐节点采集**。V3 P1 + P2 执行芯已全部落地，剩余仅 RECONCILING 崩溃恢复（安全关键，单独做）与 P3（延后）。
+**当前执行能力（全部落地并测试，17 tests 绿，真实 CH 24.8 验证节点采集）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + 真集群逐节点采集 + RECONCILING 崩溃恢复 + EXPIRED 超时清理。
+
+**V3 P1 + P2 已全部落地**；P3 中具 concrete 价值的 EXPIRED 已落地，其余 P3 项（branches/Provider/路由/intent 富结构）经评估为**按需精化或策略决策**——其设计已就绪（spike + §4.5/§5.3/§6.2），但在无真实消费者/需求时落地属于本文 §0.2 与用户「避免过度堆砌」原则所要避免的空抽象。
