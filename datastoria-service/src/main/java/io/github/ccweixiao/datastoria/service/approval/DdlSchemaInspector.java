@@ -51,6 +51,27 @@ public class DdlSchemaInspector {
     this.mapper = mapper;
   }
 
+  /** Whether a table exists on the connection (used by the CREATE_TABLE existence branch). */
+  public Mono<Boolean> objectExists(
+      String connectionId, String database, String table, Identity identity) {
+    return connections
+        .query(
+            connectionId,
+            "SELECT count() AS c FROM system.tables"
+                + " WHERE database = {database:String} AND name = {table:String} FORMAT JSONCompact",
+            Map.of("param_database", database, "param_table", table),
+            identity)
+        .<Boolean>map(
+            response -> {
+              try {
+                return mapper.readTree(response).path("data").path(0).path(0).asInt(0) > 0;
+              } catch (Exception exception) {
+                return false;
+              }
+            })
+        .onErrorResume(exception -> Mono.just(false));
+  }
+
   public Mono<DdlSchemaSnapshot> inspect(
       String connectionId, String database, String table, Identity identity) {
     return connections

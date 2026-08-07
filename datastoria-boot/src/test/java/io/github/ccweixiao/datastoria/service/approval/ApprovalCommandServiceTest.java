@@ -834,6 +834,114 @@ class ApprovalCommandServiceTest {
   }
 
   @Test
+  void executionBlocksWhenCreateTableTargetAlreadyExists() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    Instant now = Instant.now();
+    String sql = "CREATE TABLE db.t (id UInt8) ENGINE=MergeTree ORDER BY id";
+    ApprovalItem createItem =
+        new ApprovalItem(
+            "item-1",
+            "tenant",
+            "request",
+            1,
+            DdlOperationKind.CREATE_TABLE,
+            sql,
+            "digest",
+            "[\"db.t\"]",
+            "MEDIUM",
+            "[]",
+            "PRECONDITION",
+            "{\"check\":\"table-exists\",\"object\":\"db.t\"}",
+            now);
+    String content =
+        "{\"workOrderTypeKey\":\"CLICKHOUSE_CREATE_TABLE\",\"generationRuleChecksum\":\"checksum\","
+            + "\"generatorKey\":\"test-generator\",\"generationRule\":{},"
+            + "\"intent\":{\"database\":\"db\",\"table\":\"t\"}}";
+    String canonical =
+        "{\"generationRule\":{},\"generationRuleChecksum\":\"checksum\",\"generatorKey\":"
+            + "\"test-generator\",\"intent\":{\"database\":\"db\",\"table\":\"t\"},"
+            + "\"workOrderTypeKey\":\"CLICKHOUSE_CREATE_TABLE\"}";
+    ApprovalRequest request =
+        new ApprovalRequest(
+            "request",
+            "tenant",
+            "DDL-1",
+            "CLICKHOUSE_CREATE_TABLE",
+            1,
+            "checksum",
+            "Title",
+            null,
+            "alice",
+            "Alice",
+            null,
+            null,
+            "connection",
+            "Cluster",
+            ApprovalStatus.APPROVED,
+            content,
+            1,
+            digest(canonical),
+            "MANUAL_TRIGGER",
+            0,
+            null,
+            null,
+            null,
+            3L,
+            now,
+            now,
+            now,
+            null,
+            null,
+            now,
+            1,
+            "plan-hash",
+            null,
+            null);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(new ApprovalDetail(request, List.of(createItem), List.of())));
+    when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(new CompiledDdlPlan(List.of(statement(1, sql)), List.of()));
+    when(repository.beginExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any()))
+        .thenReturn(1);
+    when(repository.createExecution(
+            anyString(), anyString(), anyString(), eq(1), anyInt(), anyString()))
+        .thenReturn("execution-1");
+    // the CREATE_TABLE existence branch finds the target already present
+    when(schemaInspector.objectExists(eq("connection"), eq("db"), eq("t"), eq(ADMIN)))
+        .thenReturn(Mono.just(true));
+    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+        .thenReturn(Mono.just("{}"));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            mock(DdlWorkOrderTypeCatalog.class),
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
+            Schedulers.immediate());
+
+    service.execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
+
+    // branch BLOCKs: the DDL is never subscribed (clean failure, not a ClickHouse rejection),
+    // and the request ends FAILED for admin retry/close.
+    verify(repository)
+        .finishRequestExecution(
+            eq("tenant"),
+            eq("request"),
+            eq(4L),
+            eq(ApprovalStatus.RUNNING),
+            eq(ApprovalStatus.FAILED),
+            eq("admin"),
+            any());
+  }
+
+  @Test
   void parseNodeStatusesReadsRealClickHouseJsonCompact() {
     DdlSchemaInspector inspector = new DdlSchemaInspector(null, new ObjectMapper());
     // Real captured response shape from CH 24.8 (note duration serializes as a string).

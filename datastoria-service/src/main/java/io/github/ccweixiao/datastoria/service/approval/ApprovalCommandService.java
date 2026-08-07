@@ -33,6 +33,7 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalNodeExecuti
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalRequest;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalStatus;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinition;
+import io.github.ccweixiao.datastoria.common.domain.approval.DdlOperationKind;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalPageResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalSqlPlanUpdateRequest;
@@ -998,11 +999,25 @@ public class ApprovalCommandService {
           statement.riskLevel(),
           mapper.writeValueAsString(statement.warnings()),
           statement.idempotencyStrategy(),
-          null,
+          preconditionJson(statement),
           now);
     } catch (Exception exception) {
       throw new IllegalStateException("Unable to persist compiled DDL item", exception);
     }
+  }
+
+  /**
+   * Declares a per-statement branch as a precondition (V3 §4.5). CREATE_TABLE guards against
+   * overwriting an existing object — the executor evaluates this before sending and BLOCKs cleanly
+   * instead of waiting for ClickHouse to reject the duplicate.
+   */
+  private String preconditionJson(CompiledDdlStatement statement) {
+    if (statement.operationKind() == DdlOperationKind.CREATE_TABLE
+        && statement.objectRefs() != null
+        && !statement.objectRefs().isEmpty()) {
+      return "{\"check\":\"table-exists\",\"object\":\"" + statement.objectRefs().get(0) + "\"}";
+    }
+    return null;
   }
 
   private Mono<Void> executeItem(
@@ -1031,6 +1046,42 @@ public class ApprovalCommandService {
    * (non-ON-CLUSTER, read mismatch, or permission). Statement success is authoritative via the
    * query exception; node rows are observability.
    */
+  /**
+   * Evaluates a statement's declared branch/precondition before sending (V3 §4.5). For
+   * CREATE_TABLE, BLOCKs cleanly when the target object already exists rather than letting
+   * ClickHouse reject the duplicate. Errors with {@link ExecutionFailedException} on a BLOCK, which
+   * the execution loop turns into a failed item.
+   */
+  private Mono<Void> checkPrecondition(
+      ApprovalRequest request, ApprovalItem item, Identity identity) {
+    if (isBlank(item.preconditionJson())) {
+      return Mono.empty();
+    }
+    try {
+      JsonNode pre = mapper.readTree(item.preconditionJson());
+      if (!"table-exists".equals(pre.path("check").asText())) {
+        return Mono.empty();
+      }
+      String object = pre.path("object").asText("");
+      int dot = object.indexOf('.');
+      if (isBlank(object) || dot < 0) {
+        return Mono.empty();
+      }
+      String database = object.substring(0, dot);
+      String table = object.substring(dot + 1);
+      return schemaInspector
+          .objectExists(request.connectionId(), database, table, identity)
+          .flatMap(
+              exists ->
+                  exists
+                      ? Mono.error(
+                          new ExecutionFailedException("Target object already exists: " + object))
+                      : Mono.<Void>empty());
+    } catch (Exception exception) {
+      return Mono.empty();
+    }
+  }
+
   private Mono<Void> executeStatement(
       ApprovalRequest request,
       ApprovalItem item,
@@ -1039,38 +1090,41 @@ public class ApprovalCommandService {
       String executionId) {
     long startedNanos = System.nanoTime();
     Instant started = Instant.now();
-    return connections
-        .query(request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
+    return checkPrecondition(request, item, identity)
         .then(
-            Mono.<Void>fromCallable(
-                    () -> {
-                      long duration = elapsedMillis(startedNanos);
-                      List<DdlSchemaInspector.NodeStatus> statuses;
-                      try {
-                        statuses =
-                            schemaInspector
-                                .nodeStatuses(
-                                    request.connectionId(),
-                                    objectMarker(item),
-                                    started.minusSeconds(5),
-                                    identity)
-                                .block();
-                      } catch (RuntimeException exception) {
-                        statuses = List.of();
-                      }
-                      ClickHouseConnectionResponse connection =
-                          connections.findById(request.connectionId(), identity).block();
-                      recordNodeResults(
-                          request,
-                          executionId,
-                          connection,
-                          statuses == null ? List.of() : statuses,
-                          duration);
-                      repository.finishExecution(
-                          request.tenantId(), executionId, true, duration, null, null);
-                      return (Void) null;
-                    })
-                .subscribeOn(jdbcScheduler))
+            connections
+                .query(
+                    request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
+                .then(
+                    Mono.<Void>fromCallable(
+                            () -> {
+                              long duration = elapsedMillis(startedNanos);
+                              List<DdlSchemaInspector.NodeStatus> statuses;
+                              try {
+                                statuses =
+                                    schemaInspector
+                                        .nodeStatuses(
+                                            request.connectionId(),
+                                            objectMarker(item),
+                                            started.minusSeconds(5),
+                                            identity)
+                                        .block();
+                              } catch (RuntimeException exception) {
+                                statuses = List.of();
+                              }
+                              ClickHouseConnectionResponse connection =
+                                  connections.findById(request.connectionId(), identity).block();
+                              recordNodeResults(
+                                  request,
+                                  executionId,
+                                  connection,
+                                  statuses == null ? List.of() : statuses,
+                                  duration);
+                              repository.finishExecution(
+                                  request.tenantId(), executionId, true, duration, null, null);
+                              return (Void) null;
+                            })
+                        .subscribeOn(jdbcScheduler)))
         .onErrorResume(
             exception ->
                 finishFailedExecution(
