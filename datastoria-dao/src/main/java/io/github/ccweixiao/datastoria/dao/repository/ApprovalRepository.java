@@ -161,6 +161,10 @@ public interface ApprovalRepository {
 
   List<ApprovalRequest> findClaimableQueuedRequests(int limit);
 
+  void renewExecutionLease(String tenantId, String requestId, java.time.Instant leaseUntil);
+
+  List<ApprovalRequest> findStuckRunningRequests();
+
   int claimQueued(
       String tenantId,
       String requestId,

@@ -685,6 +685,79 @@ class ApprovalCommandServiceTest {
   }
 
   @Test
+  void reclaimStuckMovesExpiredLeaseRunningRequestsToReconciling() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ApprovalRequest stuck = detail(ApprovalStatus.RUNNING, "admin", 3).request();
+    when(repository.findStuckRunningRequests()).thenReturn(List.of(stuck));
+    when(repository.transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.RUNNING),
+            eq(ApprovalStatus.RECONCILING),
+            eq("system"),
+            eq("system"),
+            any(),
+            any()))
+        .thenReturn(true);
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    service.reclaimStuck().block();
+
+    verify(repository)
+        .transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.RUNNING),
+            eq(ApprovalStatus.RECONCILING),
+            eq("system"),
+            eq("system"),
+            any(),
+            any());
+  }
+
+  @Test
+  void retryAcceptsReconcilingState() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(detail(ApprovalStatus.RECONCILING, "admin", 3)));
+    when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(statement(1, "DDL ONE"), statement(2, "DDL TWO")), List.of()));
+    when(repository.retryExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any()))
+        .thenReturn(2);
+    when(repository.findSucceededItemIds("tenant", "request"))
+        .thenReturn(new java.util.TreeSet<>(Set.of("item-1")));
+    when(repository.createExecution(
+            anyString(), anyString(), anyString(), eq(2), anyInt(), anyString()))
+        .thenReturn("execution-2");
+    when(repository.createNodeExecution(
+            anyString(), anyString(), anyString(), anyString(), anyInt()))
+        .thenReturn("node-2");
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+        .thenReturn(Mono.just("{}"));
+    ApprovalCommandService service =
+        service(repository, mock(DdlWorkOrderTypeCatalog.class), compiler, connections);
+
+    service.retry("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
+
+    // retry proceeds from RECONCILING (not just FAILED), skipping the already-succeeded item-1
+    verify(repository).retryExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any());
+    verify(connections, never()).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+  }
+
+  @Test
   void parseNodeStatusesReadsRealClickHouseJsonCompact() {
     DdlSchemaInspector inspector = new DdlSchemaInspector(null, new ObjectMapper());
     // Real captured response shape from CH 24.8 (note duration serializes as a string).

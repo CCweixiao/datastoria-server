@@ -7,6 +7,7 @@ public enum ApprovalStatus {
   REJECTED,
   QUEUED,
   RUNNING,
+  RECONCILING,
   SUCCEEDED,
   FAILED,
   CANCELLED

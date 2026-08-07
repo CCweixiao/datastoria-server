@@ -40,7 +40,8 @@ public class ApprovalExecutionWorker {
       return;
     }
     service
-        .drainOnce()
+        .reclaimStuck()
+        .then(service.drainOnce())
         .subscribeOn(jdbcScheduler)
         .doFinally(signal -> busy.set(false))
         .subscribe(unused -> {}, error -> log.warn("Approval execution drain failed", error));

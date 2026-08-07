@@ -559,7 +559,7 @@ public class JdbcApprovalRepository implements ApprovalRepository {
               latest_execution_status = 'RUNNING', execution_owner = :actorUserId,
               revision = revision + 1, updated_at = :now
             WHERE tenant_id = :tenantId AND id = :requestId AND revision = :expectedRevision
-              AND status = 'FAILED' AND deleted_at IS NULL
+              AND status IN ('FAILED', 'RECONCILING') AND deleted_at IS NULL
             """,
             new MapSqlParameterSource()
                 .addValue("tenantId", tenantId)
@@ -610,6 +610,36 @@ public class JdbcApprovalRepository implements ApprovalRepository {
             .addValue("ordinal", ordinal)
             .addValue("queryId", "skip:" + requestId + ":" + attemptNo + ":" + itemId)
             .addValue("now", timestamp(now)));
+  }
+
+  @Override
+  public void renewExecutionLease(String tenantId, String requestId, Instant leaseUntil) {
+    jdbc.update(
+        """
+        UPDATE ds_approval_request
+        SET execution_lease_until = :leaseUntil, updated_at = :now
+        WHERE tenant_id = :tenantId AND id = :requestId
+          AND status = 'RUNNING' AND deleted_at IS NULL
+        """,
+        new MapSqlParameterSource()
+            .addValue("leaseUntil", timestamp(leaseUntil))
+            .addValue("now", timestamp(Instant.now()))
+            .addValue("tenantId", tenantId)
+            .addValue("requestId", requestId));
+  }
+
+  @Override
+  public List<ApprovalRequest> findStuckRunningRequests() {
+    return jdbc.query(
+        """
+        SELECT * FROM ds_approval_request
+        WHERE status = 'RUNNING' AND deleted_at IS NULL
+          AND execution_lease_until IS NOT NULL AND execution_lease_until < :now
+        ORDER BY updated_at
+        LIMIT 10
+        """,
+        new MapSqlParameterSource().addValue("now", timestamp(Instant.now())),
+        JdbcApprovalRepository::mapRequest);
   }
 
   @Override

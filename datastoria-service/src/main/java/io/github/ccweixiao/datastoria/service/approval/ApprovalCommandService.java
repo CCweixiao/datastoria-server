@@ -433,7 +433,8 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler)
         .flatMap(
             detail -> {
-              if (detail.request().status() != ApprovalStatus.FAILED) {
+              ApprovalStatus status = detail.request().status();
+              if (status != ApprovalStatus.FAILED && status != ApprovalStatus.RECONCILING) {
                 return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_INVALID_STATE));
               }
               return revalidate(detail, frozenDefinition(detail.request()), identity)
@@ -522,6 +523,35 @@ public class ApprovalCommandService {
         .then();
   }
 
+  /**
+   * Reclaims RUNNING work orders whose lease has expired (worker died mid-execution) by moving them
+   * to RECONCILING for admin retry/close. Safe because a live worker renews the lease per item, so
+   * only a genuinely stuck worker's lease expires; a CAS conflict (worker finished meanwhile) is
+   * skipped.
+   */
+  public Mono<Void> reclaimStuck() {
+    return Mono.fromCallable(repository::findStuckRunningRequests)
+        .subscribeOn(jdbcScheduler)
+        .flatMapMany(Flux::fromIterable)
+        .concatMap(
+            request -> {
+              Identity system = systemIdentity(request.tenantId());
+              return Mono.<Void>fromRunnable(
+                      () ->
+                          transition(
+                              request,
+                              request.revision(),
+                              ApprovalStatus.RUNNING,
+                              ApprovalStatus.RECONCILING,
+                              system,
+                              null,
+                              "EXECUTION_STUCK_RECONCILING"))
+                  .subscribeOn(jdbcScheduler)
+                  .onErrorResume(exception -> Mono.empty());
+            })
+        .then();
+  }
+
   private Mono<Void> drainOne(ApprovalRequest queued) {
     Identity system = systemIdentity(queued.tenantId());
     return Mono.fromCallable(() -> repository.findDetail(queued.tenantId(), queued.id()))
@@ -605,11 +635,15 @@ public class ApprovalCommandService {
             () -> {
               ApprovalDetail detail = requireVisible(requestId, identity, true);
               ApprovalRequest request = detail.request();
+              ApprovalStatus expected = request.status();
+              if (expected != ApprovalStatus.FAILED && expected != ApprovalStatus.RECONCILING) {
+                throw new ConflictException(ApiErrorCode.APPROVAL_INVALID_STATE);
+              }
               repository.finishRequestExecution(
                   request.tenantId(),
                   request.id(),
                   command.revision(),
-                  ApprovalStatus.FAILED,
+                  expected,
                   ApprovalStatus.CANCELLED,
                   identity.userId(),
                   event(
@@ -945,9 +979,12 @@ public class ApprovalCommandService {
       ApprovalRequest request, ApprovalItem item, int attempt, Identity identity) {
     String queryId = "approval-" + request.id() + "-" + attempt + "-" + item.ordinal();
     return Mono.fromCallable(
-            () ->
-                repository.createExecution(
-                    request.tenantId(), request.id(), item.id(), attempt, item.ordinal(), queryId))
+            () -> {
+              repository.renewExecutionLease(
+                  request.tenantId(), request.id(), Instant.now().plus(EXECUTION_LEASE_DURATION));
+              return repository.createExecution(
+                  request.tenantId(), request.id(), item.id(), attempt, item.ordinal(), queryId);
+            })
         .subscribeOn(jdbcScheduler)
         .flatMap(
             executionId ->
