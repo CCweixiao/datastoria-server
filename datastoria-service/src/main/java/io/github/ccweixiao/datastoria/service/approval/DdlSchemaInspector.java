@@ -1,6 +1,9 @@
 package io.github.ccweixiao.datastoria.service.approval;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +24,14 @@ import reactor.core.publisher.Mono;
 public class DdlSchemaInspector {
 
   private static final Pattern IDENTIFIER_TOKEN = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+  private static final String NODE_STATUS_QUERY =
+      """
+      SELECT host, port, status, exception_code, exception_text, query_duration_ms
+      FROM system.distributed_ddl_queue
+      WHERE positionCaseInsensitive(query, {marker:String}) > 0
+        AND query_create_time >= toDateTime({since:UInt32})
+      FORMAT JSONCompact
+      """;
   private static final String QUERY =
       """
       SELECT
@@ -71,4 +82,64 @@ public class DdlSchemaInspector {
       throw new IllegalStateException("Invalid ClickHouse schema metadata response", exception);
     }
   }
+
+  /**
+   * Per-host execution status of an ON CLUSTER DDL, read from {@code system.distributed_ddl_queue}.
+   * ClickHouse rewrites/augments the DDL before storing it (e.g. injects a UUID into CREATE
+   * DATABASE), so correlation is by a stable {@code marker} (the target object name, which survives
+   * rewriting) via substring match plus a time window — not by exact SQL text. The queue's {@code
+   * entry} is CH's own sequential id, not the query_id we set. Returns an empty list when the
+   * marker is blank or no rows are found (caller falls back to recording a single local node).
+   */
+  public Mono<List<NodeStatus>> nodeStatuses(
+      String connectionId, String marker, Instant since, Identity identity) {
+    if (marker == null || marker.isBlank()) {
+      return Mono.just(List.of());
+    }
+    return connections
+        .query(
+            connectionId,
+            NODE_STATUS_QUERY,
+            Map.of("param_marker", marker, "param_since", since.getEpochSecond()),
+            identity)
+        .map(this::parseNodeStatuses)
+        .onErrorResume(exception -> Mono.just(List.of()));
+  }
+
+  List<NodeStatus> parseNodeStatuses(String response) {
+    try {
+      JsonNode data = mapper.readTree(response).path("data");
+      if (!data.isArray()) {
+        return List.of();
+      }
+      List<NodeStatus> statuses = new ArrayList<>();
+      for (JsonNode row : data) {
+        String host = row.path(0).asText("");
+        String status = row.path(2).asText("");
+        long code = row.path(3).asLong(0);
+        String message = row.path(4).asText("");
+        long durationMs = row.path(5).asLong(0);
+        boolean succeeded = "Finished".equals(status) && code == 0;
+        statuses.add(
+            new NodeStatus(
+                host,
+                row.path(1).asInt(0),
+                succeeded,
+                durationMs,
+                code == 0 ? null : String.valueOf(code),
+                message.isBlank() ? null : message));
+      }
+      return statuses;
+    } catch (Exception exception) {
+      return List.of();
+    }
+  }
+
+  public record NodeStatus(
+      String host,
+      int port,
+      boolean succeeded,
+      long durationMs,
+      String errorCode,
+      String message) {}
 }

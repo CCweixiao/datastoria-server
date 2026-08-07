@@ -951,65 +951,108 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler)
         .flatMap(
             executionId ->
-                connections
-                    .findById(request.connectionId(), identity)
-                    .flatMap(
-                        connection -> {
-                          Endpoint endpoint = endpoint(connection.url());
-                          return Mono.fromCallable(
-                                  () ->
-                                      repository.createNodeExecution(
-                                          request.tenantId(),
-                                          executionId,
-                                          endpoint.key(),
-                                          endpoint.host(),
-                                          endpoint.port()))
-                              .subscribeOn(jdbcScheduler)
-                              .flatMap(
-                                  nodeExecutionId ->
-                                      executeOnEndpoint(
-                                          request,
-                                          item,
-                                          identity,
-                                          queryId,
-                                          executionId,
-                                          nodeExecutionId));
-                        })
+                executeStatement(request, item, identity, queryId, executionId)
                     .onErrorResume(ExecutionFailedException.class, Mono::error)
                     .onErrorResume(
                         exception ->
                             finishFailedExecution(request, item, executionId, null, 0, exception)));
   }
 
-  private Mono<Void> executeOnEndpoint(
+  /**
+   * Sends the frozen DDL, then records per-node results from {@code system.distributed_ddl_queue}
+   * (real cluster view). Falls back to a single local node when no per-host rows are available
+   * (non-ON-CLUSTER, read mismatch, or permission). Statement success is authoritative via the
+   * query exception; node rows are observability.
+   */
+  private Mono<Void> executeStatement(
       ApprovalRequest request,
       ApprovalItem item,
       Identity identity,
       String queryId,
-      String executionId,
-      String nodeExecutionId) {
-    long started = System.nanoTime();
+      String executionId) {
+    long startedNanos = System.nanoTime();
+    Instant started = Instant.now();
     return connections
         .query(request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
         .then(
-            Mono.<Void>fromRunnable(
+            Mono.<Void>fromCallable(
                     () -> {
-                      long duration = elapsedMillis(started);
-                      repository.finishNodeExecution(
-                          request.tenantId(), nodeExecutionId, true, duration, null, null);
+                      long duration = elapsedMillis(startedNanos);
+                      List<DdlSchemaInspector.NodeStatus> statuses;
+                      try {
+                        statuses =
+                            schemaInspector
+                                .nodeStatuses(
+                                    request.connectionId(),
+                                    objectMarker(item),
+                                    started.minusSeconds(5),
+                                    identity)
+                                .block();
+                      } catch (RuntimeException exception) {
+                        statuses = List.of();
+                      }
+                      ClickHouseConnectionResponse connection =
+                          connections.findById(request.connectionId(), identity).block();
+                      recordNodeResults(
+                          request,
+                          executionId,
+                          connection,
+                          statuses == null ? List.of() : statuses,
+                          duration);
                       repository.finishExecution(
                           request.tenantId(), executionId, true, duration, null, null);
+                      return (Void) null;
                     })
                 .subscribeOn(jdbcScheduler))
         .onErrorResume(
             exception ->
                 finishFailedExecution(
-                    request,
-                    item,
-                    executionId,
-                    nodeExecutionId,
-                    elapsedMillis(started),
-                    exception));
+                    request, item, executionId, null, elapsedMillis(startedNanos), exception));
+  }
+
+  /**
+   * Stable marker (target object name) for correlating a DDL with its distributed_ddl_queue rows.
+   */
+  private String objectMarker(ApprovalItem item) {
+    try {
+      JsonNode refs = mapper.readTree(item.objectRefsJson());
+      if (refs.isArray() && !refs.isEmpty()) {
+        return refs.path(0).asText("");
+      }
+    } catch (Exception ignored) {
+      // blank marker -> caller falls back to single local node
+    }
+    return "";
+  }
+
+  private void recordNodeResults(
+      ApprovalRequest request,
+      String executionId,
+      ClickHouseConnectionResponse connection,
+      List<DdlSchemaInspector.NodeStatus> statuses,
+      long duration) {
+
+    if (statuses.isEmpty()) {
+      Endpoint endpoint = endpoint(connection.url());
+      String nodeId =
+          repository.createNodeExecution(
+              request.tenantId(), executionId, endpoint.key(), endpoint.host(), endpoint.port());
+      repository.finishNodeExecution(request.tenantId(), nodeId, true, duration, null, null);
+    } else {
+      for (DdlSchemaInspector.NodeStatus status : statuses) {
+        String nodeKey = status.host() + ":" + status.port();
+        String nodeId =
+            repository.createNodeExecution(
+                request.tenantId(), executionId, nodeKey, status.host(), status.port());
+        repository.finishNodeExecution(
+            request.tenantId(),
+            nodeId,
+            status.succeeded(),
+            status.durationMs(),
+            status.errorCode(),
+            status.message());
+      }
+    }
   }
 
   private Mono<Void> finishFailedExecution(

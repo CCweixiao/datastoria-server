@@ -131,15 +131,23 @@ Identity system = new Identity(request.tenantId(), "system", Set.of("ROLE_ADMIN"
 | Q4 权限 | `default` 用户可读 `distributed_ddl_queue` / `system.clusters`、可执行 `ON CLUSTER`。 |
 | **Q1 entry↔queryId（关键修正）** | **`entry ≠ queryId`**。传入 `query_id=spike-xxx`，而 `entry=query-0000000005`（CH 内部顺序号）。§4 原假设「`WHERE entry=:queryId`」**错误**。 |
 
-**正确的关联方式**（替代 §4 的 entry 匹配）：按 `query` 文本（冻结 SQL 原文）+ `query_create_time` 时间窗：
+**正确的关联方式**（实测修正两次）：
+
+1. `entry ≠ queryId`（已述），不能用 `WHERE entry=:queryId`。
+2. **`query = 精确 SQL` 也不可靠**——ClickHouse 会**重写 DDL**再入库：`CREATE DATABASE spike_nodecheck3` 被存成 `CREATE DATABASE spike_nodecheck3 UUID '...' ON CLUSTER test_cluster`。精确文本匹配失败。
+3. **但对象名会被保留**。所以用**对象 marker 子串匹配** + 时间窗：
 
 ```sql
 SELECT host, port, status, exception_code, exception_text, query_duration_ms
 FROM system.distributed_ddl_queue
-WHERE query = :frozenSql AND query_create_time >= :execStart
-ORDER BY host
+WHERE positionCaseInsensitive(query, {marker:String}) > 0
+  AND query_create_time >= toDateTime({since:UInt32})
 ```
 
-可靠性：资源 claim 串行化同对象 DDL → 无并发同文本干扰；`query_create_time >= execStart` 过滤历史 attempt 的同文本条目（重试场景）。期望节点集仍由 `system.clusters WHERE cluster=:cluster` 交叉比对（缺节点 → `UNKNOWN`）。
+- `marker` = 目标对象名（取自 `ApprovalItem.objectRefsJson` 首项，如 `analytics.events_local`；CREATE DATABASE 取库名）。`positionCaseInsensitive` 是纯子串匹配，避开 LIKE 的 `_` 通配符陷阱。
+- `since` = 执行起始 epoch 秒（`{since:UInt32}` 参数），过滤历史 attempt 的同对象条目（重试场景）。
+- marker 为空（无 objectRefs）→ 返回空 → 调用方回退单节点。
 
-**结论**：节点采集设计已通过真实 CH 验证，唯一修正为关联键。可进入实现。
+可靠性：资源 claim 串行化同对象 DDL → 无并发同对象干扰；marker + 时间窗定位本条 DDL。实测 `test_cluster` 上 `CREATE DATABASE spike_nodecheck4 ON CLUSTER` 立即返回 ch1/ch2 两行 `Finished`。
+
+**结论**：节点采集设计已通过真实 CH 24.8 验证并实现（`DdlSchemaInspector.nodeStatuses` + `ApprovalCommandService.recordNodeResults`），关联键为对象 marker 子串 + 时间窗。

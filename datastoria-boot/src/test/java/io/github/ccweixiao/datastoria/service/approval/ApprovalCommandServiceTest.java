@@ -632,6 +632,76 @@ class ApprovalCommandServiceTest {
             any());
   }
 
+  @Test
+  void executionRecordsRealPerNodeStatusesFromDistributedDdlQueue() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(detail()));
+    when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(statement(1, "DDL ONE"), statement(2, "DDL TWO")), List.of()));
+    when(repository.beginExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any()))
+        .thenReturn(1);
+    when(repository.createExecution(
+            anyString(), anyString(), anyString(), eq(1), anyInt(), anyString()))
+        .thenReturn("execution-1", "execution-2");
+    when(schemaInspector.nodeStatuses(eq("connection"), anyString(), any(), eq(ADMIN)))
+        .thenReturn(
+            Mono.just(
+                List.of(
+                    new DdlSchemaInspector.NodeStatus("ch1", 9000, true, 5, null, null),
+                    new DdlSchemaInspector.NodeStatus("ch2", 9000, true, 7, null, null))));
+    when(repository.createNodeExecution(
+            anyString(), anyString(), anyString(), anyString(), anyInt()))
+        .thenReturn("node-1", "node-2", "node-3", "node-4");
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+        .thenReturn(Mono.just("{}"));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            mock(DdlWorkOrderTypeCatalog.class),
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            Schedulers.immediate());
+
+    service.execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
+
+    // real per-node rows (ch1, ch2) recorded per statement, not the connection-url local node
+    verify(repository)
+        .createNodeExecution(eq("tenant"), eq("execution-1"), eq("ch1:9000"), eq("ch1"), eq(9000));
+    verify(repository)
+        .createNodeExecution(eq("tenant"), eq("execution-1"), eq("ch2:9000"), eq("ch2"), eq(9000));
+    verify(repository, times(4))
+        .createNodeExecution(anyString(), anyString(), anyString(), anyString(), anyInt());
+    verify(repository, never())
+        .createNodeExecution(anyString(), anyString(), eq("localhost:80"), anyString(), anyInt());
+  }
+
+  @Test
+  void parseNodeStatusesReadsRealClickHouseJsonCompact() {
+    DdlSchemaInspector inspector = new DdlSchemaInspector(null, new ObjectMapper());
+    // Real captured response shape from CH 24.8 (note duration serializes as a string).
+    String realResponse =
+        "{\"data\":[[\"ch2\",9000,\"Finished\",0,\"\"],[\"ch1\",9000,\"Finished\",0,\"\"]]}";
+    var statuses = inspector.parseNodeStatuses(realResponse);
+    assertThat(statuses).hasSize(2);
+    assertThat(statuses)
+        .anySatisfy(
+            s -> {
+              assertThat(s.host()).isEqualTo("ch2");
+              assertThat(s.port()).isEqualTo(9000);
+              assertThat(s.succeeded()).isTrue();
+            });
+    assertThat(statuses).extracting(DdlSchemaInspector.NodeStatus::host).contains("ch1", "ch2");
+  }
+
   private static ApprovalCommandService service(
       ApprovalRepository repository,
       DdlWorkOrderTypeCatalog catalog,
