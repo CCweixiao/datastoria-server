@@ -10,6 +10,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -58,6 +59,10 @@ public class ApprovalCommandService {
 
   private static final DateTimeFormatter REQUEST_DATE =
       DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
+
+  private static final int DRAIN_BATCH = 10;
+  private static final java.time.Duration EXECUTION_LEASE_DURATION =
+      java.time.Duration.ofMinutes(10);
 
   private final ApprovalRepository repository;
   private final UserAccountRepository users;
@@ -168,7 +173,14 @@ public class ApprovalCommandService {
               }
               ApprovalDetail detail = requireVisible(requestId, identity, true);
               ApprovalRequest request = detail.request();
-              ApprovalStatus target = approve ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED;
+              ApprovalStatus target;
+              if (!approve) {
+                target = ApprovalStatus.REJECTED;
+              } else if ("AUTO_AFTER_APPROVAL".equals(request.executionMode())) {
+                target = ApprovalStatus.QUEUED;
+              } else {
+                target = ApprovalStatus.APPROVED;
+              }
               transition(
                   request,
                   command.revision(),
@@ -494,6 +506,92 @@ public class ApprovalCommandService {
                                   })
                               .subscribeOn(jdbcScheduler));
             });
+  }
+
+  /**
+   * Drains claimable QUEUED work orders (AUTO_AFTER_APPROVAL) by claiming each via a CAS lease and
+   * executing it under a per-tenant system identity. Invoked by {@link ApprovalExecutionWorker} on
+   * a schedule. Lease (revision + execution_lease_until in the CAS WHERE) prevents double-execution
+   * across worker instances; a failed claim (race) is skipped.
+   */
+  public Mono<Void> drainOnce() {
+    return Mono.fromCallable(() -> repository.findClaimableQueuedRequests(DRAIN_BATCH))
+        .subscribeOn(jdbcScheduler)
+        .flatMapMany(Flux::fromIterable)
+        .concatMap(this::drainOne)
+        .then();
+  }
+
+  private Mono<Void> drainOne(ApprovalRequest queued) {
+    Identity system = systemIdentity(queued.tenantId());
+    return Mono.fromCallable(() -> repository.findDetail(queued.tenantId(), queued.id()))
+        .subscribeOn(jdbcScheduler)
+        .flatMap(opt -> opt.map(Mono::just).orElse(Mono.empty()))
+        .flatMap(
+            detail ->
+                revalidate(detail, frozenDefinition(detail.request()), system).thenReturn(detail))
+        .flatMap(detail -> verifyEnvNotDrifted(detail, system).thenReturn(detail))
+        .flatMap(
+            detail ->
+                Mono.fromCallable(
+                        () -> {
+                          int attempt =
+                              repository.claimQueued(
+                                  queued.tenantId(),
+                                  queued.id(),
+                                  queued.revision(),
+                                  Instant.now().plus(EXECUTION_LEASE_DURATION),
+                                  system.userId(),
+                                  event(
+                                      detail.request(),
+                                      system,
+                                      "EXECUTION_STARTED",
+                                      "Auto DDL execution started",
+                                      null));
+                          return attempt < 0
+                              ? Optional.<ExecutionContext>empty()
+                              : Optional.of(new ExecutionContext(detail, attempt));
+                        })
+                    .subscribeOn(jdbcScheduler))
+        .flatMap(
+            opt ->
+                opt.map(
+                        context ->
+                            Flux.fromIterable(context.detail().items())
+                                .concatMap(
+                                    item ->
+                                        executeItem(
+                                            context.detail().request(),
+                                            item,
+                                            context.attempt(),
+                                            system))
+                                .then(
+                                    Mono.fromCallable(
+                                            () -> {
+                                              finishExecutionRequest(
+                                                  context.detail().request(), true, system, null);
+                                              return requireVisible(queued.id(), system, true);
+                                            })
+                                        .subscribeOn(jdbcScheduler))
+                                .onErrorResume(
+                                    ExecutionFailedException.class,
+                                    failure ->
+                                        Mono.fromCallable(
+                                                () -> {
+                                                  finishExecutionRequest(
+                                                      context.detail().request(),
+                                                      false,
+                                                      system,
+                                                      failure.getMessage());
+                                                  return requireVisible(queued.id(), system, true);
+                                                })
+                                            .subscribeOn(jdbcScheduler))
+                                .then())
+                    .orElse(Mono.empty()));
+  }
+
+  private static Identity systemIdentity(String tenantId) {
+    return new Identity(tenantId, "system", Set.of("ROLE_ADMIN"));
   }
 
   public Mono<ApprovalDetail> closeFailed(

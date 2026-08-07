@@ -2,7 +2,9 @@ package io.github.ccweixiao.datastoria.boot;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+@EnableScheduling
 @SpringBootApplication(scanBasePackages = "io.github.ccweixiao.datastoria")
 public class DatastoriaServerApplication {
 

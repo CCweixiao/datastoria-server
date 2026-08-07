@@ -580,6 +580,58 @@ class ApprovalCommandServiceTest {
             any());
   }
 
+  @Test
+  void drainOnceExecutesClaimedQueuedRequestUnderSystemIdentity() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    ApprovalDetail queued = detail(ApprovalStatus.QUEUED, "admin", 3);
+    when(repository.findClaimableQueuedRequests(anyInt())).thenReturn(List.of(queued.request()));
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(queued));
+    when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(statement(1, "DDL ONE"), statement(2, "DDL TWO")), List.of()));
+    when(repository.claimQueued(eq("tenant"), eq("request"), eq(3L), any(), eq("system"), any()))
+        .thenReturn(1);
+    when(repository.createExecution(
+            anyString(), anyString(), anyString(), eq(1), anyInt(), anyString()))
+        .thenReturn("execution-1", "execution-2");
+    when(repository.createNodeExecution(
+            anyString(), anyString(), anyString(), anyString(), anyInt()))
+        .thenReturn("node-1", "node-2");
+    when(connections.findById(eq("connection"), any())).thenReturn(Mono.just(connection()));
+    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+        .thenReturn(Mono.just("{}"));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            mock(DdlWorkOrderTypeCatalog.class),
+            compiler,
+            mock(DdlSchemaInspector.class),
+            connections,
+            new ObjectMapper(),
+            Schedulers.immediate());
+
+    service.drainOnce().block();
+
+    // executed under a per-tenant system identity, not the admin who queued it
+    verify(connections).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(repository, never())
+        .beginExecution(anyString(), anyString(), anyLong(), anyString(), any());
+    verify(repository)
+        .finishRequestExecution(
+            eq("tenant"),
+            eq("request"),
+            eq(4L),
+            eq(ApprovalStatus.RUNNING),
+            eq(ApprovalStatus.SUCCEEDED),
+            eq("system"),
+            any());
+  }
+
   private static ApprovalCommandService service(
       ApprovalRepository repository,
       DdlWorkOrderTypeCatalog catalog,

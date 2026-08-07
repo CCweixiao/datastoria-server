@@ -158,4 +158,14 @@ public interface ApprovalRepository {
 
   void createSkippedExecution(
       String tenantId, String requestId, String itemId, int attemptNo, int ordinal);
+
+  List<ApprovalRequest> findClaimableQueuedRequests(int limit);
+
+  int claimQueued(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      java.time.Instant leaseUntil,
+      String actorUserId,
+      ApprovalEvent event);
 }

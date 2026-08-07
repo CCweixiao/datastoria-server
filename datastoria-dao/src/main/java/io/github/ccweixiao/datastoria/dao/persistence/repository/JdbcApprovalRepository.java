@@ -613,6 +613,59 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   }
 
   @Override
+  public List<ApprovalRequest> findClaimableQueuedRequests(int limit) {
+    return jdbc.query(
+        """
+        SELECT * FROM ds_approval_request
+        WHERE status = 'QUEUED' AND deleted_at IS NULL
+          AND (execution_lease_until IS NULL OR execution_lease_until < :now)
+        ORDER BY updated_at
+        LIMIT :limit
+        """,
+        new MapSqlParameterSource()
+            .addValue("now", timestamp(Instant.now()))
+            .addValue("limit", limit),
+        JdbcApprovalRepository::mapRequest);
+  }
+
+  @Override
+  public int claimQueued(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      Instant leaseUntil,
+      String actorUserId,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET status = 'RUNNING', execution_attempt = execution_attempt + 1,
+              latest_execution_status = 'RUNNING', execution_owner = :actorUserId,
+              execution_lease_until = :leaseUntil, revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :requestId AND revision = :expectedRevision
+              AND status = 'QUEUED' AND deleted_at IS NULL
+              AND (execution_lease_until IS NULL OR execution_lease_until < :now)
+            """,
+            new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("requestId", requestId)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("leaseUntil", timestamp(leaseUntil))
+                .addValue("actorUserId", actorUserId)
+                .addValue("now", timestamp(now)));
+    if (affected != 1) {
+      return -1;
+    }
+    insertEvent(event);
+    return jdbc.queryForObject(
+        "SELECT execution_attempt FROM ds_approval_request WHERE tenant_id = :tenantId AND id = :requestId",
+        Map.of("tenantId", tenantId, "requestId", requestId),
+        Integer.class);
+  }
+
+  @Override
   public String createExecution(
       String tenantId,
       String requestId,
