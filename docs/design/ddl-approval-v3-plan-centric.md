@@ -743,3 +743,21 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 18. **失败三层处置可审计**：确认成功（带证据 + 操作人）/从失败重试（新 attempt）/关闭处理；`NONE` 类语句结果不明时不自动重试，只能人工确认或关闭。
 19. **重纠正分两路且不新建独立工单**：运行时纠正（retry/reconcile）不重新审批；改 plan 走 change classifier → 新 `plan_version` → 重新审批；重试在原工单新建 attempt，跳过已成功语句。
 20. **幂等重试安全**：`NATIVE_IF_EXISTS`/`PRECONDITION` 重试前做幂等预检查，已达期望状态记 `SUCCEEDED`（reason=`BY_PRECONDITION`）；绝不靠字符串补 `IF EXISTS` 把任意 DDL 宣称幂等。
+
+## 13. 实施进度（分支 `feat/ddl-approval-v3-plan`）
+
+| 阶段 | 状态 | 落地内容（commit） |
+| ---- | ---- | ---- |
+| **P1 升 Plan** | ✅ 完成 | V25 加 `plan_version`/`plan_hash`/`env_snapshot_json`/`policy_version_ref` 四列；`computePlanHash` 复用 `canonicalJsonDigest`；createDraft 计算 hash/env/version，语义变化自增 `plan_version`；prepare 返回 `planVersion`/`planHash`。单测验证 hash 稳定 + version 自增。 |
+| **P2-1 环境漂移检测** | ✅ 完成 | `verifyEnvNotDrifted`：执行前消费冻结 `env_snapshot`，ALTER 类型重查目标表 schema 比对，漂移则阻断 `DDL_REVALIDATION_REQUIRED`；CREATE_TABLE 短路。 |
+| **P2-2 失败重试** | ✅ 完成 | `retryExecution`（FAILED→RUNNING 新 attempt）、`findSucceededItemIds`、`createSkippedExecution`（SKIPPED 审计行）；`retry` 复用 revalidate + 漂移检查，**跳过历史 attempt 已 SUCCEEDED 的语句**，只重跑失败的；`POST /admin/approvals/{id}/retry`。 |
+
+**剩余项（未落地）**：
+
+| 项 | 性质 | 为何暂不落地 |
+| ---- | ---- | ---- |
+| **P2 异步执行引擎**（QUEUED + scheduler/worker + 租约 + AUTO_AFTER_APPROVAL） | 大子系统，**spike-gated** | 需先做 ClickHouse `system.clusters`/`distributed_ddl_queue` 探针验证节点状态采集可行性（不同 CH 版本差异），且 worker 涉及租约/并发/系统身份/跨租户轮询等需迭代的设计决策。一shot 风险高，违反本文 §11「P2 先 spike」的既定节奏。 |
+| **P2 真集群多节点采集** | CH 版本相关 | 同上，需真实 CH 环境验证；当前为单节点，保持现状待 spike。 |
+| **P3** EXPIRED/超时、声明式 branches 被执行器消费、`ApprovalProvider`、路由矩阵 | 刻意延后 | 见 §11，按需再开。 |
+
+当前 `execute()` 仍为管理员同步触发（MANUAL_TRIGGER，APPROVED→RUNNING）；`retry()` 在此基础上补齐了失败恢复（跳过已成功语句）。异步自动执行（AUTO_AFTER_APPROVAL）是下一阶段的 spike-gated 工作。
