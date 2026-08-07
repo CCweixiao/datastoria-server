@@ -72,6 +72,7 @@ public class ApprovalCommandService {
   private final DdlSchemaInspector schemaInspector;
   private final ClickHouseConnectionService connections;
   private final ObjectMapper mapper;
+  private final ApprovalProvider approvalProvider;
   private final Scheduler jdbcScheduler;
 
   public ApprovalCommandService(
@@ -82,6 +83,7 @@ public class ApprovalCommandService {
       DdlSchemaInspector schemaInspector,
       ClickHouseConnectionService connections,
       ObjectMapper mapper,
+      ApprovalProvider approvalProvider,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.repository = repository;
     this.users = users;
@@ -90,6 +92,7 @@ public class ApprovalCommandService {
     this.schemaInspector = schemaInspector;
     this.connections = connections;
     this.mapper = mapper;
+    this.approvalProvider = approvalProvider;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -174,8 +177,9 @@ public class ApprovalCommandService {
               }
               ApprovalDetail detail = requireVisible(requestId, identity, true);
               ApprovalRequest request = detail.request();
+              ApprovalStatus decision = approvalProvider.decide(request, approve, identity);
               ApprovalStatus target;
-              if (!approve) {
+              if (decision == ApprovalStatus.REJECTED) {
                 target = ApprovalStatus.REJECTED;
               } else if ("AUTO_AFTER_APPROVAL".equals(request.executionMode())) {
                 target = ApprovalStatus.QUEUED;

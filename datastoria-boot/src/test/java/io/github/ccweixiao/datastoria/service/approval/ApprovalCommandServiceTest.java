@@ -52,9 +52,9 @@ class ApprovalCommandServiceTest {
   private static final Identity ADMIN = new Identity("tenant", "admin", Set.of("ROLE_ADMIN"));
 
   @Test
-  void administratorCanApproveOwnSubmittedRequest() {
+  void administratorCanApproveAnotherApplicantsRequest() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
-    ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "admin", 3);
+    ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "alice", 3);
     when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(submitted));
     when(repository.transition(
             eq("tenant"),
@@ -68,11 +68,16 @@ class ApprovalCommandServiceTest {
             any()))
         .thenReturn(true);
     ApprovalCommandService service =
-        service(
+        new ApprovalCommandService(
             repository,
+            userAccounts(),
             mock(DdlWorkOrderTypeCatalog.class),
             mock(DdlPlanCompiler.class),
-            mock(ClickHouseConnectionService.class));
+            mock(DdlSchemaInspector.class),
+            mock(ClickHouseConnectionService.class),
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(false),
+            Schedulers.immediate());
 
     service
         .review("request", new ApprovalTransitionRequest(3, null, "approved"), true, ADMIN)
@@ -89,6 +94,34 @@ class ApprovalCommandServiceTest {
             eq("admin"),
             eq("approved"),
             any());
+  }
+
+  @Test
+  void administratorCannotApproveOwnRequest() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "admin", 3);
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(submitted));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(DdlSchemaInspector.class),
+            mock(ClickHouseConnectionService.class),
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(false),
+            Schedulers.immediate());
+
+    assertThatThrownBy(
+            () ->
+                service
+                    .review(
+                        "request", new ApprovalTransitionRequest(3, null, "approved"), true, ADMIN)
+                    .block())
+        .hasMessageContaining("own work order");
+    verify(repository, never())
+        .transition(anyString(), anyString(), anyLong(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -228,6 +261,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
             Schedulers.immediate());
 
     ApprovalDetail result =
@@ -514,6 +548,7 @@ class ApprovalCommandServiceTest {
             schemaInspector,
             connections,
             new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
             Schedulers.immediate());
 
     assertThatThrownBy(
@@ -559,6 +594,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
             Schedulers.immediate());
 
     service.retry("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
@@ -612,6 +648,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
             Schedulers.immediate());
 
     service.drainOnce().block();
@@ -669,6 +706,7 @@ class ApprovalCommandServiceTest {
             schemaInspector,
             connections,
             new ObjectMapper(),
+            new BuiltinApprovalProvider(true),
             Schedulers.immediate());
 
     service.execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
@@ -826,6 +864,7 @@ class ApprovalCommandServiceTest {
         mock(DdlSchemaInspector.class),
         connections,
         new ObjectMapper(),
+        new BuiltinApprovalProvider(true),
         Schedulers.immediate());
   }
 
