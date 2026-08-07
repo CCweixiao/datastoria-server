@@ -751,13 +751,15 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 | **P1 升 Plan** | ✅ 完成 | V25 加 `plan_version`/`plan_hash`/`env_snapshot_json`/`policy_version_ref` 四列；`computePlanHash` 复用 `canonicalJsonDigest`；createDraft 计算 hash/env/version，语义变化自增 `plan_version`；prepare 返回 `planVersion`/`planHash`。单测验证 hash 稳定 + version 自增。 |
 | **P2-1 环境漂移检测** | ✅ 完成 | `verifyEnvNotDrifted`：执行前消费冻结 `env_snapshot`，ALTER 类型重查目标表 schema 比对，漂移则阻断 `DDL_REVALIDATION_REQUIRED`；CREATE_TABLE 短路。 |
 | **P2-2 失败重试** | ✅ 完成 | `retryExecution`（FAILED→RUNNING 新 attempt）、`findSucceededItemIds`、`createSkippedExecution`（SKIPPED 审计行）；`retry` 复用 revalidate + 漂移检查，**跳过历史 attempt 已 SUCCEEDED 的语句**，只重跑失败的；`POST /admin/approvals/{id}/retry`。 |
+| **P2-3 异步执行引擎** | ✅ 完成 | `findClaimableQueuedRequests` + `claimQueued`（CAS QUEUED→RUNNING + `execution_lease_until` 租约，防跨实例重复领取）；`drainOnce` 按租户构造 system 身份执行；`review()` 对 `AUTO_AFTER_APPROVAL` 转 QUEUED；`executionMode` 从类型 `risk_policy_json` 读出（默认 MANUAL）；`ApprovalExecutionWorker` @Scheduled 轮询（busy 防重叠）+ `@EnableScheduling`。AUTO 闭环打通：审批→QUEUED→worker 领取→执行。 |
+| **P2 spike** | ✅ 完成 | 集群状态采集设计：`system.distributed_ddl_queue`（每节点一行 status/exception/duration）+ `system.clusters`（期望节点集）；并解除 worker 身份阻断（`connections.query` 仅租户隔离、无 admin 门禁）。见 `ddl-approval-v3-p2-cluster-spike.md`。 |
 
 **剩余项（未落地）**：
 
 | 项 | 性质 | 为何暂不落地 |
 | ---- | ---- | ---- |
-| **P2 异步执行引擎**（QUEUED + scheduler/worker + 租约 + AUTO_AFTER_APPROVAL） | 大子系统，**spike-gated** | 需先做 ClickHouse `system.clusters`/`distributed_ddl_queue` 探针验证节点状态采集可行性（不同 CH 版本差异），且 worker 涉及租约/并发/系统身份/跨租户轮询等需迭代的设计决策。一shot 风险高，违反本文 §11「P2 先 spike」的既定节奏。 |
-| **P2 真集群多节点采集** | CH 版本相关 | 同上，需真实 CH 环境验证；当前为单节点，保持现状待 spike。 |
+| **P2 真集群多节点采集** | CH 版本相关，**待真实 CH 验证** | spike 设计已就绪（`distributed_ddl_queue` 按 entry 逐节点）；但 `entry↔queryId` 关联、读取时机、版本边界（`distributed_ddl_queue` vs `cluster_ddl_queue`）、读权限 5 个开放问题需真实 ClickHouse 验证后才能写采集代码。当前执行仍记录单节点。 |
+| **P2 RECONCILING 恢复** | 依赖上一项 | worker 崩溃后 RUNNING+租约过期的工单需重新核对实际集群状态（依赖节点采集）再决定续跑/失败，与上一项耦合，待 CH 验证后一起做。 |
 | **P3** EXPIRED/超时、声明式 branches 被执行器消费、`ApprovalProvider`、路由矩阵 | 刻意延后 | 见 §11，按需再开。 |
 
-当前 `execute()` 仍为管理员同步触发（MANUAL_TRIGGER，APPROVED→RUNNING）；`retry()` 在此基础上补齐了失败恢复（跳过已成功语句）。异步自动执行（AUTO_AFTER_APPROVAL）是下一阶段的 spike-gated 工作。
+**当前执行能力**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批后 `review` 转 QUEUED，`ApprovalExecutionWorker` 异步领取执行）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断，均已落地并单测。剩余的真集群逐节点采集与崩溃恢复是 CH 环境验证后的工作。
