@@ -359,6 +359,7 @@ public class ApprovalCommandService {
         .flatMap(
             detail ->
                 revalidate(detail, frozenDefinition(detail.request()), identity).thenReturn(detail))
+        .flatMap(detail -> verifyEnvNotDrifted(detail, identity).thenReturn(detail))
         .flatMap(
             detail ->
                 Mono.fromCallable(
@@ -904,6 +905,53 @@ public class ApprovalCommandService {
       return Mono.error(PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST));
     }
     return schemaInspector.inspect(command.connectionId(), database, table, identity);
+  }
+
+  /**
+   * Execute-time environment drift check (V3 P2). Consumes the env_snapshot frozen at prepare: for
+   * ALTER-type plans the snapshot holds the target table schema; if it has changed by execute time
+   * the approval rested on stale facts, so execution is blocked (re-prepare required). CREATE_TABLE
+   * short-circuited to an empty snapshot at prepare, so there is no baseline to drift-check.
+   */
+  private Mono<Void> verifyEnvNotDrifted(ApprovalDetail detail, Identity identity) {
+    String envJson = detail.request().envSnapshotJson();
+    if (isBlank(envJson)) return Mono.empty();
+    try {
+      JsonNode env = mapper.readTree(envJson);
+      JsonNode frozenColumns = env.path("schema").path("columns");
+      if (!frozenColumns.isArray() || frozenColumns.isEmpty()) {
+        return Mono.empty();
+      }
+      JsonNode intent = mapper.readTree(detail.request().contentJson()).path("intent");
+      String database = intent.path("database").asText();
+      String table = intent.path("table").asText();
+      if (isBlank(database) || isBlank(table)) return Mono.empty();
+      Set<String> frozenColumnSet = jsonToStringSet(frozenColumns);
+      Set<String> frozenProtectedSet = jsonToStringSet(env.path("schema").path("protectedColumns"));
+      return schemaInspector
+          .inspect(detail.request().connectionId(), database, table, identity)
+          .map(
+              current -> {
+                if (!current.columns().equals(frozenColumnSet)
+                    || !current.protectedColumns().equals(frozenProtectedSet)) {
+                  throw new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED);
+                }
+                return current;
+              })
+          .then();
+    } catch (RuntimeException exception) {
+      return Mono.error(exception);
+    } catch (Exception exception) {
+      return Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED));
+    }
+  }
+
+  private Set<String> jsonToStringSet(JsonNode array) {
+    Set<String> values = new TreeSet<>();
+    if (array.isArray()) {
+      array.forEach(node -> values.add(node.asText()));
+    }
+    return values;
   }
 
   private Mono<Void> revalidate(

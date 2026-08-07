@@ -415,6 +415,117 @@ class ApprovalCommandServiceTest {
     assertThat(updated.get().planVersion()).isEqualTo(2);
   }
 
+  @Test
+  void executeBlocksWhenEnvironmentDriftedFromFrozenSnapshot() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    DdlWorkOrderTypeCatalog catalog = mock(DdlWorkOrderTypeCatalog.class);
+    when(catalog.requireEnabled(anyString(), anyString())).thenReturn(definition());
+    String content =
+        "{\"workOrderTypeKey\":\"CLICKHOUSE_MODIFY_COLUMN\",\"generationRuleChecksum\":\"checksum\","
+            + "\"generatorKey\":\"test-generator\",\"generationRule\":{},"
+            + "\"intent\":{\"database\":\"db\",\"table\":\"t\"}}";
+    String canonical =
+        "{\"generationRule\":{},\"generationRuleChecksum\":\"checksum\",\"generatorKey\":"
+            + "\"test-generator\",\"intent\":{\"database\":\"db\",\"table\":\"t\"},"
+            + "\"workOrderTypeKey\":\"CLICKHOUSE_MODIFY_COLUMN\"}";
+    String envSnapshot =
+        "{\"connectionId\":\"connection\",\"workOrderTypeKey\":\"CLICKHOUSE_MODIFY_COLUMN\","
+            + "\"schema\":{\"columns\":[\"a\",\"b\"],\"protectedColumns\":[]}}";
+    Instant now = Instant.now();
+    ApprovalItem modifyItem =
+        new ApprovalItem(
+            "item-1",
+            "tenant",
+            "request",
+            1,
+            DdlOperationKind.ALTER_TABLE_MODIFY_COLUMN,
+            "ALTER TABLE db.t MODIFY COLUMN a UInt64",
+            "digest",
+            "[\"db.t\"]",
+            "HIGH",
+            "[]",
+            "PRECONDITION",
+            null,
+            now);
+    ApprovalRequest request =
+        new ApprovalRequest(
+            "request",
+            "tenant",
+            "DDL-1",
+            "CLICKHOUSE_MODIFY_COLUMN",
+            1,
+            "checksum",
+            "Title",
+            null,
+            "admin",
+            "Administrator",
+            null,
+            null,
+            "connection",
+            "Cluster",
+            ApprovalStatus.APPROVED,
+            content,
+            1,
+            digest(canonical),
+            "MANUAL_TRIGGER",
+            0,
+            null,
+            null,
+            null,
+            3L,
+            now,
+            now,
+            now,
+            null,
+            null,
+            now,
+            1,
+            "plan-hash",
+            envSnapshot,
+            null);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(new ApprovalDetail(request, List.of(modifyItem), List.of())));
+    // recompiled frozen plan still matches the frozen item, so revalidate passes
+    when(compiler.compile(any(), any(), any()))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(
+                    new CompiledDdlStatement(
+                        1,
+                        DdlOperationKind.ALTER_TABLE_MODIFY_COLUMN,
+                        "ALTER TABLE db.t MODIFY COLUMN a UInt64",
+                        List.of("db.t"),
+                        "HIGH",
+                        List.of(),
+                        "PRECONDITION")),
+                List.of()));
+    // by execute time the table drifted: column c was added since prepare
+    when(schemaInspector.inspect(eq("connection"), eq("db"), eq("t"), eq(ADMIN)))
+        .thenReturn(Mono.just(new DdlSchemaSnapshot(Set.of("a", "b", "c"), Set.of())));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            catalog,
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            Schedulers.immediate());
+
+    assertThatThrownBy(
+            () ->
+                service
+                    .execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN)
+                    .block())
+        .hasMessageContaining("schema changed");
+    verify(repository, never())
+        .beginExecution(anyString(), anyString(), anyLong(), anyString(), any());
+  }
+
   private static ApprovalCommandService service(
       ApprovalRepository repository,
       DdlWorkOrderTypeCatalog catalog,
