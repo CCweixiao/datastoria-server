@@ -10,5 +10,6 @@ public enum ApprovalStatus {
   RECONCILING,
   SUCCEEDED,
   FAILED,
-  CANCELLED
+  CANCELLED,
+  EXPIRED
 }

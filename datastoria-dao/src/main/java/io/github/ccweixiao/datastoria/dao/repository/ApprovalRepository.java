@@ -165,6 +165,8 @@ public interface ApprovalRepository {
 
   List<ApprovalRequest> findStuckRunningRequests();
 
+  List<ApprovalRequest> findExpiredApprovalCandidates(java.time.Instant cutoff);
+
   int claimQueued(
       String tenantId,
       String requestId,

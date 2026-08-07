@@ -63,6 +63,7 @@ public class ApprovalCommandService {
   private static final int DRAIN_BATCH = 10;
   private static final java.time.Duration EXECUTION_LEASE_DURATION =
       java.time.Duration.ofMinutes(10);
+  private static final java.time.Duration APPROVAL_EXPIRY = java.time.Duration.ofDays(7);
 
   private final ApprovalRepository repository;
   private final UserAccountRepository users;
@@ -546,6 +547,31 @@ public class ApprovalCommandService {
                               system,
                               null,
                               "EXECUTION_STUCK_RECONCILING"))
+                  .subscribeOn(jdbcScheduler)
+                  .onErrorResume(exception -> Mono.empty());
+            })
+        .then();
+  }
+
+  /** Expires APPROVED/QUEUED work orders not progressed within the approval TTL (V3 P3). */
+  public Mono<Void> expireStale() {
+    java.time.Instant cutoff = java.time.Instant.now().minus(APPROVAL_EXPIRY);
+    return Mono.fromCallable(() -> repository.findExpiredApprovalCandidates(cutoff))
+        .subscribeOn(jdbcScheduler)
+        .flatMapMany(Flux::fromIterable)
+        .concatMap(
+            request -> {
+              Identity system = systemIdentity(request.tenantId());
+              return Mono.<Void>fromRunnable(
+                      () ->
+                          transition(
+                              request,
+                              request.revision(),
+                              request.status(),
+                              ApprovalStatus.EXPIRED,
+                              system,
+                              null,
+                              "APPROVAL_EXPIRED"))
                   .subscribeOn(jdbcScheduler)
                   .onErrorResume(exception -> Mono.empty());
             })

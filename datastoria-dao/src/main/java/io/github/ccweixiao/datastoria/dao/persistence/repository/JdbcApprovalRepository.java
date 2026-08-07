@@ -448,14 +448,16 @@ public class JdbcApprovalRepository implements ApprovalRepository {
               submitted_at = CASE WHEN :targetStatus = 'SUBMITTED' THEN :now ELSE submitted_at END,
               approved_at = CASE WHEN :targetStatus = 'APPROVED' THEN :now ELSE approved_at END,
               rejected_at = CASE WHEN :targetStatus = 'REJECTED' THEN :now ELSE rejected_at END,
-              finished_at = CASE WHEN :targetStatus IN ('SUCCEEDED','FAILED','CANCELLED') THEN :now ELSE finished_at END,
+              finished_at = CASE WHEN :targetStatus IN ('SUCCEEDED','FAILED','CANCELLED','EXPIRED') THEN :now ELSE finished_at END,
               revision = revision + 1, updated_at = :now
             WHERE tenant_id = :tenantId AND id = :requestId
               AND revision = :expectedRevision AND status = :expectedStatus AND deleted_at IS NULL
             """,
             parameters);
     if (affected == 1) {
-      if (targetStatus == ApprovalStatus.REJECTED || targetStatus == ApprovalStatus.CANCELLED) {
+      if (targetStatus == ApprovalStatus.REJECTED
+          || targetStatus == ApprovalStatus.CANCELLED
+          || targetStatus == ApprovalStatus.EXPIRED) {
         releaseResourceClaims(tenantId, requestId, now);
       }
       insertEvent(event);
@@ -639,6 +641,20 @@ public class JdbcApprovalRepository implements ApprovalRepository {
         LIMIT 10
         """,
         new MapSqlParameterSource().addValue("now", timestamp(Instant.now())),
+        JdbcApprovalRepository::mapRequest);
+  }
+
+  @Override
+  public List<ApprovalRequest> findExpiredApprovalCandidates(Instant cutoff) {
+    return jdbc.query(
+        """
+        SELECT * FROM ds_approval_request
+        WHERE status IN ('APPROVED', 'QUEUED') AND deleted_at IS NULL
+          AND updated_at < :cutoff
+        ORDER BY updated_at
+        LIMIT 50
+        """,
+        new MapSqlParameterSource().addValue("cutoff", timestamp(cutoff)),
         JdbcApprovalRepository::mapRequest);
   }
 

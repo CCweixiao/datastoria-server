@@ -685,6 +685,44 @@ class ApprovalCommandServiceTest {
   }
 
   @Test
+  void expireStaleMarksOldApprovedRequestsExpired() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ApprovalRequest stale = detail(ApprovalStatus.APPROVED, "admin", 3).request();
+    when(repository.findExpiredApprovalCandidates(any())).thenReturn(List.of(stale));
+    when(repository.transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.APPROVED),
+            eq(ApprovalStatus.EXPIRED),
+            any(),
+            any(),
+            any(),
+            any()))
+        .thenReturn(true);
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    service.expireStale().block();
+
+    verify(repository)
+        .transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.APPROVED),
+            eq(ApprovalStatus.EXPIRED),
+            eq("system"),
+            eq("system"),
+            any(),
+            any());
+  }
+
+  @Test
   void reclaimStuckMovesExpiredLeaseRunningRequestsToReconciling() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
     ApprovalRequest stuck = detail(ApprovalStatus.RUNNING, "admin", 3).request();

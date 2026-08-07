@@ -40,7 +40,8 @@ public class ApprovalExecutionWorker {
       return;
     }
     service
-        .reclaimStuck()
+        .expireStale()
+        .then(service.reclaimStuck())
         .then(service.drainOnce())
         .subscribeOn(jdbcScheduler)
         .doFinally(signal -> busy.set(false))
