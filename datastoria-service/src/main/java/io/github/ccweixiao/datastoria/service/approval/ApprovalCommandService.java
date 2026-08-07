@@ -413,6 +413,89 @@ public class ApprovalCommandService {
                                 .subscribeOn(jdbcScheduler)));
   }
 
+  public Mono<ApprovalDetail> retry(
+      String requestId, ApprovalTransitionRequest command, Identity identity) {
+    requireAdmin(identity);
+    validateRevision(command);
+    return Mono.fromCallable(() -> requireVisible(requestId, identity, true))
+        .subscribeOn(jdbcScheduler)
+        .flatMap(
+            detail -> {
+              if (detail.request().status() != ApprovalStatus.FAILED) {
+                return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_INVALID_STATE));
+              }
+              return revalidate(detail, frozenDefinition(detail.request()), identity)
+                  .thenReturn(detail);
+            })
+        .flatMap(detail -> verifyEnvNotDrifted(detail, identity).thenReturn(detail))
+        .flatMap(
+            detail ->
+                Mono.fromCallable(
+                        () -> {
+                          int attempt =
+                              repository.retryExecution(
+                                  identity.tenantId(),
+                                  requestId,
+                                  command.revision(),
+                                  identity.userId(),
+                                  event(
+                                      detail.request(),
+                                      identity,
+                                      "EXECUTION_STARTED",
+                                      "Manual DDL retry started",
+                                      null));
+                          if (attempt < 0) {
+                            throw new ConflictException(
+                                ApiErrorCode.APPROVAL_DRAFT_REVISION_CONFLICT);
+                          }
+                          return new ExecutionContext(detail, attempt);
+                        })
+                    .subscribeOn(jdbcScheduler))
+        .flatMap(
+            context -> {
+              Set<String> succeeded =
+                  repository.findSucceededItemIds(context.detail().request().tenantId(), requestId);
+              return Flux.fromIterable(context.detail().items())
+                  .concatMap(
+                      item -> {
+                        if (succeeded.contains(item.id())) {
+                          return Mono.<Void>fromRunnable(
+                                  () ->
+                                      repository.createSkippedExecution(
+                                          context.detail().request().tenantId(),
+                                          requestId,
+                                          item.id(),
+                                          context.attempt(),
+                                          item.ordinal()))
+                              .subscribeOn(jdbcScheduler);
+                        }
+                        return executeItem(
+                            context.detail().request(), item, context.attempt(), identity);
+                      })
+                  .then(
+                      Mono.fromCallable(
+                              () -> {
+                                finishExecutionRequest(
+                                    context.detail().request(), true, identity, null);
+                                return requireVisible(requestId, identity, true);
+                              })
+                          .subscribeOn(jdbcScheduler))
+                  .onErrorResume(
+                      ExecutionFailedException.class,
+                      failure ->
+                          Mono.fromCallable(
+                                  () -> {
+                                    finishExecutionRequest(
+                                        context.detail().request(),
+                                        false,
+                                        identity,
+                                        failure.getMessage());
+                                    return requireVisible(requestId, identity, true);
+                                  })
+                              .subscribeOn(jdbcScheduler));
+            });
+  }
+
   public Mono<ApprovalDetail> closeFailed(
       String requestId, ApprovalTransitionRequest command, Identity identity) {
     requireAdmin(identity);

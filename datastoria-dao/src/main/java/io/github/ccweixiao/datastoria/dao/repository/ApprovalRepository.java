@@ -3,6 +3,7 @@ package io.github.ccweixiao.datastoria.dao.repository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalDetail;
 import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalEvent;
@@ -145,4 +146,16 @@ public interface ApprovalRepository {
       ApprovalStatus targetStatus,
       String actorUserId,
       ApprovalEvent event);
+
+  int retryExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      String actorUserId,
+      ApprovalEvent event);
+
+  Set<String> findSucceededItemIds(String tenantId, String requestId);
+
+  void createSkippedExecution(
+      String tenantId, String requestId, String itemId, int attemptNo, int ordinal);
 }

@@ -544,6 +544,75 @@ public class JdbcApprovalRepository implements ApprovalRepository {
   }
 
   @Override
+  public int retryExecution(
+      String tenantId,
+      String requestId,
+      long expectedRevision,
+      String actorUserId,
+      ApprovalEvent event) {
+    Instant now = Instant.now();
+    int affected =
+        jdbc.update(
+            """
+            UPDATE ds_approval_request
+            SET status = 'RUNNING', execution_attempt = execution_attempt + 1,
+              latest_execution_status = 'RUNNING', execution_owner = :actorUserId,
+              revision = revision + 1, updated_at = :now
+            WHERE tenant_id = :tenantId AND id = :requestId AND revision = :expectedRevision
+              AND status = 'FAILED' AND deleted_at IS NULL
+            """,
+            new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("requestId", requestId)
+                .addValue("expectedRevision", expectedRevision)
+                .addValue("actorUserId", actorUserId)
+                .addValue("now", timestamp(now)));
+    if (affected != 1) {
+      return -1;
+    }
+    insertEvent(event);
+    return jdbc.queryForObject(
+        "SELECT execution_attempt FROM ds_approval_request WHERE tenant_id = :tenantId AND id = :requestId",
+        Map.of("tenantId", tenantId, "requestId", requestId),
+        Integer.class);
+  }
+
+  @Override
+  public java.util.Set<String> findSucceededItemIds(String tenantId, String requestId) {
+    return new java.util.TreeSet<>(
+        jdbc.queryForList(
+            """
+            SELECT DISTINCT item_id FROM ds_approval_execution
+            WHERE tenant_id = :tenantId AND request_id = :requestId AND status = 'SUCCEEDED'
+            """,
+            Map.of("tenantId", tenantId, "requestId", requestId),
+            String.class));
+  }
+
+  @Override
+  public void createSkippedExecution(
+      String tenantId, String requestId, String itemId, int attemptNo, int ordinal) {
+    Instant now = Instant.now();
+    jdbc.update(
+        """
+        INSERT INTO ds_approval_execution
+          (id, tenant_id, request_id, item_id, attempt_no, ordinal, status, query_id,
+           started_at, finished_at, duration_ms, created_at, updated_at)
+        VALUES (:id, :tenantId, :requestId, :itemId, :attemptNo, :ordinal, 'SKIPPED',
+          :queryId, :now, :now, 0, :now, :now)
+        """,
+        new MapSqlParameterSource()
+            .addValue("id", Ulid.next())
+            .addValue("tenantId", tenantId)
+            .addValue("requestId", requestId)
+            .addValue("itemId", itemId)
+            .addValue("attemptNo", attemptNo)
+            .addValue("ordinal", ordinal)
+            .addValue("queryId", "skip:" + requestId + ":" + attemptNo + ":" + itemId)
+            .addValue("now", timestamp(now)));
+  }
+
+  @Override
   public String createExecution(
       String tenantId,
       String requestId,

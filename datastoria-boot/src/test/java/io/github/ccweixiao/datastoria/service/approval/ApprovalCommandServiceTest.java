@@ -526,6 +526,60 @@ class ApprovalCommandServiceTest {
         .beginExecution(anyString(), anyString(), anyLong(), anyString(), any());
   }
 
+  @Test
+  void retrySkipsPreviouslySucceededItemsAndReRunsTheRest() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(detail(ApprovalStatus.FAILED, "admin", 3)));
+    when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(statement(1, "DDL ONE"), statement(2, "DDL TWO")), List.of()));
+    when(repository.retryExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any()))
+        .thenReturn(2);
+    when(repository.findSucceededItemIds("tenant", "request"))
+        .thenReturn(new java.util.TreeSet<>(Set.of("item-1")));
+    when(repository.createExecution(
+            anyString(), anyString(), anyString(), eq(2), anyInt(), anyString()))
+        .thenReturn("execution-2");
+    when(repository.createNodeExecution(
+            anyString(), anyString(), anyString(), anyString(), anyInt()))
+        .thenReturn("node-2");
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+        .thenReturn(Mono.just("{}"));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            mock(DdlWorkOrderTypeCatalog.class),
+            compiler,
+            mock(DdlSchemaInspector.class),
+            connections,
+            new ObjectMapper(),
+            Schedulers.immediate());
+
+    service.retry("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
+
+    // item-1 already succeeded in a prior attempt -> skipped, never re-sent to ClickHouse
+    verify(connections, never()).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(repository)
+        .createSkippedExecution(eq("tenant"), eq("request"), eq("item-1"), eq(2), eq(1));
+    // item-2 is re-run
+    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(repository)
+        .finishRequestExecution(
+            eq("tenant"),
+            eq("request"),
+            eq(4L),
+            eq(ApprovalStatus.RUNNING),
+            eq(ApprovalStatus.SUCCEEDED),
+            eq("admin"),
+            any());
+  }
+
   private static ApprovalCommandService service(
       ApprovalRepository repository,
       DdlWorkOrderTypeCatalog catalog,

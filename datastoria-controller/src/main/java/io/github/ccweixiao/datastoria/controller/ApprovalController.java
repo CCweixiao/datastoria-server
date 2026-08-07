@@ -143,6 +143,15 @@ public class ApprovalController {
         .map(ResponseEntity::ok);
   }
 
+  @PostMapping("/admin/approvals/{id}/retry")
+  @AdminAccess
+  public Mono<ResponseEntity<ApprovalDetail>> retry(
+      @PathVariable String id, @RequestBody ApprovalTransitionRequest request) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.retry(id, request, identity))
+        .map(ResponseEntity::ok);
+  }
+
   @PostMapping("/admin/approvals/{id}/close")
   @AdminAccess
   public Mono<ResponseEntity<ApprovalDetail>> closeFailed(
