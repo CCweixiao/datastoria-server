@@ -753,13 +753,13 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 | **P2-2 失败重试** | ✅ 完成 | `retryExecution`（FAILED→RUNNING 新 attempt）、`findSucceededItemIds`、`createSkippedExecution`（SKIPPED 审计行）；`retry` 复用 revalidate + 漂移检查，**跳过历史 attempt 已 SUCCEEDED 的语句**，只重跑失败的；`POST /admin/approvals/{id}/retry`。 |
 | **P2-3 异步执行引擎** | ✅ 完成 | `findClaimableQueuedRequests` + `claimQueued`（CAS QUEUED→RUNNING + `execution_lease_until` 租约，防跨实例重复领取）；`drainOnce` 按租户构造 system 身份执行；`review()` 对 `AUTO_AFTER_APPROVAL` 转 QUEUED；`executionMode` 从类型 `risk_policy_json` 读出（默认 MANUAL）；`ApprovalExecutionWorker` @Scheduled 轮询（busy 防重叠）+ `@EnableScheduling`。AUTO 闭环打通：审批→QUEUED→worker 领取→执行。 |
 | **P2 spike** | ✅ 完成 | 集群状态采集设计：`system.distributed_ddl_queue`（每节点一行 status/exception/duration）+ `system.clusters`（期望节点集）；并解除 worker 身份阻断（`connections.query` 仅租户隔离、无 admin 门禁）。见 `ddl-approval-v3-p2-cluster-spike.md`。 |
+| **P2 真集群逐节点采集** | ✅ 完成（真实 CH 验证） | `DdlSchemaInspector.nodeStatuses` + `recordNodeStatuses`：执行后从 `distributed_ddl_queue` 取逐节点状态写入 `ds_approval_node_execution`，空则回退单节点。在本地 test_cluster（CH 24.8）实测验证关联键（对象 marker 子串 + 时间窗；`entry≠queryId`、CH 重写 SQL 注入 UUID 故精确匹配不可靠），curl + 真实 JSONCompact 单测 + flow 单测，13 tests 绿。 |
 
 **剩余项（未落地）**：
 
 | 项 | 性质 | 为何暂不落地 |
 | ---- | ---- | ---- |
-| **P2 真集群多节点采集** | CH 版本相关，**待真实 CH 验证** | spike 设计已就绪（`distributed_ddl_queue` 按 entry 逐节点）；但 `entry↔queryId` 关联、读取时机、版本边界（`distributed_ddl_queue` vs `cluster_ddl_queue`）、读权限 5 个开放问题需真实 ClickHouse 验证后才能写采集代码。当前执行仍记录单节点。 |
-| **P2 RECONCILING 恢复** | 依赖上一项 | worker 崩溃后 RUNNING+租约过期的工单需重新核对实际集群状态（依赖节点采集）再决定续跑/失败，与上一项耦合，待 CH 验证后一起做。 |
+| **P2 RECONCILING 崩溃恢复** | 安全关键，需谨慎设计 | worker 崩溃后 RUNNING+租约过期的工单需恢复。朴素「租约过期即标 FAILED」会误杀慢 DDL（>10min）；正确做法是进 RECONCILING 态、用节点采集核对实际状态再决定续跑/失败——涉及 RECONCILING 状态机 + 人工动作，值得单独聚焦实现而非仓促收尾。当前：正常路径（无崩溃）完整可用。 |
 | **P3** EXPIRED/超时、声明式 branches 被执行器消费、`ApprovalProvider`、路由矩阵 | 刻意延后 | 见 §11，按需再开。 |
 
-**当前执行能力**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批后 `review` 转 QUEUED，`ApprovalExecutionWorker` 异步领取执行）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断，均已落地并单测。剩余的真集群逐节点采集与崩溃恢复是 CH 环境验证后的工作。
+**当前执行能力（全部落地并测试）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取执行）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + **真集群逐节点采集**。V3 P1 + P2 执行芯已全部落地，剩余仅 RECONCILING 崩溃恢复（安全关键，单独做）与 P3（延后）。
