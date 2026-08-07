@@ -755,17 +755,17 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 | **P2 spike** | ✅ 完成 | 集群状态采集设计：`system.distributed_ddl_queue`（每节点一行 status/exception/duration）+ `system.clusters`（期望节点集）；并解除 worker 身份阻断（`connections.query` 仅租户隔离、无 admin 门禁）。见 `ddl-approval-v3-p2-cluster-spike.md`。 |
 | **P2 真集群逐节点采集** | ✅ 完成（真实 CH 验证） | `DdlSchemaInspector.nodeStatuses` + `recordNodeStatuses`：执行后从 `distributed_ddl_queue` 取逐节点状态写入 `ds_approval_node_execution`，空则回退单节点。在本地 test_cluster（CH 24.8）实测验证关联键（对象 marker 子串 + 时间窗；`entry≠queryId`、CH 重写 SQL 注入 UUID 故精确匹配不可靠），curl + 真实 JSONCompact 单测 + flow 单测，13 tests 绿。 |
 
-**剩余项（未落地）**：
+**P3 全部落地（含原评估为「按需」的四项，已按要求实现）**：
 
-| 项 | 性质 | 为何暂不落地 |
+| 项 | 状态 | 落地内容 |
 | ---- | ---- | ---- |
 | **P2 RECONCILING 崩溃恢复** | ✅ 已落地 | `RECONCILING` 状态；`executeItem` 按 item 续租约（只让真死的 worker 租约过期）；`reclaimStuck` sweep 把 RUNNING+过期租约→RECONCILING（worker tick 调）；retry/closeFailed 接受 RECONCILING。CAS 冲突跳过，不丢成功/不重复执行。 |
 | **P3 EXPIRED/超时** | ✅ 已落地 | `EXPIRED` 终态（释放 claim + finished_at）；`expireStale` 把 >7 天未推进的 APPROVED/QUEUED→EXPIRED（worker tick 调）。 |
-| **P3 声明式 branches** | 按需精化 | 当前 `CREATE TABLE` 无 `IF NOT EXISTS`，对象已存在时 **ClickHouse 已拒绝**（不覆盖，安全已有保障）；branches 只是把"CH 报错"升级为"更干净的 BLOCK 提示"，属 UX 精化非安全缺口。最有价值的 db-missing→auto-create 需新增 CREATE_DATABASE 类型 + 级联，是独立特性。 |
-| **P3 `ApprovalProvider` 抽象** | 按需（无第二 provider） | builtin 审批的"决策"就是管理员点击动作本身，无可抽的逻辑；接口只在出现外部 provider（钉钉/飞书/Jira）时才有意义。现在抽 = 空仪式（违反本文 §0.2 去过度抽象）。`external_*` 列已就位待用。 |
-| **P3 路由矩阵** | 按需（策略决策） | 「禁自批」会反转现有策略（现有测试 `administratorCanApproveOwnSubmittedRequest` 明确允许管理员自批，适合 dev/单管理员）；多签/紧急/按风险路由需要真实多租户需求驱动。当前 SINGLE 审批已可用。 |
-| **P3 intent schema 富结构** | 部分已有 | `requiredIntentFields`（字段名列表）已在 `ApprovalWorkOrderTypeResponse` 按 generatorKey 暴露——Agent 已知该传哪些字段。V2 的富结构（type/source/question）是进一步精化。 |
+| **P3 声明式 branches** | ✅ 已落地 | `toItem` 给 CREATE_TABLE 项填 `preconditionJson`（table-exists）；`executeStatement` 执行前 `checkPrecondition` 查目标对象存在性，已存在则干净 BLOCK（激活原本永远 null 的 preconditionJson）。db-missing→auto-create 仍为独立特性（需 CREATE_DATABASE 类型）。 |
+| **P3 `ApprovalProvider` 抽象** | ✅ 已落地 | `ApprovalProvider` 接口 + `BuiltinApprovalProvider`；`review()` 经 `provider.decide`；`external_*` 列就位待外部 provider。 |
+| **P3 路由矩阵** | ✅ 已落地（禁自批） | `BuiltinApprovalProvider` 默认禁自批（`datastoria.approval.allow-self-approve` 可放开适应单管理员）；`APPROVAL_SELF_APPROVAL_FORBIDDEN`。多签/紧急/按风险路由仍待真实多租户需求。 |
+| **P3 intent schema 富结构** | ✅ 已落地 | `ApprovalWorkOrderTypeResponse.intentSchema`（`List<IntentField>`：name/type/required/source，V2 source 分类），controller 按 generatorKey 声明；保留 `requiredIntentFields` 向后兼容。 |
 
-**当前执行能力（全部落地并测试，17 tests 绿，真实 CH 24.8 验证节点采集）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + 真集群逐节点采集 + RECONCILING 崩溃恢复 + EXPIRED 超时清理。
+**当前执行能力（全部落地并测试，19 tests 绿，真实 CH 24.8 验证节点采集）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + CREATE_TABLE 存在性 branch + 真集群逐节点采集 + RECONCILING 崩溃恢复 + EXPIRED 超时清理 + ApprovalProvider/禁自批 + 结构化 intentSchema。
 
-**V3 P1 + P2 已全部落地**；P3 中具 concrete 价值的 EXPIRED 已落地，其余 P3 项（branches/Provider/路由/intent 富结构）经评估为**按需精化或策略决策**——其设计已就绪（spike + §4.5/§5.3/§6.2），但在无真实消费者/需求时落地属于本文 §0.2 与用户「避免过度堆砌」原则所要避免的空抽象。
+**V3 P1 + P2 + P3 已全部落地**。剩余仅分支机制里的 db-missing→auto-create（需新增 CREATE_DATABASE 类型 + 级联，是独立特性，非 P3 范畴内的精化）、以及多签/紧急路由（待真实多租户需求）——二者均超出 V3 §11 的 P3 清单。
