@@ -117,3 +117,29 @@ Identity system = new Identity(request.tenantId(), "system", Set.of("ROLE_ADMIN"
 - AUTO 可达性：`review()` 对 `executionMode = AUTO_AFTER_APPROVAL` 转 QUEUED（SUBMITTED→QUEUED），`executionMode` 默认仍 MANUAL_TRIGGER。
 
 并发安全靠 CAS 租约（claim 的 `WHERE revision=:expected AND status='QUEUED' AND (lease 过期/未持有)`），多 worker 实例只有一个领取成功。
+
+## 9. 真实 CH 验证结果（CH 24.8.14.39 / test_cluster ch1+ch2，2026-08-07）
+
+在本地测试集群上实测，**确认并修正了 §4/§5 的开放问题**：
+
+| 问题 | 结论 |
+| ---- | ---- |
+| Q3 版本边界 | CH 24.8 用 `system.distributed_ddl_queue`（无需兼容 `cluster_ddl_queue`）。 |
+| 列结构 | 确认：`entry(String)`、`host`、`port`、`status(Enum8: Inactive/Active/Finished/Removing/Unknown)`、`exception_code`、`exception_text`、`query_finish_time`、`query_duration_ms`。 |
+| 逐节点 | 一条 `CREATE DATABASE ... ON CLUSTER test_cluster` 产生 **2 行（ch1、ch2）**，各 `Finished`、`exception_code=0`、`duration 3–5ms`。正是 `ds_approval_node_execution` 所需逐节点视图。 |
+| Q2 读取时机 | 同步 DDL 返回后**立即查**，行已全部 `Finished`——无需轮询（lag 集群可加短重试）。 |
+| Q4 权限 | `default` 用户可读 `distributed_ddl_queue` / `system.clusters`、可执行 `ON CLUSTER`。 |
+| **Q1 entry↔queryId（关键修正）** | **`entry ≠ queryId`**。传入 `query_id=spike-xxx`，而 `entry=query-0000000005`（CH 内部顺序号）。§4 原假设「`WHERE entry=:queryId`」**错误**。 |
+
+**正确的关联方式**（替代 §4 的 entry 匹配）：按 `query` 文本（冻结 SQL 原文）+ `query_create_time` 时间窗：
+
+```sql
+SELECT host, port, status, exception_code, exception_text, query_duration_ms
+FROM system.distributed_ddl_queue
+WHERE query = :frozenSql AND query_create_time >= :execStart
+ORDER BY host
+```
+
+可靠性：资源 claim 串行化同对象 DDL → 无并发同文本干扰；`query_create_time >= execStart` 过滤历史 attempt 的同文本条目（重试场景）。期望节点集仍由 `system.clusters WHERE cluster=:cluster` 交叉比对（缺节点 → `UNKNOWN`）。
+
+**结论**：节点采集设计已通过真实 CH 验证，唯一修正为关联键。可进入实现。
