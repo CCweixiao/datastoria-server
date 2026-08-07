@@ -7,6 +7,8 @@ public record DdlApprovalPrepareResponse(
     String requestNo,
     long revision,
     String contentDigest,
+    int planVersion,
+    String planHash,
     List<PreparedStatement> orderedItems,
     List<String> appliedRuleSummary,
     boolean submittable) {

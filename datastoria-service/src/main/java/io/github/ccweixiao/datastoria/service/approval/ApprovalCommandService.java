@@ -104,6 +104,7 @@ public class ApprovalCommandService {
                                 identity,
                                 connection,
                                 definition,
+                                schema,
                                 compiler.compile(command.intent(), definition, schema))))
         .subscribeOn(jdbcScheduler);
   }
@@ -242,6 +243,7 @@ public class ApprovalCommandService {
               }
               String contentJson = mapper.writeValueAsString(content);
               String digest = canonicalJsonDigest(content);
+              String planHash = computePlanHash(content.get("intent"), content.get("statements"));
               ApprovalRequest updatedRequest =
                   new ApprovalRequest(
                       current.id(),
@@ -273,7 +275,11 @@ public class ApprovalCommandService {
                       null,
                       null,
                       null,
-                      Instant.now());
+                      Instant.now(),
+                      current.planVersion() + 1,
+                      planHash,
+                      current.envSnapshotJson(),
+                      current.policyVersionRef());
               if (!repository.updateSqlPlan(
                   updatedRequest,
                   command.revision(),
@@ -540,6 +546,7 @@ public class ApprovalCommandService {
       Identity identity,
       ClickHouseConnectionResponse connection,
       ApprovalTypeDefinition definition,
+      DdlSchemaSnapshot schema,
       CompiledDdlPlan plan) {
     try {
       Instant now = Instant.now();
@@ -574,6 +581,15 @@ public class ApprovalCommandService {
       content.set("ruleSummaries", mapper.valueToTree(plan.ruleSummaries()));
       String contentJson = mapper.writeValueAsString(content);
       String digest = canonicalJsonDigest(content);
+      String planHash = computePlanHash(command.intent(), content.get("statements"));
+      String envSnapshotJson = envSnapshot(command.connectionId(), definition, schema);
+      String policyVersionRef = definition.definitionRevision() + ":v1";
+      int planVersion =
+          current == null
+              ? 1
+              : (planHash.equals(current.request().planHash())
+                  ? current.request().planVersion()
+                  : current.request().planVersion() + 1);
       ApprovalRequest request =
           new ApprovalRequest(
               requestId,
@@ -605,7 +621,11 @@ public class ApprovalCommandService {
               null,
               null,
               null,
-              now);
+              now,
+              planVersion,
+              planHash,
+              envSnapshotJson,
+              policyVersionRef);
       List<ApprovalItem> items =
           plan.statements().stream()
               .map(statement -> toItem(requestId, identity.tenantId(), statement, now))
@@ -681,6 +701,8 @@ public class ApprovalCommandService {
           detail.request().requestNo(),
           detail.request().revision(),
           detail.request().contentDigest(),
+          detail.request().planVersion(),
+          detail.request().planHash(),
           statements,
           summaries,
           true);
@@ -1108,6 +1130,51 @@ public class ApprovalCommandService {
    */
   private String canonicalJsonDigest(JsonNode value) throws Exception {
     return sha256(mapper.writeValueAsString(canonicalJson(value)));
+  }
+
+  /**
+   * Semantic content hash of the Plan. Drives the change classifier: an edit that changes plan_hash
+   * invalidates approval; runtime-only edits (not represented here) do not. Excludes raw SQL (uses
+   * its normalized digest), per-statement risk/warnings (derived), and the env/policy anchors
+   * (captured separately). Reuses canonicalJsonDigest for a stable canonical encoding.
+   */
+  private String computePlanHash(JsonNode intent, JsonNode statements) throws Exception {
+    ObjectNode semantic = mapper.createObjectNode();
+    semantic.set("intent", intent);
+    ArrayNode semanticStatements = mapper.createArrayNode();
+    for (JsonNode statement : statements) {
+      ObjectNode semanticStatement = mapper.createObjectNode();
+      semanticStatement.put("ordinal", statement.path("ordinal").asInt());
+      semanticStatement.put("operationKind", statement.path("operationKind").asText());
+      semanticStatement.put("digest", sha256(normalizeSql(statement.path("sql").asText())));
+      java.util.TreeSet<String> objectRefs = new java.util.TreeSet<>();
+      statement.path("objectRefs").forEach(ref -> objectRefs.add(ref.asText()));
+      ArrayNode refs = mapper.createArrayNode();
+      objectRefs.forEach(refs::add);
+      semanticStatement.set("objectRefs", refs);
+      semanticStatement.put("idempotency", statement.path("idempotencyStrategy").asText());
+      semanticStatements.add(semanticStatement);
+    }
+    semantic.set("statements", semanticStatements);
+    return canonicalJsonDigest(semantic);
+  }
+
+  /** Captures the environment facts the Plan was validated against; drift-detected in P2. */
+  private String envSnapshot(
+      String connectionId, ApprovalTypeDefinition definition, DdlSchemaSnapshot schema)
+      throws Exception {
+    ObjectNode snapshot = mapper.createObjectNode();
+    snapshot.put("connectionId", connectionId);
+    snapshot.put("workOrderTypeKey", definition.typeKey());
+    ObjectNode schemaNode = mapper.createObjectNode();
+    ArrayNode columns = mapper.createArrayNode();
+    schema.columns().stream().sorted().forEach(columns::add);
+    ArrayNode protectedColumns = mapper.createArrayNode();
+    schema.protectedColumns().stream().sorted().forEach(protectedColumns::add);
+    schemaNode.set("columns", columns);
+    schemaNode.set("protectedColumns", protectedColumns);
+    snapshot.set("schema", schemaNode);
+    return mapper.writeValueAsString(snapshot);
   }
 
   private JsonNode canonicalJson(JsonNode value) {

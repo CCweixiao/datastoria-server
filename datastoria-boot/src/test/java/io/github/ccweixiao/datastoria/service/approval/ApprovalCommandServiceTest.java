@@ -323,6 +323,10 @@ class ApprovalCommandServiceTest {
     assertThat(replay.draftId()).isEqualTo(first.draftId());
     assertThat(replay.submittable()).isTrue();
     assertThat(saved.get().request().applicantDisplayName()).isEqualTo("Administrator");
+    assertThat(saved.get().request().planHash()).isNotNull();
+    assertThat(saved.get().request().planVersion()).isEqualTo(1);
+    assertThat(first.planHash()).isEqualTo(saved.get().request().planHash());
+    assertThat(replay.planHash()).isEqualTo(first.planHash());
     verify(repository, times(1)).createDraft(any(), any(), anyString(), any());
 
     when(repository.findDetail("tenant", first.draftId()))
@@ -341,6 +345,74 @@ class ApprovalCommandServiceTest {
     assertThatThrownBy(() -> service.prepare(staleUpdate, ADMIN).block())
         .hasMessageContaining("draft changed");
     verify(repository, times(1)).updateDraft(any(), eq(0L), any(), anyString(), any());
+  }
+
+  @Test
+  void planHashIsStableAndVersionBumpsOnSemanticChange() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlWorkOrderTypeCatalog catalog = mock(DdlWorkOrderTypeCatalog.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    ApprovalTypeDefinition definition = definition();
+    when(catalog.requireEnabled("tenant", "CLICKHOUSE_CREATE_TABLE")).thenReturn(definition);
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(compiler.compile(any(), eq(definition), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(new CompiledDdlPlan(List.of(statement(1, "DDL ONE")), List.of("rule")));
+    AtomicReference<ApprovalRequest> created = new AtomicReference<>();
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              created.set(invocation.getArgument(0));
+              return null;
+            })
+        .when(repository)
+        .createDraft(any(), any(), anyString(), any());
+    ApprovalCommandService service = service(repository, catalog, compiler, connections);
+    DdlApprovalPrepareRequest command =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_TABLE",
+            "Create table",
+            null,
+            new ObjectMapper().createObjectNode(),
+            "session",
+            "run",
+            null,
+            null);
+
+    var first = service.prepare(command, ADMIN).block();
+    String firstHash = first.planHash();
+
+    assertThat(firstHash).isNotNull();
+    assertThat(first.planVersion()).isEqualTo(1);
+
+    // Semantic change (different SQL) must produce a new plan_hash and bump plan_version.
+    ApprovalDetail currentDetail = new ApprovalDetail(created.get(), List.of(), List.of());
+    when(repository.findDetail("tenant", first.draftId())).thenReturn(Optional.of(currentDetail));
+    when(compiler.compile(any(), eq(definition), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(new CompiledDdlPlan(List.of(statement(1, "DDL TWO")), List.of("rule")));
+    AtomicReference<ApprovalRequest> updated = new AtomicReference<>();
+    when(repository.updateDraft(any(), eq(0L), any(), anyString(), any()))
+        .thenAnswer(
+            invocation -> {
+              updated.set(invocation.getArgument(0));
+              return true;
+            });
+    DdlApprovalPrepareRequest change =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_TABLE",
+            "Create table",
+            null,
+            new ObjectMapper().createObjectNode(),
+            "session",
+            "run",
+            first.draftId(),
+            0L);
+
+    service.prepare(change, ADMIN).block();
+
+    assertThat(updated.get().planHash()).isNotEqualTo(firstHash);
+    assertThat(updated.get().planVersion()).isEqualTo(2);
   }
 
   private static ApprovalCommandService service(
@@ -414,7 +486,11 @@ class ApprovalCommandServiceTest {
             now,
             null,
             null,
-            now);
+            now,
+            1,
+            "plan-hash",
+            null,
+            null);
     ApprovalItem first = item("item-1", 1, "DDL ONE", now);
     ApprovalItem second = item("item-2", 2, "DDL TWO", now);
     return new ApprovalDetail(request, List.of(first, second), List.of());

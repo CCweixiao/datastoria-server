@@ -150,14 +150,16 @@ public class JdbcApprovalRepository implements ApprovalRepository {
           type_definition_checksum, title, summary, applicant_user_id, applicant_display_name,
           source_session_id, source_run_id, connection_id, connection_name, status,
           content_json, content_version, content_digest, execution_mode, execution_attempt,
-          idempotency_key, revision, created_at, updated_at)
+          idempotency_key, revision, created_at, updated_at,
+          plan_version, plan_hash, env_snapshot_json, policy_version_ref)
         VALUES (
           :id, :tenantId, :requestNo, 'CLICKHOUSE_DDL', :workOrderTypeKey,
           :workOrderTypeRevision, :typeDefinitionChecksum, :title, :summary,
           :applicantUserId, :applicantDisplayName, :sourceSessionId, :sourceRunId,
           :connectionId, :connectionName, :status, :contentJson, :contentVersion,
           :contentDigest, :executionMode, :executionAttempt, :idempotencyKey,
-          :revision, :createdAt, :updatedAt)
+          :revision, :createdAt, :updatedAt,
+          :planVersion, :planHash, :envSnapshotJson, :policyVersionRef)
         """,
         requestParameters(request).addValue("idempotencyKey", idempotencyKey));
     for (ApprovalItem item : items) {
@@ -205,6 +207,8 @@ public class JdbcApprovalRepository implements ApprovalRepository {
               connection_id = :connectionId, connection_name = :connectionName,
               content_json = :contentJson, content_version = content_version + 1,
               content_digest = :contentDigest, idempotency_key = :idempotencyKey,
+              plan_version = :planVersion, plan_hash = :planHash,
+              env_snapshot_json = :envSnapshotJson, policy_version_ref = :policyVersionRef,
               revision = revision + 1, updated_at = :now
             WHERE tenant_id = :tenantId AND id = :id
               AND applicant_user_id = :applicantUserId
@@ -820,7 +824,11 @@ public class JdbcApprovalRepository implements ApprovalRepository {
         .addValue("executionAttempt", r.executionAttempt())
         .addValue("revision", r.revision())
         .addValue("createdAt", timestamp(r.createdAt()))
-        .addValue("updatedAt", timestamp(r.updatedAt()));
+        .addValue("updatedAt", timestamp(r.updatedAt()))
+        .addValue("planVersion", r.planVersion())
+        .addValue("planHash", r.planHash())
+        .addValue("envSnapshotJson", r.envSnapshotJson())
+        .addValue("policyVersionRef", r.policyVersionRef());
   }
 
   private static ApprovalTypeDefinition mapType(ResultSet rs, int row) throws SQLException {
@@ -878,7 +886,11 @@ public class JdbcApprovalRepository implements ApprovalRepository {
         instant(rs, "approved_at"),
         instant(rs, "rejected_at"),
         instant(rs, "finished_at"),
-        instant(rs, "updated_at"));
+        instant(rs, "updated_at"),
+        rs.getInt("plan_version"),
+        rs.getString("plan_hash"),
+        rs.getString("env_snapshot_json"),
+        rs.getString("policy_version_ref"));
   }
 
   private static ApprovalItem mapItem(ResultSet rs, int row) throws SQLException {

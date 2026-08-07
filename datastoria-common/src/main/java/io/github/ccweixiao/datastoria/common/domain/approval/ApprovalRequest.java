@@ -32,4 +32,8 @@ public record ApprovalRequest(
     Instant approvedAt,
     Instant rejectedAt,
     Instant finishedAt,
-    Instant updatedAt) {}
+    Instant updatedAt,
+    int planVersion,
+    String planHash,
+    String envSnapshotJson,
+    String policyVersionRef) {}
