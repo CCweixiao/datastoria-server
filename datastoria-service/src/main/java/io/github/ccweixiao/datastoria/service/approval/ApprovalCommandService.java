@@ -756,7 +756,8 @@ public class ApprovalCommandService {
       content.put("workOrderTypeRevision", definition.definitionRevision());
       content.put("generationRuleChecksum", definition.checksum());
       content.put("generatorKey", definition.generatorKey());
-      content.put("executionMode", "MANUAL_TRIGGER");
+      String executionMode = executionMode(definition);
+      content.put("executionMode", executionMode);
       content.set("intent", command.intent());
       content.set("generationRule", mapper.readTree(definition.generationRuleJson()));
       content.set("statements", mapper.valueToTree(plan.statements()));
@@ -792,7 +793,7 @@ public class ApprovalCommandService {
               contentJson,
               current == null ? 1 : current.request().contentVersion() + 1,
               digest,
-              "MANUAL_TRIGGER",
+              executionMode,
               0,
               null,
               null,
@@ -1359,6 +1360,21 @@ public class ApprovalCommandService {
    */
   private String canonicalJsonDigest(JsonNode value) throws Exception {
     return sha256(mapper.writeValueAsString(canonicalJson(value)));
+  }
+
+  /**
+   * Execution mode comes from the type's risk_policy_json: default {@code MANUAL_TRIGGER}; {@code
+   * AUTO_AFTER_APPROVAL} opts a type into async execution via the worker.
+   */
+  private String executionMode(ApprovalTypeDefinition definition) {
+    try {
+      JsonNode policy = mapper.readTree(definition.riskPolicyJson());
+      return "AUTO_AFTER_APPROVAL".equals(policy.path("executionMode").asText(""))
+          ? "AUTO_AFTER_APPROVAL"
+          : "MANUAL_TRIGGER";
+    } catch (Exception exception) {
+      return "MANUAL_TRIGGER";
+    }
   }
 
   /**
