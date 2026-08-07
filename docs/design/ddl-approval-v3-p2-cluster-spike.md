@@ -94,3 +94,26 @@ spike 把「节点采集」从「未知」降为「待验证的实现」。P2 �
 - ✅ spike 研究/设计完成（本文件）。
 - ⏳ A 节点采集：待真实 CH 验证 §5 后实现。
 - ⏳ B 异步执行引擎：待系统身份/并发设计决策后实现（独立的下一阶段）。
+
+## 8. 异步 worker 身份决断（已解阻，2026-08-07）
+
+原担心 worker 无人類身份无法执行 DDL。核查 `ClickHouseConnectionService` 后**解除**：
+
+- `query(id, sql, params, identity)`（`executeOnEndpoint` 所用，:220）只做 `require(id, identity)`（**租户隔离**：`identity.tenantId()` 必须匹配连接租户）+ `remoteClient.execute(...)`，**无 admin 门禁**。
+- 只有 `queryStream`（:239）才按 `identity.isAdmin()` 把非 admin 限为只读；worker 走 `query`，不受此限。
+
+因此 worker 对每个被领取的工单，按其租户构造系统身份即可执行：
+
+```java
+Identity system = new Identity(request.tenantId(), "system", Set.of("ROLE_ADMIN"));
+```
+
+`require()` 因租户匹配通过，`query` 无 admin 门禁故 DDL 可发。worker 实现路径已无身份阻断，剩余仅为：
+
+- `findClaimableQueuedRequests(limit)`（QUEUED 且租约过期/未持有，跨租户）；
+- `claimQueued`（CAS QUEUED→RUNNING + 写 `execution_lease_until`，租约防并发重复领取）；
+- `drainOnce()`：领取 → 构造系统身份 → 复用 `revalidate` + `verifyEnvNotDrifted` + 语句执行 + `finishExecutionRequest`（释放租约）；
+- `@EnableScheduling` + 薄 `@Scheduled` 包装调 `drainOnce()`；
+- AUTO 可达性：`review()` 对 `executionMode = AUTO_AFTER_APPROVAL` 转 QUEUED（SUBMITTED→QUEUED），`executionMode` 默认仍 MANUAL_TRIGGER。
+
+并发安全靠 CAS 租约（claim 的 `WHERE revision=:expected AND status='QUEUED' AND (lease 过期/未持有)`），多 worker 实例只有一个领取成功。
