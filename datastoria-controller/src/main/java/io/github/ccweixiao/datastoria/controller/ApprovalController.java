@@ -204,6 +204,7 @@ public class ApprovalController {
         type.nameI18nJson(),
         type.descriptionI18nJson(),
         requiredFields(type.generatorKey()),
+        intentSchema(type.generatorKey()),
         safeRuleSummary(type.generatorKey()),
         type.definitionRevision());
   }
@@ -218,6 +219,40 @@ public class ApprovalController {
           "database", "table", "index", "column", "indexType", "granularity");
       default -> List.of();
     };
+  }
+
+  private static List<ApprovalWorkOrderTypeResponse.IntentField> intentSchema(String generatorKey) {
+    return switch (generatorKey) {
+      case "create_local_distributed_table" -> List.of(
+          field("database", "identifier", "user-provided"),
+          field("table", "identifier", "user-provided"),
+          field("cluster", "identifier", "user-provided"),
+          field("columns", "array", "mixed"),
+          field("orderBy", "array", "agent-derived"),
+          field("shardingKey", "identifier", "agent-derived"));
+      case "add_column", "modify_column" -> List.of(
+          field("database", "identifier", "user-provided"),
+          field("table", "identifier", "user-provided"),
+          field("column", "identifier", "user-provided"),
+          field("type", "columnType", "user-provided"));
+      case "drop_column" -> List.of(
+          field("database", "identifier", "user-provided"),
+          field("table", "identifier", "user-provided"),
+          field("column", "identifier", "user-provided"));
+      case "add_index" -> List.of(
+          field("database", "identifier", "user-provided"),
+          field("table", "identifier", "user-provided"),
+          field("index", "identifier", "user-provided"),
+          field("column", "identifier", "user-provided"),
+          field("indexType", "identifier", "user-provided"),
+          field("granularity", "number", "user-provided"));
+      default -> List.of();
+    };
+  }
+
+  private static ApprovalWorkOrderTypeResponse.IntentField field(
+      String name, String type, String source) {
+    return new ApprovalWorkOrderTypeResponse.IntentField(name, type, true, source);
   }
 
   private static String safeRuleSummary(String generatorKey) {
