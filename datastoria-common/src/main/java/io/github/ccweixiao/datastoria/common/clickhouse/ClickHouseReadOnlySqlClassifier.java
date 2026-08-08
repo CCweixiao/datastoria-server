@@ -80,6 +80,13 @@ public final class ClickHouseReadOnlySqlClassifier {
     return stripSingleTerminalSemicolon(sql).trim();
   }
 
+  /** Returns whether the statement visibly requests DDL, DML, or an access-control operation. */
+  public boolean isMutationOrControl(String sql) {
+    if (sql == null || sql.isBlank()) return false;
+    String normalized = maskLiteralsAndComments(sql).toLowerCase(Locale.ROOT);
+    return PROHIBITED_KEYWORDS.matcher(normalized).find();
+  }
+
   private static void validateClusterAllReplicas(
       String sql, String maskedSql, String allowedCluster) {
     var allCalls = Pattern.compile("(?i)\\bclusterallreplicas\\s*\\(").matcher(maskedSql);

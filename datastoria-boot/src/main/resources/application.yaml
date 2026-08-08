@@ -42,6 +42,33 @@ datastoria:
     metadata-cache:
       ttl: ${DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL:PT5M}
       maximum-size: ${DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE:1000}
+    # 普通用户 Query 和 Agent 查询共用的 ClickHouse 服务端安全上限。
+    # 请求参数只能把数值调小，不能覆盖或放宽这里的限制；管理员 Query 不应用这些只读限制。
+    query-security:
+      # 是否强制只读。必须保持 true；服务端会映射为 ClickHouse readonly=2。
+      read-only: ${DATASTORIA_QUERY_READ_ONLY:true}
+      # 即使 ClickHouse 账号本身拥有 DDL 权限，普通用户和 Agent 仍禁止执行 DDL。
+      allow-ddl: ${DATASTORIA_QUERY_ALLOW_DDL:false}
+      # 禁止可能访问服务端环境或文件系统信息的 introspection functions。
+      allow-introspection-functions: ${DATASTORIA_QUERY_ALLOW_INTROSPECTION_FUNCTIONS:false}
+      # 单次查询最长执行秒数。
+      max-execution-time: ${DATASTORIA_QUERY_MAX_EXECUTION_TIME:30}
+      # 最多返回行数；超出后按 result-overflow-mode 处理。
+      max-result-rows: ${DATASTORIA_QUERY_MAX_RESULT_ROWS:10000}
+      # 最多返回字节数，默认约 10 MB。
+      max-result-bytes: ${DATASTORIA_QUERY_MAX_RESULT_BYTES:10000000}
+      # 最多扫描行数；这是约束全表扫描的主要参数之一。
+      max-rows-to-read: ${DATASTORIA_QUERY_MAX_ROWS_TO_READ:10000000}
+      # 最多读取字节数，默认约 1 GB。
+      max-bytes-to-read: ${DATASTORIA_QUERY_MAX_BYTES_TO_READ:1000000000}
+      # 单次查询最大内存用量，默认约 1 GB。
+      max-memory-usage: ${DATASTORIA_QUERY_MAX_MEMORY_USAGE:1000000000}
+      # 单次查询最多使用的 ClickHouse 执行线程数。
+      max-threads: ${DATASTORIA_QUERY_MAX_THREADS:4}
+      # 返回结果超限时截断结果，避免大结果继续传输。
+      result-overflow-mode: break
+      # 扫描量超限时直接终止查询，避免继续消耗集群资源。
+      read-overflow-mode: throw
   # Base64-encoded 32-byte AES-256 key used to encrypt server-managed credentials at rest.
   # Keep this value stable: changing it makes existing encrypted credentials unreadable.
   master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
