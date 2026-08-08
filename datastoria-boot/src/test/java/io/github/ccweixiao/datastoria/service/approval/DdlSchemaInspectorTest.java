@@ -30,10 +30,10 @@ class DdlSchemaInspectorTest {
   void databaseExistenceIsCheckedAcrossEveryClusterReplica() {
     ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection("cluster_a")));
-    when(connections.query(
+    when(connections.queryReadOnly(
             eq("connection"),
-            contains("clusterAllReplicas({cluster:String}, system.databases)"),
-            eq(Map.of("param_cluster", "cluster_a", "param_database", "demo")),
+            contains("clusterAllReplicas('cluster_a', system.databases)"),
+            eq(Map.of("param_database", "demo")),
             eq(ADMIN)))
         .thenReturn(Mono.just("{\"data\":[[\"1\"]]}"));
 
@@ -44,10 +44,10 @@ class DdlSchemaInspectorTest {
 
     assertThat(exists).isTrue();
     verify(connections)
-        .query(
+        .queryReadOnly(
             eq("connection"),
-            contains("clusterAllReplicas({cluster:String}, system.databases)"),
-            eq(Map.of("param_cluster", "cluster_a", "param_database", "demo")),
+            contains("clusterAllReplicas('cluster_a', system.databases)"),
+            eq(Map.of("param_database", "demo")),
             eq(ADMIN));
   }
 
@@ -55,10 +55,10 @@ class DdlSchemaInspectorTest {
   void databaseExistenceCheckFailsClosedWhenClickHouseQueryFails() {
     ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection("cluster_a")));
-    when(connections.query(
+    when(connections.queryReadOnly(
             eq("connection"),
             contains("clusterAllReplicas"),
-            eq(Map.of("param_cluster", "cluster_a", "param_database", "demo")),
+            eq(Map.of("param_database", "demo")),
             eq(ADMIN)))
         .thenReturn(Mono.error(new IllegalStateException("metadata unavailable")));
 

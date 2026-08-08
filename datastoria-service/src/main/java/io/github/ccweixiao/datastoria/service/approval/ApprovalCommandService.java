@@ -1338,7 +1338,7 @@ public class ApprovalCommandService {
     return checkPrecondition(request, item, identity)
         .then(
             connections
-                .query(
+                .executeAdminSql(
                     request.connectionId(), item.sqlText(), Map.of("query_id", queryId), identity)
                 .then(
                     Mono.<Void>fromCallable(

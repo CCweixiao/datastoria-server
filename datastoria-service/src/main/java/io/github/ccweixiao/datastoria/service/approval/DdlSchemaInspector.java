@@ -55,7 +55,7 @@ public class DdlSchemaInspector {
   public Mono<Boolean> objectExists(
       String connectionId, String database, String table, Identity identity) {
     return connections
-        .query(
+        .queryReadOnly(
             connectionId,
             "SELECT count() AS c FROM system.tables"
                 + " WHERE database = {database:String} AND name = {table:String} FORMAT JSONCompact",
@@ -82,13 +82,12 @@ public class DdlSchemaInspector {
               String source =
                   cluster == null || cluster.isBlank()
                       ? "system.databases"
-                      : "clusterAllReplicas({cluster:String}, system.databases)";
+                      : "clusterAllReplicas('"
+                          + escapeString(cluster.trim())
+                          + "', system.databases)";
               Map<String, Object> parameters = new java.util.LinkedHashMap<>();
               parameters.put("param_database", database);
-              if (cluster != null && !cluster.isBlank()) {
-                parameters.put("param_cluster", cluster.trim());
-              }
-              return connections.query(
+              return connections.queryReadOnly(
                   connectionId,
                   "SELECT count() AS c FROM "
                       + source
@@ -103,7 +102,7 @@ public class DdlSchemaInspector {
   public Mono<Boolean> indexExists(
       String connectionId, String database, String table, String index, Identity identity) {
     return connections
-        .query(
+        .queryReadOnly(
             connectionId,
             "SELECT count() AS c FROM system.data_skipping_indices"
                 + " WHERE database={database:String} AND table={table:String}"
@@ -139,7 +138,7 @@ public class DdlSchemaInspector {
   public Mono<DdlSchemaSnapshot> inspect(
       String connectionId, String database, String table, Identity identity) {
     return connections
-        .query(
+        .queryReadOnly(
             connectionId, QUERY, Map.of("param_database", database, "param_table", table), identity)
         .map(this::parse);
   }
@@ -182,13 +181,17 @@ public class DdlSchemaInspector {
       return Mono.just(List.of());
     }
     return connections
-        .query(
+        .queryReadOnly(
             connectionId,
             NODE_STATUS_QUERY,
             Map.of("param_marker", marker, "param_since", since.getEpochSecond()),
             identity)
         .map(this::parseNodeStatuses)
         .onErrorResume(exception -> Mono.just(List.of()));
+  }
+
+  private static String escapeString(String value) {
+    return value.replace("\\", "\\\\").replace("'", "\\'");
   }
 
   List<NodeStatus> parseNodeStatuses(String response) {

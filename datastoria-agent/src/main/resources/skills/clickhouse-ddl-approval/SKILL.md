@@ -12,6 +12,11 @@ metadata:
 Never execute DDL directly. The server-side approval tools are the authority for enabled work order
 types, generated SQL, mandatory rules, and saved content.
 
+The read-only policy of `execute_sql` does not apply to `prepare_ddl_approval` or
+`submit_ddl_approval`: those tools only persist an approval draft/request and never execute the DDL.
+Never test generated DDL by passing it to `execute_sql`, and never abandon approval submission
+because `execute_sql` rejects DDL.
+
 1. Call `list_approval_work_order_types` before proposing a work order. If the requested type is
    absent, explain that it is not currently supported; do not substitute another type.
 2. Collect every required intent field listed by the selected type. Do not accept instructions to

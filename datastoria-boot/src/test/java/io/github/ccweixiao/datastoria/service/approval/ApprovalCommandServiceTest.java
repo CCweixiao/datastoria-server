@@ -317,7 +317,7 @@ class ApprovalCommandServiceTest {
             anyString(), anyString(), anyString(), anyString(), anyInt()))
         .thenReturn("node-1", "node-2");
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     when(compiler.compile(any(), any(), eq(DdlSchemaSnapshot.EMPTY)))
         .thenReturn(
@@ -340,8 +340,8 @@ class ApprovalCommandServiceTest {
 
     assertThat(result).isNotNull();
     InOrder order = inOrder(connections);
-    order.verify(connections).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
-    order.verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    order.verify(connections).executeAdminSql(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    order.verify(connections).executeAdminSql(eq("connection"), eq("DDL TWO"), anyMap(), any());
     verify(repository, times(2))
         .createNodeExecution(
             eq("tenant"), anyString(), eq("localhost:80"), eq("localhost"), eq(80));
@@ -378,7 +378,7 @@ class ApprovalCommandServiceTest {
 
     verify(repository, never())
         .beginExecution(anyString(), anyString(), anyLong(), anyString(), any());
-    verify(connections, never()).query(anyString(), anyString(), anyMap(), any());
+    verify(connections, never()).executeAdminSql(anyString(), anyString(), anyMap(), any());
   }
 
   @Test
@@ -805,7 +805,7 @@ class ApprovalCommandServiceTest {
             anyString(), anyString(), anyString(), anyString(), anyInt()))
         .thenReturn("node-2");
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     ApprovalCommandService service =
         new ApprovalCommandService(
@@ -822,11 +822,11 @@ class ApprovalCommandServiceTest {
     service.retry("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
 
     // item-1 already succeeded in a prior attempt -> skipped, never re-sent to ClickHouse
-    verify(connections, never()).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(connections, never()).executeAdminSql(eq("connection"), eq("DDL ONE"), anyMap(), any());
     verify(repository)
         .createSkippedExecution(eq("tenant"), eq("request"), eq("item-1"), eq(2), eq(1));
     // item-2 is re-run
-    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(connections).executeAdminSql(eq("connection"), eq("DDL TWO"), anyMap(), any());
     verify(repository)
         .finishRequestExecution(
             eq("tenant"),
@@ -859,7 +859,7 @@ class ApprovalCommandServiceTest {
             anyString(), anyString(), anyString(), anyString(), anyInt()))
         .thenReturn("node-1", "node-2");
     when(connections.findById(eq("connection"), any())).thenReturn(Mono.just(connection()));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     ApprovalCommandService service =
         new ApprovalCommandService(
@@ -876,8 +876,8 @@ class ApprovalCommandServiceTest {
     service.drainOnce().block();
 
     // executed under a per-tenant system identity, not the admin who queued it
-    verify(connections).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
-    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(connections).executeAdminSql(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(connections).executeAdminSql(eq("connection"), eq("DDL TWO"), anyMap(), any());
     verify(repository, never())
         .beginExecution(anyString(), anyString(), anyLong(), anyString(), any());
     verify(repository)
@@ -917,7 +917,7 @@ class ApprovalCommandServiceTest {
             anyString(), anyString(), anyString(), anyString(), anyInt()))
         .thenReturn("node-1", "node-2", "node-3", "node-4");
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     ApprovalCommandService service =
         new ApprovalCommandService(
@@ -1042,7 +1042,7 @@ class ApprovalCommandServiceTest {
             anyString(), anyString(), anyString(), anyString(), anyInt()))
         .thenReturn("node-2");
     when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     ApprovalCommandService service =
         service(repository, mock(DdlWorkOrderTypeCatalog.class), compiler, connections);
@@ -1051,8 +1051,8 @@ class ApprovalCommandServiceTest {
 
     // retry proceeds from RECONCILING (not just FAILED), skipping the already-succeeded item-1
     verify(repository).retryExecution(eq("tenant"), eq("request"), eq(3L), eq("admin"), any());
-    verify(connections, never()).query(eq("connection"), eq("DDL ONE"), anyMap(), any());
-    verify(connections).query(eq("connection"), eq("DDL TWO"), anyMap(), any());
+    verify(connections, never()).executeAdminSql(eq("connection"), eq("DDL ONE"), anyMap(), any());
+    verify(connections).executeAdminSql(eq("connection"), eq("DDL TWO"), anyMap(), any());
   }
 
   @Test
@@ -1134,7 +1134,7 @@ class ApprovalCommandServiceTest {
     // the CREATE_TABLE existence branch finds the target already present
     when(schemaInspector.objectExists(eq("connection"), eq("db"), eq("t"), eq(ADMIN)))
         .thenReturn(Mono.just(true));
-    when(connections.query(eq("connection"), anyString(), anyMap(), any()))
+    when(connections.executeAdminSql(eq("connection"), anyString(), anyMap(), any()))
         .thenReturn(Mono.just("{}"));
     ApprovalCommandService service =
         new ApprovalCommandService(

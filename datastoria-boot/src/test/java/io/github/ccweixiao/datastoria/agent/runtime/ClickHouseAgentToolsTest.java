@@ -130,7 +130,7 @@ class ClickHouseAgentToolsTest {
     @SuppressWarnings("unchecked")
     org.mockito.ArgumentCaptor<Map<String, Object>> settings =
         org.mockito.ArgumentCaptor.forClass(Map.class);
-    when(service.query(anyString(), anyString(), settings.capture(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), settings.capture(), any()))
         .thenReturn(
             Mono.just(
                 """
@@ -162,7 +162,7 @@ class ClickHouseAgentToolsTest {
   void executeSqlAllowsConfiguredClusterAllReplicas() {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
     when(service.findById(anyString(), any())).thenReturn(Mono.just(connection("analytics")));
-    when(service.query(anyString(), anyString(), any(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
         .thenReturn(Mono.just("{\"meta\":[],\"data\":[],\"rows\":0}"));
     ClickHouseAgentTools tools =
         new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
@@ -194,7 +194,7 @@ class ClickHouseAgentToolsTest {
   void searchQueryLogCompilesValidatedFiltersAndReturnsFrontendShape() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
     org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
-    when(service.query(anyString(), sql.capture(), any(), any()))
+    when(service.queryReadOnly(anyString(), sql.capture(), any(), any()))
         .thenReturn(
             Mono.just(
                 """
@@ -241,7 +241,7 @@ class ClickHouseAgentToolsTest {
   @Test
   void clusterStatusReturnsSnapshotAndWindowContract() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
-    when(service.query(anyString(), anyString(), any(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
         .thenReturn(
             Mono.just(
                 """
@@ -290,7 +290,7 @@ class ClickHouseAgentToolsTest {
   @Test
   void optimizationEvidenceReturnsLightAndFullExplainArtifacts() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
-    when(service.query(anyString(), anyString(), any(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
         .thenReturn(
             Mono.just(
                 """
@@ -329,7 +329,7 @@ class ClickHouseAgentToolsTest {
   @Test
   void rcaEvidenceMatchesFrontendContractAndPinsA27Template() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
-    when(service.query(anyString(), anyString(), any(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
         .thenReturn(
             Mono.just(
                 """

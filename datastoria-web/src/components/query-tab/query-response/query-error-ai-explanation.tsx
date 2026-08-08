@@ -177,6 +177,7 @@ const AutoExplainFeedback = memo(function AutoExplainFeedback({
             reasonCode: solved ? null : selectedReason,
             freeText: solved ? null : freeText,
             recoveryActionTaken,
+            ephemeral: true,
             payload: {
               queryId,
               errorCode: errorCode ?? null,

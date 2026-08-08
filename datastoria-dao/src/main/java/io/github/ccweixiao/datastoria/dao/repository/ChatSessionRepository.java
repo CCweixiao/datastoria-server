@@ -35,8 +35,8 @@ public interface ChatSessionRepository {
   ChatSession rename(String id, String tenantId, String userId, String title);
 
   /**
-   * Hard-deletes the session row. Messages and feedback cascade via the V4 FK; share rows are
-   * intentionally left as audit (no FK).
+   * Hard-deletes the session row. Messages cascade via the V4 FK; feedback and share rows are
+   * intentionally retained as audit because Query AI-fix feedback can target ephemeral sessions.
    */
   void delete(String id, String tenantId, String userId);
 

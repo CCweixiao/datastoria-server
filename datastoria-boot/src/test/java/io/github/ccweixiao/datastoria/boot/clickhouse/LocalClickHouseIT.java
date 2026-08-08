@@ -258,10 +258,10 @@ class LocalClickHouseIT {
             .mapToObj(index -> "c" + index + " UInt8")
             .collect(java.util.stream.Collectors.joining(","));
     connectionService
-        .query(
+        .executeAdminSql(
             connectionId, "DROP TABLE IF EXISTS datastoria_test.p6_wide_schema", Map.of(), IDENTITY)
         .then(
-            connectionService.query(
+            connectionService.executeAdminSql(
                 connectionId,
                 "CREATE TABLE datastoria_test.p6_wide_schema ("
                     + wideColumns
@@ -283,7 +283,7 @@ class LocalClickHouseIT {
       throw new AssertionError(error);
     } finally {
       connectionService
-          .query(
+          .executeAdminSql(
               connectionId,
               "DROP TABLE IF EXISTS datastoria_test.p6_wide_schema",
               Map.of(),
@@ -349,7 +349,8 @@ class LocalClickHouseIT {
         .contains("validation", "success", "rowCount", "bar", "datasource");
 
     connectionService
-        .query(connectionId, "SYSTEM FLUSH LOGS", Map.of("default_format", "JSON"), IDENTITY)
+        .executeAdminSql(
+            connectionId, "SYSTEM FLUSH LOGS", Map.of("default_format", "JSON"), IDENTITY)
         .block();
     assertThat(
             tools
