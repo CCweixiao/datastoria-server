@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import io.github.ccweixiao.datastoria.common.clickhouse.ClickHouseReadOnlySqlClassifier;
+import io.github.ccweixiao.datastoria.common.config.ClickHouseQuerySecurityProperties;
 import io.github.ccweixiao.datastoria.common.config.JdbcSchedulerConfig;
 import io.github.ccweixiao.datastoria.common.crypto.EnvelopeEncryptionService;
 import io.github.ccweixiao.datastoria.common.crypto.MaskedHintBuilder;
@@ -19,7 +20,9 @@ import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionRequest;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionResponse;
 import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionTestResponse;
 import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
+import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
+import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.ClickHouseConnectionRepository;
 
@@ -33,6 +36,7 @@ public class ClickHouseConnectionService {
   private final EnvelopeEncryptionService crypto;
   private final ClickHouseRemoteClient remoteClient;
   private final Scheduler jdbcScheduler;
+  private final ClickHouseQuerySecurityProperties querySecurity;
   private final ClickHouseReadOnlySqlClassifier sqlClassifier =
       new ClickHouseReadOnlySqlClassifier();
 
@@ -40,10 +44,12 @@ public class ClickHouseConnectionService {
       ClickHouseConnectionRepository repository,
       EnvelopeEncryptionService crypto,
       ClickHouseRemoteClient remoteClient,
+      ClickHouseQuerySecurityProperties querySecurity,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.repository = repository;
     this.crypto = crypto;
     this.remoteClient = remoteClient;
+    this.querySecurity = querySecurity;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -226,7 +232,12 @@ public class ClickHouseConnectionService {
                 return Mono.error(
                     new IllegalArgumentException("ClickHouse connection is disabled: " + id));
               }
-              return remoteClient.execute(connection, decryptPassword(connection), sql, parameters);
+              String gatedSql = requireReadOnly(sql, connection);
+              return remoteClient.execute(
+                  connection,
+                  decryptPassword(connection),
+                  gatedSql,
+                  enforceReadOnlyLimits(parameters, querySecurity));
             })
         .subscribeOn(jdbcScheduler);
   }
@@ -252,16 +263,60 @@ public class ClickHouseConnectionService {
               }
               String password = decryptPassword(connection);
               // Non-admin callers may only run read-only SQL; admins may execute DDL/DML.
-              String gatedSql =
-                  identity.isAdmin()
-                      ? sql
-                      : sqlClassifier.requireReadOnly(sql, effectiveCluster(connection.cluster()));
+              String gatedSql = identity.isAdmin() ? sql : requireReadOnly(sql, connection);
               String effectiveSql =
                   wrapForTargetNode(
                       gatedSql, targetNode, targetUser, connection.username(), password);
-              return remoteClient.executeStream(connection, password, effectiveSql, parameters);
+              Map<String, Object> effectiveParameters =
+                  identity.isAdmin()
+                      ? copyParameters(parameters)
+                      : enforceReadOnlyLimits(parameters, querySecurity);
+              if (!identity.isAdmin() && targetNode != null && !targetNode.isBlank()) {
+                throw new AdminAccessRequiredException();
+              }
+              return remoteClient.executeStream(
+                  connection, password, effectiveSql, effectiveParameters);
             })
         .subscribeOn(jdbcScheduler);
+  }
+
+  private String requireReadOnly(String sql, ClickHouseConnection connection) {
+    try {
+      return sqlClassifier.requireReadOnly(sql, effectiveCluster(connection.cluster()));
+    } catch (IllegalArgumentException exception) {
+      if (sqlClassifier.isMutationOrControl(sql)) {
+        throw PlainTextException.forbidden(ApiErrorCode.QUERY_WRITE_PERMISSION_DENIED);
+      }
+      throw PlainTextException.badRequest(ApiErrorCode.QUERY_UNSAFE_SQL);
+    }
+  }
+
+  static Map<String, Object> enforceReadOnlyLimits(
+      Map<String, Object> parameters, ClickHouseQuerySecurityProperties querySecurity) {
+    Map<String, Object> safe = copyParameters(parameters);
+    Map<String, Object> limits = querySecurity.asClickHouseSettings();
+    limits.forEach(
+        (key, ceiling) -> {
+          Object requested = safe.get(key);
+          if (ceiling instanceof Number maximum && requested instanceof Number value) {
+            long bounded = Math.max(1, Math.min(value.longValue(), maximum.longValue()));
+            safe.put(key, bounded);
+          } else {
+            safe.put(key, ceiling);
+          }
+        });
+    safe.put("readonly", limits.get("readonly"));
+    safe.put("allow_ddl", limits.get("allow_ddl"));
+    safe.put("allow_introspection_functions", limits.get("allow_introspection_functions"));
+    safe.put("result_overflow_mode", limits.get("result_overflow_mode"));
+    safe.put("read_overflow_mode", limits.get("read_overflow_mode"));
+    return Map.copyOf(safe);
+  }
+
+  private static Map<String, Object> copyParameters(Map<String, Object> parameters) {
+    return parameters == null
+        ? new java.util.LinkedHashMap<>()
+        : new java.util.LinkedHashMap<>(parameters);
   }
 
   static String wrapForTargetNode(

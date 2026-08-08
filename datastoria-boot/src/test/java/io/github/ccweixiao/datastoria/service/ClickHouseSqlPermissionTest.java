@@ -45,7 +45,12 @@ class ClickHouseSqlPermissionTest {
   @BeforeEach
   void setUp() {
     service =
-        new ClickHouseConnectionService(repository, crypto, remoteClient, Schedulers.immediate());
+        new ClickHouseConnectionService(
+            repository,
+            crypto,
+            remoteClient,
+            ClickHouseConnectionServiceTest.querySecurity(),
+            Schedulers.immediate());
   }
 
   /**
@@ -87,7 +92,8 @@ class ClickHouseSqlPermissionTest {
     Mono<?> result =
         service.queryStream("c1", "DROP TABLE sensitive", Map.of(), null, null, regularUser());
 
-    assertThatThrownBy(result::block).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(result::block)
+        .isInstanceOf(io.github.ccweixiao.datastoria.common.error.PlainTextException.class);
     verifyNoInteractions(remoteClient);
   }
 

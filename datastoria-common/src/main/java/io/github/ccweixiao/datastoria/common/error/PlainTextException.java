@@ -77,6 +77,14 @@ public class PlainTextException extends RuntimeException {
     return localized(code, code.message(Locale.ENGLISH), code.message(Locale.SIMPLIFIED_CHINESE));
   }
 
+  /** HTTP 403 with a stable error code and a locale-aware body. */
+  public static PlainTextException forbidden(ApiErrorCode code) {
+    if (code.status() != HttpStatus.FORBIDDEN.value()) {
+      throw new IllegalArgumentException("Error code must use HTTP 403: " + code.name());
+    }
+    return localized(code, code.message(Locale.ENGLISH), code.message(Locale.SIMPLIFIED_CHINESE));
+  }
+
   /** HTTP 401 with the literal body {@code Authentication required}. */
   public static PlainTextException authenticationRequired() {
     return localized(ApiErrorCode.AUTHENTICATION_REQUIRED, "Authentication required", "需要身份认证");

@@ -110,6 +110,18 @@ public enum ApiErrorCode {
       "Administrator access is required.",
       "需要管理员权限",
       "需要管理员权限才能执行此操作。"),
+  QUERY_WRITE_PERMISSION_DENIED(
+      403,
+      "Query write permission denied",
+      "Only administrators may execute DDL or data-changing SQL in Query.",
+      "没有 Query 写入权限",
+      "只有管理员可以在 Query 中执行 DDL 或数据变更 SQL。"),
+  QUERY_UNSAFE_SQL(
+      400,
+      "Unsafe query rejected",
+      "The query violates the server read-only safety policy.",
+      "查询被安全策略拒绝",
+      "该查询违反了服务端只读安全策略。"),
   ADMIN_ACCOUNT_PROTECTED(
       403,
       "Administrator account is protected",
