@@ -204,33 +204,31 @@ export class ChatFactory {
     actionId: string,
     response: unknown
   ): Promise<void> {
-    const headers = buildChatRequestHeaders(
-      {
-        "Content-Type": "application/json",
-        "Idempotency-Key": uuidv7(),
-      },
-      undefined
-    );
-    const resolved = await backendApiFetch(
-      backendApiUrl(
-        `/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond`
-      ),
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ response }),
-      }
-    );
-    if (!resolved.ok) {
-      throw new Error((await resolved.text()) || "Failed to submit answer.");
-    }
     const selectTarget = ChatFactory.resumeTargets.get(chat);
     if (!selectTarget) {
       throw new Error("Chat resume transport is unavailable.");
     }
     selectTarget(runId);
+    const idempotencyKey = uuidv7();
     await chat.resumeStream({
-      headers: new Headers(buildChatRequestHeaders({ "Idempotency-Key": uuidv7() }, undefined)),
+      request: (signal) =>
+        backendApiFetch(
+          backendApiUrl(
+            `/api/ai/runs/${encodeURIComponent(runId)}/actions/${encodeURIComponent(actionId)}:respond-and-resume`
+          ),
+          {
+            method: "POST",
+            headers: buildChatRequestHeaders(
+              {
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotencyKey,
+              },
+              undefined
+            ),
+            body: JSON.stringify({ response }),
+            signal,
+          }
+        ),
     });
   }
 

@@ -52,6 +52,60 @@ class ApprovalCommandServiceTest {
   private static final Identity ADMIN = new Identity("tenant", "admin", Set.of("ROLE_ADMIN"));
 
   @Test
+  void administratorCanDeleteWorkOrdersInEveryStateExceptRunning() {
+    for (ApprovalStatus status : ApprovalStatus.values()) {
+      if (status == ApprovalStatus.RUNNING) continue;
+      ApprovalRepository repository = mock(ApprovalRepository.class);
+      when(repository.findDetail("tenant", "request"))
+          .thenReturn(Optional.of(detail(status, "alice", 3)));
+      when(repository.deleteAggregate("tenant", "request")).thenReturn(true);
+      ApprovalCommandService service =
+          service(
+              repository,
+              mock(DdlWorkOrderTypeCatalog.class),
+              mock(DdlPlanCompiler.class),
+              mock(ClickHouseConnectionService.class));
+
+      service.delete("request", ADMIN).block();
+
+      verify(repository).deleteAggregate("tenant", "request");
+    }
+  }
+
+  @Test
+  void runningWorkOrderCannotBeDeleted() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    when(repository.findDetail("tenant", "request"))
+        .thenReturn(Optional.of(detail(ApprovalStatus.RUNNING, "alice", 3)));
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    assertThatThrownBy(() -> service.delete("request", ADMIN).block())
+        .hasMessageContaining("running work order");
+    verify(repository, never()).deleteAggregate(anyString(), anyString());
+  }
+
+  @Test
+  void deletingAnAlreadyAbsentWorkOrderIsIdempotent() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    when(repository.findDetail("tenant", "request")).thenReturn(Optional.empty());
+    ApprovalCommandService service =
+        service(
+            repository,
+            mock(DdlWorkOrderTypeCatalog.class),
+            mock(DdlPlanCompiler.class),
+            mock(ClickHouseConnectionService.class));
+
+    service.delete("request", ADMIN).block();
+
+    verify(repository, never()).deleteAggregate(anyString(), anyString());
+  }
+
+  @Test
   void administratorCanApproveAnotherApplicantsRequest() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
     ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "alice", 3);
@@ -76,7 +130,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             mock(ClickHouseConnectionService.class),
             new ObjectMapper(),
-            new BuiltinApprovalProvider(false),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     service
@@ -97,10 +151,21 @@ class ApprovalCommandServiceTest {
   }
 
   @Test
-  void administratorCannotApproveOwnRequest() {
+  void administratorCanApproveOwnRequest() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
     ApprovalDetail submitted = detail(ApprovalStatus.SUBMITTED, "admin", 3);
     when(repository.findDetail("tenant", "request")).thenReturn(Optional.of(submitted));
+    when(repository.transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.APPROVED),
+            eq("admin"),
+            eq("admin"),
+            eq("approved"),
+            any()))
+        .thenReturn(true);
     ApprovalCommandService service =
         new ApprovalCommandService(
             repository,
@@ -110,18 +175,24 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             mock(ClickHouseConnectionService.class),
             new ObjectMapper(),
-            new BuiltinApprovalProvider(false),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
-    assertThatThrownBy(
-            () ->
-                service
-                    .review(
-                        "request", new ApprovalTransitionRequest(3, null, "approved"), true, ADMIN)
-                    .block())
-        .hasMessageContaining("own work order");
-    verify(repository, never())
-        .transition(anyString(), anyString(), anyLong(), any(), any(), any(), any(), any(), any());
+    service
+        .review("request", new ApprovalTransitionRequest(3, null, "approved"), true, ADMIN)
+        .block();
+
+    verify(repository)
+        .transition(
+            eq("tenant"),
+            eq("request"),
+            eq(3L),
+            eq(ApprovalStatus.SUBMITTED),
+            eq(ApprovalStatus.APPROVED),
+            eq("admin"),
+            eq("admin"),
+            eq("approved"),
+            any());
   }
 
   @Test
@@ -261,7 +332,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     ApprovalDetail result =
@@ -379,6 +450,157 @@ class ApprovalCommandServiceTest {
     assertThatThrownBy(() -> service.prepare(staleUpdate, ADMIN).block())
         .hasMessageContaining("draft changed");
     verify(repository, times(1)).updateDraft(any(), eq(0L), any(), anyString(), any());
+  }
+
+  @Test
+  void prepareCreateTableBlocksBeforeDraftWhenDatabaseDoesNotExist() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlWorkOrderTypeCatalog catalog = mock(DdlWorkOrderTypeCatalog.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    ApprovalTypeDefinition definition = definition();
+    when(catalog.requireEnabled("tenant", "CLICKHOUSE_CREATE_TABLE")).thenReturn(definition);
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(compiler.compile(any(), eq(definition), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(
+                    new CompiledDdlStatement(
+                        1,
+                        DdlOperationKind.CREATE_TABLE,
+                        "CREATE TABLE `missing`.`events_local`",
+                        List.of("missing.events_local"),
+                        "MEDIUM",
+                        List.of(),
+                        "PRECONDITION")),
+                List.of()));
+    when(schemaInspector.databaseExists("connection", "missing", ADMIN))
+        .thenReturn(Mono.just(false));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            catalog,
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(),
+            Schedulers.immediate());
+    DdlApprovalPrepareRequest command =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_TABLE",
+            "Create table",
+            null,
+            new ObjectMapper().createObjectNode(),
+            "session",
+            "run",
+            null,
+            null);
+
+    assertThatThrownBy(() -> service.prepare(command, ADMIN).block())
+        .hasMessageContaining("database does not exist");
+    verify(repository, never()).createDraft(any(), any(), any(), any());
+  }
+
+  @Test
+  void prepareCreateDatabaseBlocksBeforeDraftWhenDatabaseAlreadyExists() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlWorkOrderTypeCatalog catalog = mock(DdlWorkOrderTypeCatalog.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    ApprovalTypeDefinition definition = definition("CLICKHOUSE_CREATE_DATABASE", "create_database");
+    when(catalog.requireEnabled("tenant", "CLICKHOUSE_CREATE_DATABASE")).thenReturn(definition);
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    when(compiler.compile(any(), eq(definition), eq(DdlSchemaSnapshot.EMPTY)))
+        .thenReturn(
+            new CompiledDdlPlan(
+                List.of(
+                    new CompiledDdlStatement(
+                        1,
+                        DdlOperationKind.CREATE_DATABASE,
+                        "CREATE DATABASE `analytics`",
+                        List.of("analytics"),
+                        "LOW",
+                        List.of(),
+                        "PRECONDITION")),
+                List.of()));
+    when(schemaInspector.databaseExists("connection", "analytics", ADMIN))
+        .thenReturn(Mono.just(true));
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            catalog,
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(),
+            Schedulers.immediate());
+    var intent = new ObjectMapper().createObjectNode();
+    intent.put("database", "analytics");
+    intent.put("cluster", "default");
+    DdlApprovalPrepareRequest command =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_DATABASE",
+            "Create database",
+            null,
+            intent,
+            "session",
+            "run",
+            null,
+            null);
+
+    assertThatThrownBy(() -> service.prepare(command, ADMIN).block())
+        .hasMessageContaining("already exists");
+    verify(repository, never()).createDraft(any(), any(), any(), any());
+  }
+
+  @Test
+  void prepareBlocksWhenIntentTargetsAnotherClusterThanTheSelectedConnection() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    ClickHouseConnectionService connections = mock(ClickHouseConnectionService.class);
+    DdlWorkOrderTypeCatalog catalog = mock(DdlWorkOrderTypeCatalog.class);
+    DdlPlanCompiler compiler = mock(DdlPlanCompiler.class);
+    DdlSchemaInspector schemaInspector = mock(DdlSchemaInspector.class);
+    ApprovalTypeDefinition definition = definition("CLICKHOUSE_CREATE_DATABASE", "create_database");
+    when(catalog.requireEnabled("tenant", "CLICKHOUSE_CREATE_DATABASE")).thenReturn(definition);
+    when(connections.findById("connection", ADMIN)).thenReturn(Mono.just(connection()));
+    var intent = new ObjectMapper().createObjectNode();
+    intent.put("database", "demo");
+    intent.put("cluster", "another_cluster");
+    DdlApprovalPrepareRequest command =
+        new DdlApprovalPrepareRequest(
+            "connection",
+            "CLICKHOUSE_CREATE_DATABASE",
+            "Create demo database",
+            null,
+            intent,
+            "session",
+            "run",
+            null,
+            null);
+    ApprovalCommandService service =
+        new ApprovalCommandService(
+            repository,
+            userAccounts(),
+            catalog,
+            compiler,
+            schemaInspector,
+            connections,
+            new ObjectMapper(),
+            new BuiltinApprovalProvider(),
+            Schedulers.immediate());
+
+    assertThatThrownBy(() -> service.prepare(command, ADMIN).block())
+        .hasMessageContaining("cluster other than the cluster configured");
+    verify(compiler, never()).compile(any(), any(), any());
+    verify(repository, never()).createDraft(any(), any(), any(), any());
   }
 
   @Test
@@ -537,7 +759,7 @@ class ApprovalCommandServiceTest {
                         "PRECONDITION")),
                 List.of()));
     // by execute time the table drifted: column c was added since prepare
-    when(schemaInspector.inspect(eq("connection"), eq("db"), eq("t"), eq(ADMIN)))
+    when(schemaInspector.inspect(eq("connection"), eq("db"), eq("t_local"), eq(ADMIN)))
         .thenReturn(Mono.just(new DdlSchemaSnapshot(Set.of("a", "b", "c"), Set.of())));
     ApprovalCommandService service =
         new ApprovalCommandService(
@@ -548,7 +770,7 @@ class ApprovalCommandServiceTest {
             schemaInspector,
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     assertThatThrownBy(
@@ -594,7 +816,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     service.retry("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
@@ -648,7 +870,7 @@ class ApprovalCommandServiceTest {
             mock(DdlSchemaInspector.class),
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     service.drainOnce().block();
@@ -706,7 +928,7 @@ class ApprovalCommandServiceTest {
             schemaInspector,
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     service.execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
@@ -923,7 +1145,7 @@ class ApprovalCommandServiceTest {
             schemaInspector,
             connections,
             new ObjectMapper(),
-            new BuiltinApprovalProvider(true),
+            new BuiltinApprovalProvider(),
             Schedulers.immediate());
 
     service.execute("request", new ApprovalTransitionRequest(3, null, null), ADMIN).block();
@@ -972,7 +1194,7 @@ class ApprovalCommandServiceTest {
         mock(DdlSchemaInspector.class),
         connections,
         new ObjectMapper(),
-        new BuiltinApprovalProvider(true),
+        new BuiltinApprovalProvider(),
         Schedulers.immediate());
   }
 
@@ -1070,15 +1292,19 @@ class ApprovalCommandServiceTest {
   }
 
   private static ApprovalTypeDefinition definition() {
+    return definition("CLICKHOUSE_CREATE_TABLE", "test-generator");
+  }
+
+  private static ApprovalTypeDefinition definition(String typeKey, String generatorKey) {
     Instant now = Instant.now();
     return new ApprovalTypeDefinition(
         "type",
         "tenant",
-        "CLICKHOUSE_CREATE_TABLE",
+        typeKey,
         "CLICKHOUSE_DDL",
         "{}",
         "{}",
-        "test-generator",
+        generatorKey,
         "[]",
         "{}",
         null,
@@ -1101,7 +1327,7 @@ class ApprovalCommandServiceTest {
         "Cluster",
         "http://localhost",
         "default",
-        "cluster",
+        "default",
         null,
         true,
         "***",

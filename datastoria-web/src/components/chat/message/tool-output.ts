@@ -16,7 +16,7 @@
 export type ToolOutputError = { error: string };
 
 export function readToolOutputObject<T extends object = Record<string, unknown>>(
-  output: unknown,
+  output: unknown
 ): T | ToolOutputError | undefined {
   if (output == null) {
     return undefined;

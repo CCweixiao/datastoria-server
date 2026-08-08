@@ -15,7 +15,15 @@ public final class HumanInteractionAgentTools {
       description = "Ask exactly one structured follow-up question and wait for the user's answer.",
       readOnly = true)
   public String askUserQuestion(
-      @ToolParam(name = "questions", description = "Exactly one structured question")
+      @ToolParam(
+              name = "questions",
+              description =
+                  "Exactly one question object: { \"header\": short title, \"options\": [ "
+                      + "{ \"id\": \"o1\", \"label\": \"short choice\", \"input\": \"none\" } ] }. "
+                      + "Set \"input\" to \"text\" when the user must type a free-form answer, "
+                      + "\"select\" with a \"choices\" string array for a fixed set, or \"none\" for "
+                      + "a single click. Emit only these fields; do not invent alternatives such as "
+                      + "{ label, description }.")
           List<Map<String, Object>> questions) {
     if (questions == null || questions.size() != 1) {
       throw new IllegalArgumentException("ask_user_question requires exactly one question");

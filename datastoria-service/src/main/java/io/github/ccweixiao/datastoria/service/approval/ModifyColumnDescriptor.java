@@ -10,7 +10,12 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinit
 import io.github.ccweixiao.datastoria.common.domain.approval.DdlOperationKind;
 
 @Component
-public class ModifyColumnDescriptor extends AbstractDdlDescriptor {
+public class ModifyColumnDescriptor extends AbstractTableDdlDescriptor {
+
+  @Override
+  protected TableTargetPolicy targetPolicy() {
+    return TableTargetPolicy.LOGICAL_PAIR_LOCAL_FIRST;
+  }
 
   @Override
   public String generatorKey() {
@@ -18,32 +23,37 @@ public class ModifyColumnDescriptor extends AbstractDdlDescriptor {
   }
 
   @Override
+  protected void validateTableRules(JsonNode rules) {
+    requireProtectedColumnRules(rules);
+  }
+
+  @Override
   public CompiledDdlPlan compile(
       JsonNode intent, ApprovalTypeDefinition definition, DdlSchemaSnapshot schema) {
     String column = rawIdentifier(requiredText(intent, "column"));
     requireMutableColumn(schema, column);
-    String sql =
-        "ALTER TABLE "
-            + qualifiedTable(intent)
-            + " MODIFY COLUMN "
-            + identifier(column)
-            + " "
-            + columnType(intent, "type");
+    TableTargets targets = targets(intent, definition);
+    String type = columnType(intent, "type");
+    List<CompiledDdlStatement> statements = new java.util.ArrayList<>();
+    for (int index = 0; index < targets.physicalTables().size(); index++) {
+      String table = targets.physicalTables().get(index);
+      statements.add(
+          new CompiledDdlStatement(
+              index + 1,
+              DdlOperationKind.ALTER_TABLE_MODIFY_COLUMN,
+              "ALTER TABLE "
+                  + qualified(targets.database(), table)
+                  + " MODIFY COLUMN "
+                  + identifier(column)
+                  + " "
+                  + type,
+              List.of(targets.database() + "." + table + "." + column),
+              "HIGH",
+              List.of("typeChangeMayRewriteData"),
+              "PRECONDITION"));
+    }
     return new CompiledDdlPlan(
-        List.of(
-            new CompiledDdlStatement(
-                1,
-                DdlOperationKind.ALTER_TABLE_MODIFY_COLUMN,
-                sql,
-                List.of(
-                    requiredText(intent, "database")
-                        + "."
-                        + requiredText(intent, "table")
-                        + "."
-                        + column),
-                "HIGH",
-                List.of("typeChangeMayRewriteData"),
-                "PRECONDITION")),
-        List.of("protectSortingPrimaryPartitionSamplingKeys"));
+        statements,
+        List.of("protectSortingPrimaryPartitionSamplingKeys", "logicalTableTargetsExpanded"));
   }
 }

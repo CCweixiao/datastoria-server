@@ -40,9 +40,7 @@ const DatabaseTabComponent = ({ database }: DatabaseTabProps) => {
 
   // Helper function to get the current ref based on active tab
   const getCurrentRef = useCallback(():
-    | DashboardPanelContainerRef
-    | RefreshableTabViewRef
-    | null => {
+    DashboardPanelContainerRef | RefreshableTabViewRef | null => {
     switch (activeTab) {
       case "overview":
         return overviewRef.current;

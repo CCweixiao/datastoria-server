@@ -96,7 +96,6 @@ public final class AgentRunService {
                 request.modelAdapter(),
                 request.config(),
                 request.capabilities(),
-                request.history(),
                 resume));
   }
 
@@ -123,7 +122,6 @@ public final class AgentRunService {
                     request.modelAdapter(),
                     request.config(),
                     request.capabilities(),
-                    request.history(),
                     resume)));
   }
 

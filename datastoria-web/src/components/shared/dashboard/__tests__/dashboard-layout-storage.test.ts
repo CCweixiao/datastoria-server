@@ -3,19 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearAllSectionLayouts,
   clearDashboardLayout,
+  hydrateDashboardLayouts,
   loadDashboardLayout,
   loadSectionLayout,
   saveDashboardLayout,
   saveSectionLayout,
 } from "../dashboard-layout-storage";
 
-const { putUserState, deleteUserState } = vi.hoisted(() => ({
+const { listUserState, putUserState, deleteUserState } = vi.hoisted(() => ({
+  listUserState: vi.fn().mockResolvedValue([]),
   putUserState: vi.fn().mockResolvedValue({}),
   deleteUserState: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/user-state-client", () => ({
-  listUserState: vi.fn().mockResolvedValue([]),
+  listUserState,
   putUserState,
   deleteUserState,
 }));
@@ -28,6 +30,14 @@ const sampleLayouts = {
 
 describe("dashboard-layout-storage backend persistence", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("does not load user state until hydration is explicitly requested", async () => {
+    expect(listUserState).not.toHaveBeenCalled();
+
+    await hydrateDashboardLayouts();
+
+    expect(listUserState).toHaveBeenCalledWith("dashboard-layout");
+  });
 
   it("writes dashboard layouts through the user-state API and keeps a read cache", () => {
     saveDashboardLayout("dashboard-a", sampleLayouts);

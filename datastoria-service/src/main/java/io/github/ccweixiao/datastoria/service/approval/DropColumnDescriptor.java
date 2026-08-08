@@ -10,7 +10,12 @@ import io.github.ccweixiao.datastoria.common.domain.approval.ApprovalTypeDefinit
 import io.github.ccweixiao.datastoria.common.domain.approval.DdlOperationKind;
 
 @Component
-public class DropColumnDescriptor extends AbstractDdlDescriptor {
+public class DropColumnDescriptor extends AbstractTableDdlDescriptor {
+
+  @Override
+  protected TableTargetPolicy targetPolicy() {
+    return TableTargetPolicy.LOGICAL_PAIR_DISTRIBUTED_FIRST;
+  }
 
   @Override
   public String generatorKey() {
@@ -18,26 +23,34 @@ public class DropColumnDescriptor extends AbstractDdlDescriptor {
   }
 
   @Override
+  protected void validateTableRules(JsonNode rules) {
+    requireProtectedColumnRules(rules);
+  }
+
+  @Override
   public CompiledDdlPlan compile(
       JsonNode intent, ApprovalTypeDefinition definition, DdlSchemaSnapshot schema) {
     String column = rawIdentifier(requiredText(intent, "column"));
     requireMutableColumn(schema, column);
-    String sql = "ALTER TABLE " + qualifiedTable(intent) + " DROP COLUMN " + identifier(column);
+    TableTargets targets = targets(intent, definition);
+    List<CompiledDdlStatement> statements = new java.util.ArrayList<>();
+    for (int index = 0; index < targets.physicalTables().size(); index++) {
+      String table = targets.physicalTables().get(index);
+      statements.add(
+          new CompiledDdlStatement(
+              index + 1,
+              DdlOperationKind.ALTER_TABLE_DROP_COLUMN,
+              "ALTER TABLE "
+                  + qualified(targets.database(), table)
+                  + " DROP COLUMN "
+                  + identifier(column),
+              List.of(targets.database() + "." + table + "." + column),
+              "CRITICAL",
+              List.of("dropColumnPermanentlyRemovesData"),
+              "PRECONDITION"));
+    }
     return new CompiledDdlPlan(
-        List.of(
-            new CompiledDdlStatement(
-                1,
-                DdlOperationKind.ALTER_TABLE_DROP_COLUMN,
-                sql,
-                List.of(
-                    requiredText(intent, "database")
-                        + "."
-                        + requiredText(intent, "table")
-                        + "."
-                        + column),
-                "CRITICAL",
-                List.of("dropColumnPermanentlyRemovesData"),
-                "PRECONDITION")),
-        List.of("protectSortingPrimaryPartitionSamplingKeys"));
+        statements,
+        List.of("protectSortingPrimaryPartitionSamplingKeys", "logicalTableTargetsExpanded"));
   }
 }

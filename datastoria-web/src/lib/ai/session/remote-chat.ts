@@ -172,16 +172,25 @@ export class RemoteChat {
     await this.consume((signal) => this.options.sendRequest(messages, signal));
   };
 
-  resumeStream = async (options?: { headers?: Headers }): Promise<void> => {
+  resumeStream = async (options?: {
+    headers?: Headers;
+    request?: (signal: AbortSignal) => Promise<Response>;
+  }): Promise<void> => {
     this.setState({ ...this.state, status: "submitted", error: undefined });
-    await this.consume((signal) => this.options.resumeRequest(options?.headers, signal));
+    await this.consume(
+      options?.request ?? ((signal) => this.options.resumeRequest(options?.headers, signal)),
+      true
+    );
   };
 
   stop = (): void => {
     this.abortController?.abort();
   };
 
-  private async consume(request: (signal: AbortSignal) => Promise<Response>): Promise<void> {
+  private async consume(
+    request: (signal: AbortSignal) => Promise<Response>,
+    propagateError = false
+  ): Promise<void> {
     this.abortController?.abort();
     this.abortController = new AbortController();
     try {
@@ -253,6 +262,7 @@ export class RemoteChat {
       }
       const error = reason instanceof Error ? reason : new Error("Agent request failed");
       this.setState({ ...this.state, status: "error", error });
+      if (propagateError) throw error;
     }
   }
 

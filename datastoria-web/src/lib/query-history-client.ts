@@ -63,9 +63,7 @@ export async function deleteQueryHistory(id: string): Promise<void> {
 
 export async function clearQueryHistory(connectionId: string): Promise<void> {
   const response = await backendApiFetch(
-    backendApiUrl(
-      `/api/me/query-history?connectionId=${encodeURIComponent(connectionId)}`
-    ),
+    backendApiUrl(`/api/me/query-history?connectionId=${encodeURIComponent(connectionId)}`),
     { method: "DELETE", headers: backendApiHeaders() }
   );
   if (!response.ok) {

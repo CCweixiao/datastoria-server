@@ -1,6 +1,7 @@
 package io.github.ccweixiao.datastoria.agent.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -325,7 +326,6 @@ class HarnessAgentFactoryTest {
                 new FakeModelAdapter(model),
                 AgentRuntimeConfig.minimal("sys"),
                 capabilities,
-                List.of(new ChatTurn("user", "call the tool")),
                 new ApprovalResumeRequest(
                     approval.sequence(),
                     approval.replyId(),
@@ -345,13 +345,14 @@ class HarnessAgentFactoryTest {
   }
 
   @Test
-  void denialResumeRebuildsPendingStateAfterProcessRestart() {
+  void denialResumeLoadsNativeAgentScopeStateAfterProcessRestart() {
     String runId = "run-restart-" + UUID.randomUUID();
     RunContext context = ctx(runId);
     ToolCallingModel model = new ToolCallingModel();
     TestTools tools = new TestTools();
     AgentRunCapabilities capabilities = askCapabilities(tools);
-    HarnessAgentFactory beforeRestart = TestHarnessAgentFactories.create();
+    var nativeStateStore = new io.agentscope.core.state.InMemoryAgentStateStore();
+    HarnessAgentFactory beforeRestart = TestHarnessAgentFactories.create(nativeStateStore);
     List<AgentRunEvent> paused =
         beforeRestart
             .create(
@@ -371,7 +372,7 @@ class HarnessAgentFactoryTest {
                 .findFirst()
                 .orElseThrow();
 
-    HarnessAgentFactory afterRestart = TestHarnessAgentFactories.create();
+    HarnessAgentFactory afterRestart = TestHarnessAgentFactories.create(nativeStateStore);
     List<AgentRunEvent> resumed =
         afterRestart
             .resumeApprovals(
@@ -379,7 +380,6 @@ class HarnessAgentFactoryTest {
                 new FakeModelAdapter(model),
                 AgentRuntimeConfig.minimal("sys"),
                 capabilities,
-                List.of(new ChatTurn("user", "call the tool")),
                 new ApprovalResumeRequest(
                     approval.sequence(),
                     approval.replyId(),
@@ -403,8 +403,9 @@ class HarnessAgentFactoryTest {
     QuestionCallingModel model = new QuestionCallingModel();
     AgentRunCapabilities capabilities =
         new AgentRunCapabilities(List.of(), List.of(new HumanInteractionAgentTools()));
+    var nativeStateStore = new io.agentscope.core.state.InMemoryAgentStateStore();
     List<AgentRunEvent> paused =
-        TestHarnessAgentFactories.create()
+        TestHarnessAgentFactories.create(nativeStateStore)
             .create(
                 context,
                 new FakeModelAdapter(model),
@@ -423,13 +424,12 @@ class HarnessAgentFactoryTest {
                 .orElseThrow();
 
     List<AgentRunEvent> resumed =
-        TestHarnessAgentFactories.create()
+        TestHarnessAgentFactories.create(nativeStateStore)
             .resumeQuestion(
                 context,
                 new FakeModelAdapter(model),
                 AgentRuntimeConfig.minimal("sys"),
                 capabilities,
-                List.of(new ChatTurn("user", "ask me")),
                 new QuestionResumeRequest(
                     question.sequence(),
                     question.replyId(),
@@ -447,6 +447,35 @@ class HarnessAgentFactoryTest {
     assertThat(resumed)
         .allSatisfy(event -> assertThat(event.sequence()).isGreaterThan(question.sequence() + 1));
     assertThat(model.observedAnswer()).isEqualTo("{\"answer\":\"prod\"}");
+  }
+
+  @Test
+  void questionResumeRejectsMissingNativeAgentScopeState() {
+    RunContext context = ctx("run-missing-native-state-" + UUID.randomUUID());
+    QuestionCallingModel model = new QuestionCallingModel();
+    AgentRunCapabilities capabilities =
+        new AgentRunCapabilities(List.of(), List.of(new HumanInteractionAgentTools()));
+    HarnessAgentFactory factory = TestHarnessAgentFactories.create();
+    QuestionResumeRequest resume =
+        new QuestionResumeRequest(
+            1L,
+            "reply",
+            "action",
+            "question-call",
+            "ask_user_question",
+            Map.of(),
+            "{\"answer\":\"prod\"}");
+
+    assertThatThrownBy(
+            () ->
+                factory.resumeQuestion(
+                    context,
+                    new FakeModelAdapter(model),
+                    AgentRuntimeConfig.minimal("sys"),
+                    capabilities,
+                    resume))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("AgentScope state is unavailable");
   }
 
   private static AgentRunCapabilities askCapabilities(TestTools tools) {

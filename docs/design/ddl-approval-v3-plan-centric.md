@@ -1,5 +1,9 @@
 # 计划型工单设计（V3）：以 Plan 为核心的 Agent 审批体系
 
+> **当前实现边界**：以 [Agent DDL 工单收敛设计（V4）](ddl-approval-v4-agent-change-plan.md)
+> 为最新决策。V3 的 Plan 语义继续保留，但不新增独立 Plan 表；当前版本只允许管理员手工触发执行，
+> `AUTO_AFTER_APPROVAL` 不属于产品能力。
+
 > **修订说明**：本版在初稿基础上做了**去过度持久化**的简化——砍掉 4 张新增表、延后两个尚未出现需求的抽象，保留全部承重概念。设计质量不降，join 更少、状态更少、分层更清。变更要点见 §0.2 与 §8。
 
 ## 0. 定位与阅读顺序
@@ -763,7 +767,7 @@ ClickHouse RBAC 能按 role/profile 限流，但做不到廉价地「5 分钟内
 | **P3 EXPIRED/超时** | ✅ 已落地 | `EXPIRED` 终态（释放 claim + finished_at）；`expireStale` 把 >7 天未推进的 APPROVED/QUEUED→EXPIRED（worker tick 调）。 |
 | **P3 声明式 branches** | ✅ 已落地 | `toItem` 给 CREATE_TABLE 项填 `preconditionJson`（table-exists）；`executeStatement` 执行前 `checkPrecondition` 查目标对象存在性，已存在则干净 BLOCK（激活原本永远 null 的 preconditionJson）。db-missing→auto-create 仍为独立特性（需 CREATE_DATABASE 类型）。 |
 | **P3 `ApprovalProvider` 抽象** | ✅ 已落地 | `ApprovalProvider` 接口 + `BuiltinApprovalProvider`；`review()` 经 `provider.decide`；`external_*` 列就位待外部 provider。 |
-| **P3 路由矩阵** | ✅ 已落地（禁自批） | `BuiltinApprovalProvider` 默认禁自批（`datastoria.approval.allow-self-approve` 可放开适应单管理员）；`APPROVAL_SELF_APPROVAL_FORBIDDEN`。多签/紧急/按风险路由仍待真实多租户需求。 |
+| **P3 路由矩阵** | ⚠️ 自批限制已移除 | 原 `BuiltinApprovalProvider` 的禁自批规则、`datastoria.approval.allow-self-approve` 开关与 `APPROVAL_SELF_APPROVAL_FORBIDDEN` 错误码已按需求彻底移除，管理员可审批自己提交的工单。多签/紧急/按风险路由仍待真实多租户需求。 |
 | **P3 intent schema 富结构** | ✅ 已落地 | `ApprovalWorkOrderTypeResponse.intentSchema`（`List<IntentField>`：name/type/required/source，V2 source 分类），controller 按 generatorKey 声明；保留 `requiredIntentFields` 向后兼容。 |
 
 **当前执行能力（全部落地并测试，19 tests 绿，真实 CH 24.8 验证节点采集）**：MANUAL_TRIGGER（管理员同步 `execute`）+ AUTO_AFTER_APPROVAL（审批→QUEUED→`ApprovalExecutionWorker` 异步领取）+ 失败 `retry`（跳过已成功语句）+ 执行前 `env` 漂移阻断 + CREATE_TABLE 存在性 branch + 真集群逐节点采集 + RECONCILING 崩溃恢复 + EXPIRED 超时清理 + ApprovalProvider/禁自批 + 结构化 intentSchema。

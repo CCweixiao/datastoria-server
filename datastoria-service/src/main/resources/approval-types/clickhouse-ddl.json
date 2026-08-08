@@ -1,0 +1,102 @@
+[
+  {
+    "typeKey": "CLICKHOUSE_CREATE_TABLE",
+    "generatorKey": "create_local_distributed_table",
+    "nameEn": "Standard table",
+    "nameZhCn": "标准建表",
+    "descriptionEn": "Create a required local table and its distributed table as one ordered plan.",
+    "descriptionZhCn": "按固定顺序创建本地表及其分布式表。",
+    "allowedOperationKinds": ["CREATE_TABLE"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireCluster":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_CREATE_DATABASE",
+    "generatorKey": "create_database",
+    "nameEn": "Create database",
+    "nameZhCn": "创建数据库",
+    "descriptionEn": "Create a database on the cluster with the Atomic engine.",
+    "descriptionZhCn": "在集群上创建数据库（Atomic 引擎）。",
+    "allowedOperationKinds": ["CREATE_DATABASE"],
+    "defaultRules": {"requireCluster":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_ADD_COLUMN",
+    "generatorKey": "add_column",
+    "nameEn": "Add column",
+    "nameZhCn": "增加字段",
+    "descriptionEn": "Add a column after confirming that it does not already exist.",
+    "descriptionZhCn": "确认字段不存在后增加字段。",
+    "allowedOperationKinds": ["ALTER_TABLE_ADD_COLUMN"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireMissingColumn":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_MODIFY_COLUMN",
+    "generatorKey": "modify_column",
+    "nameEn": "Modify column",
+    "nameZhCn": "修改字段",
+    "descriptionEn": "Modify a column while protecting sorting, primary, partition, and sampling keys.",
+    "descriptionZhCn": "修改字段，同时保护排序键、主键、分区键和采样键。",
+    "allowedOperationKinds": ["ALTER_TABLE_MODIFY_COLUMN"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","protectKeys":["sorting_key","primary_key","partition_key","sampling_key"],"allowPromptOverride":false}
+  },
+  {
+    "typeKey": "CLICKHOUSE_DROP_COLUMN",
+    "generatorKey": "drop_column",
+    "nameEn": "Drop column",
+    "nameZhCn": "删除字段",
+    "descriptionEn": "Drop a non-key column after mandatory dependency checks.",
+    "descriptionZhCn": "通过强制依赖检查后删除非关键字段。",
+    "allowedOperationKinds": ["ALTER_TABLE_DROP_COLUMN"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","protectKeys":["sorting_key","primary_key","partition_key","sampling_key"],"allowPromptOverride":false}
+  },
+  {
+    "typeKey": "CLICKHOUSE_ADD_INDEX",
+    "generatorKey": "add_index",
+    "nameEn": "Add skipping index",
+    "nameZhCn": "增加索引",
+    "descriptionEn": "Add a skipping index and optionally materialize it in the same ordered plan.",
+    "descriptionZhCn": "增加跳数索引，并可在同一有序计划中物化索引。",
+    "allowedOperationKinds": ["ALTER_TABLE_ADD_INDEX","ALTER_TABLE_MATERIALIZE_INDEX"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","allowedIndexTypes":["minmax","set","bloom_filter","tokenbf_v1","ngrambf_v1"],"maxGranularity":8192}
+  },
+  {
+    "typeKey": "CLICKHOUSE_RENAME_TABLE",
+    "generatorKey": "rename_table",
+    "nameEn": "Rename table",
+    "nameZhCn": "重命名表",
+    "descriptionEn": "Rename an existing table after dependency and target checks.",
+    "descriptionZhCn": "检查依赖和目标名称后重命名已有表。",
+    "allowedOperationKinds": ["RENAME_TABLE"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireCluster":true,"manualExecutionOnly":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_DROP_TABLE",
+    "generatorKey": "drop_table",
+    "nameEn": "Drop table",
+    "nameZhCn": "删除表",
+    "descriptionEn": "Permanently drop an existing table through manual execution.",
+    "descriptionZhCn": "通过人工执行永久删除已有表。",
+    "allowedOperationKinds": ["DROP_TABLE"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireCluster":true,"manualExecutionOnly":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_TRUNCATE_TABLE",
+    "generatorKey": "truncate_table",
+    "nameEn": "Truncate table",
+    "nameZhCn": "清空表",
+    "descriptionEn": "Permanently remove all rows from an existing table through manual execution.",
+    "descriptionZhCn": "通过人工执行永久清空已有表的全部数据。",
+    "allowedOperationKinds": ["TRUNCATE_TABLE"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireCluster":true,"manualExecutionOnly":true}
+  },
+  {
+    "typeKey": "CLICKHOUSE_DROP_INDEX",
+    "generatorKey": "drop_index",
+    "nameEn": "Drop skipping index",
+    "nameZhCn": "删除索引",
+    "descriptionEn": "Drop an existing skipping index after checking the target table.",
+    "descriptionZhCn": "检查目标表后删除已有跳数索引。",
+    "allowedOperationKinds": ["ALTER_TABLE_DROP_INDEX"],
+    "defaultRules": {"localSuffix":"_local","distributedSuffix":"_all","requireExistingIndex":true}
+  }
+]

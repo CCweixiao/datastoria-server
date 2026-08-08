@@ -256,7 +256,13 @@ describe("ChatFactory durable actions", () => {
   });
 
   function resumableChat() {
-    const resumeStream = vi.fn().mockResolvedValue(undefined);
+    const resumeStream = vi
+      .fn()
+      .mockImplementation(
+        async (options?: { request?: (signal: AbortSignal) => Promise<Response> }) => {
+          await options?.request?.(new AbortController().signal);
+        }
+      );
     const chat = { resumeStream } as never;
     (
       ChatFactory as unknown as {
@@ -275,7 +281,7 @@ describe("ChatFactory durable actions", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(String(fetchMock.mock.calls[0][0])).toContain(
-      "/api/ai/runs/run%2F1/actions/action%2F1:respond"
+      "/api/ai/runs/run%2F1/actions/action%2F1:respond-and-resume"
     );
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
       response: { value: "Production" },

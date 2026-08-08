@@ -13,6 +13,7 @@ import type { Layout, ResponsiveLayouts } from "react-grid-layout";
 import {
   clearAllSectionLayouts,
   clearDashboardLayout,
+  hydrateDashboardLayouts,
   loadDashboardLayout,
   saveDashboardLayout,
 } from "./dashboard-layout-storage";
@@ -43,6 +44,20 @@ export function DashboardLayoutProvider({
     const saved = loadDashboardLayout(dashboardId);
     return saved ?? defaultLayouts;
   });
+
+  useEffect(() => {
+    let active = true;
+    void hydrateDashboardLayouts()
+      .then(() => {
+        if (active) {
+          setLayouts(loadDashboardLayout(dashboardId) ?? defaultLayouts);
+        }
+      })
+      .catch((error) => console.error("Failed to load dashboard layouts:", error));
+    return () => {
+      active = false;
+    };
+  }, [dashboardId, defaultLayouts]);
 
   // Debounce saves to the backend.
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

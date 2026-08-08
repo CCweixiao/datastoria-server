@@ -7,9 +7,11 @@ export type ApprovalStatus =
   | "REJECTED"
   | "QUEUED"
   | "RUNNING"
+  | "RECONCILING"
   | "SUCCEEDED"
   | "FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "EXPIRED";
 
 export type ApprovalRequest = {
   id: string;
@@ -143,6 +145,14 @@ export function getApproval(id: string): Promise<ApprovalDetail> {
   return request(`/api/approvals/${encodeURIComponent(id)}`);
 }
 
+export async function deleteApproval(id: string): Promise<void> {
+  const response = await backendApiFetch(
+    backendApiUrl(`/api/admin/approvals/${encodeURIComponent(id)}`),
+    { method: "DELETE" }
+  );
+  if (!response.ok) throw new Error((await readBackendError(response)).message);
+}
+
 export function updateApprovalSqlPlan(
   id: string,
   payload: { revision: number; items: Array<{ id: string; sqlText: string }> }
@@ -201,7 +211,7 @@ export function updateApprovalTypeDefinition(
 
 export function transitionApproval(
   id: string,
-  action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
+  action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "retry" | "close",
   payload: { revision: number; contentDigest?: string; comment?: string }
 ): Promise<ApprovalDetail> {
   const admin = action !== "submit" && action !== "interrupt";

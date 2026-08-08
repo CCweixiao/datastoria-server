@@ -16,6 +16,8 @@ import io.github.ccweixiao.datastoria.common.error.PlainTextException;
 @Service
 public class DdlPlanCompiler {
 
+  private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+      new com.fasterxml.jackson.databind.ObjectMapper();
   private final Map<String, DdlWorkOrderTypeDescriptor> descriptors;
 
   public DdlPlanCompiler(List<DdlWorkOrderTypeDescriptor> descriptors) {
@@ -31,6 +33,13 @@ public class DdlPlanCompiler {
     DdlWorkOrderTypeDescriptor descriptor = descriptors.get(definition.generatorKey());
     if (descriptor == null) {
       throw PlainTextException.badRequest(ApiErrorCode.APPROVAL_WORK_ORDER_TYPE_UNSUPPORTED);
+    }
+    try {
+      descriptor.validateRules(JSON.readTree(definition.generationRuleJson()));
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw PlainTextException.badRequest(ApiErrorCode.DDL_RULE_VIOLATION);
     }
     CompiledDdlPlan plan = descriptor.compile(intent, definition, schema);
     if (plan.statements().isEmpty()) {

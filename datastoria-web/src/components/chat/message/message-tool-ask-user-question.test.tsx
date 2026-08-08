@@ -209,6 +209,40 @@ describe("MessageToolAskUserQuestion", () => {
     expect(container.textContent).not.toContain("Question unavailable.");
   });
 
+  it("normalizes provider questions with labeled object options", () => {
+    act(() => {
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart({
+            input: {
+              questions: [
+                {
+                  question: "请描述用户信息表的字段设计（字段名、数据类型），以及排序键和分区键？",
+                  header: "表结构设计",
+                  options: [
+                    { label: "我来描述字段", description: "我将提供具体的字段、类型需求" },
+                    {
+                      label: "请推荐一个方案",
+                      description: "推荐符合 ClickHouse 最佳实践的表结构",
+                    },
+                  ],
+                  default: "请推荐一个方案",
+                },
+              ],
+            },
+          })}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("请描述用户信息表的字段设计");
+    expect(container.textContent).toContain("我来描述字段");
+    expect(container.textContent).toContain("请推荐一个方案");
+    expect(container.textContent).not.toContain("Question unavailable.");
+  });
+
   it("submits direct radio choices without requiring extra text", async () => {
     act(() => {
       root.render(

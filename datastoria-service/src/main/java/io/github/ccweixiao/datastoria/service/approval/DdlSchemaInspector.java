@@ -72,6 +72,70 @@ public class DdlSchemaInspector {
         .onErrorResume(exception -> Mono.just(false));
   }
 
+  /** Whether a database exists on the connection (create-table / create-database preconditions). */
+  public Mono<Boolean> databaseExists(String connectionId, String database, Identity identity) {
+    return connections
+        .findById(connectionId, identity)
+        .flatMap(
+            connection -> {
+              String cluster = connection.cluster();
+              String source =
+                  cluster == null || cluster.isBlank()
+                      ? "system.databases"
+                      : "clusterAllReplicas({cluster:String}, system.databases)";
+              Map<String, Object> parameters = new java.util.LinkedHashMap<>();
+              parameters.put("param_database", database);
+              if (cluster != null && !cluster.isBlank()) {
+                parameters.put("param_cluster", cluster.trim());
+              }
+              return connections.query(
+                  connectionId,
+                  "SELECT count() AS c FROM "
+                      + source
+                      + " WHERE name = {database:String} FORMAT JSONCompact",
+                  parameters,
+                  identity);
+            })
+        .map(this::requiredCountResult)
+        .map(count -> count > 0);
+  }
+
+  public Mono<Boolean> indexExists(
+      String connectionId, String database, String table, String index, Identity identity) {
+    return connections
+        .query(
+            connectionId,
+            "SELECT count() AS c FROM system.data_skipping_indices"
+                + " WHERE database={database:String} AND table={table:String}"
+                + " AND name={index:String} FORMAT JSONCompact",
+            Map.of("param_database", database, "param_table", table, "param_index", index),
+            identity)
+        .map(response -> countResult(response) > 0)
+        .onErrorResume(exception -> Mono.just(false));
+  }
+
+  private int countResult(String response) {
+    try {
+      return mapper.readTree(response).path("data").path(0).path(0).asInt(0);
+    } catch (Exception exception) {
+      return 0;
+    }
+  }
+
+  private int requiredCountResult(String response) {
+    try {
+      JsonNode count = mapper.readTree(response).path("data").path(0).path(0);
+      if (!count.isNumber() && !count.isTextual()) {
+        throw new IllegalStateException("ClickHouse count query returned no result");
+      }
+      return count.asInt();
+    } catch (RuntimeException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new IllegalStateException("Unable to parse ClickHouse count query result", exception);
+    }
+  }
+
   public Mono<DdlSchemaSnapshot> inspect(
       String connectionId, String database, String table, Identity identity) {
     return connections

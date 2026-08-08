@@ -28,7 +28,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -41,6 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  deleteApproval,
   getApproval,
   listApprovalExecutions,
   listApprovalNodeExecutions,
@@ -58,6 +58,7 @@ import {
   type ApprovalType,
   type ApprovalTypeDefinition,
 } from "@/lib/approval-client";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 import { SqlUtils } from "@/lib/sql-utils";
 import {
   AlertCircle,
@@ -71,6 +72,8 @@ import {
   ClipboardCheck,
   Clock3,
   Code2,
+  Eye,
+  FileClock,
   Pencil,
   Play,
   RefreshCw,
@@ -79,6 +82,7 @@ import {
   Search,
   Send,
   Sparkles,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -89,16 +93,60 @@ const STATUS_FILTERS: ApprovalStatus[] = [
   "DRAFT",
   "SUBMITTED",
   "APPROVED",
+  "QUEUED",
   "RUNNING",
+  "RECONCILING",
   "SUCCEEDED",
   "FAILED",
   "REJECTED",
   "CANCELLED",
+  "EXPIRED",
 ];
 
 const PAGE_SIZE = 10;
 const APPROVAL_TABLE_HEAD_CLASS =
   "sticky top-0 z-20 h-11 whitespace-nowrap border-b bg-muted px-4 text-xs font-semibold text-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]";
+const STICKY_ACTION_HEAD_CLASS = `${APPROVAL_TABLE_HEAD_CLASS} right-0 z-30 border-l-2`;
+const STICKY_ACTION_CELL_CLASS =
+  "sticky right-0 z-10 border-l-2 bg-card text-right group-hover:bg-muted";
+
+const AUDIT_EVENT_KEYS = {
+  DRAFT_CREATED: "approval.timeline.event.DRAFT_CREATED",
+  DRAFT_UPDATED: "approval.timeline.event.DRAFT_UPDATED",
+  SUBMITTED: "approval.timeline.event.SUBMITTED",
+  APPROVED: "approval.timeline.event.APPROVED",
+  REJECTED: "approval.timeline.event.REJECTED",
+  INTERRUPTED_BY_APPLICANT: "approval.timeline.event.INTERRUPTED_BY_APPLICANT",
+  SQL_PLAN_EDITED: "approval.timeline.event.SQL_PLAN_EDITED",
+  EXECUTION_STARTED: "approval.timeline.event.EXECUTION_STARTED",
+  EXECUTION_SUCCEEDED: "approval.timeline.event.EXECUTION_SUCCEEDED",
+  EXECUTION_FAILED: "approval.timeline.event.EXECUTION_FAILED",
+  EXECUTION_STUCK_RECONCILING: "approval.timeline.event.EXECUTION_STUCK_RECONCILING",
+  FAILED_EXECUTION_CLOSED: "approval.timeline.event.FAILED_EXECUTION_CLOSED",
+  APPROVAL_EXPIRED: "approval.timeline.event.APPROVAL_EXPIRED",
+} as const;
+
+const AUDIT_SYSTEM_MESSAGE_KEYS = {
+  "DDL approval draft created": "approval.timeline.message.draftCreated",
+  "DDL approval draft updated": "approval.timeline.message.draftUpdated",
+  "DDL approval submitted": "approval.timeline.message.submitted",
+  "SQL plan edited by administrator": "approval.timeline.message.sqlEdited",
+  "Manual DDL execution started": "approval.timeline.message.manualExecutionStarted",
+  "Auto DDL execution started": "approval.timeline.message.autoExecutionStarted",
+  "DDL execution succeeded": "approval.timeline.message.executionSucceeded",
+  "DDL execution failed": "approval.timeline.message.executionFailed",
+  "Failed DDL execution closed by administrator": "approval.timeline.message.failedClosed",
+} as const;
+
+function auditEventLabel(eventType: string, t: (key: MessageKey) => string): string {
+  const key = AUDIT_EVENT_KEYS[eventType as keyof typeof AUDIT_EVENT_KEYS];
+  return key ? t(key) : eventType.replaceAll("_", " ");
+}
+
+function auditMessage(message: string, t: (key: MessageKey) => string): string {
+  const key = AUDIT_SYSTEM_MESSAGE_KEYS[message as keyof typeof AUDIT_SYSTEM_MESSAGE_KEYS];
+  return key ? t(key) : message;
+}
 
 type FilterOption = { value: string; label: string };
 
@@ -339,9 +387,16 @@ function i18nValue(value: string, language: "en" | "zh-CN"): string {
 
 function StatusIcon({ status }: { status: ApprovalStatus }) {
   if (status === "SUCCEEDED") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  if (status === "FAILED" || status === "REJECTED" || status === "CANCELLED")
+  if (
+    status === "FAILED" ||
+    status === "REJECTED" ||
+    status === "CANCELLED" ||
+    status === "EXPIRED"
+  )
     return <XCircle className="h-4 w-4 text-destructive" />;
   if (status === "RUNNING") return <RefreshCw className="h-4 w-4 animate-spin text-primary" />;
+  if (status === "RECONCILING")
+    return <AlertCircle className="h-4 w-4 animate-pulse text-amber-500" />;
   return <Clock3 className="h-4 w-4 text-muted-foreground" />;
 }
 
@@ -363,8 +418,11 @@ export function ApprovalCenterTab() {
   const deferredKeyword = useDeferredValue(keyword.trim());
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ApprovalRequest | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAdmin = user?.role === "ADMIN";
+  const selectedRequestId = selected?.request.id;
   const createdFrom = dateRange?.from
     ? new Date(
         dateRange.from.getFullYear(),
@@ -400,7 +458,7 @@ export function ApprovalCenterTab() {
       });
       setRequests(nextPage.items);
       setRequestTotal(nextPage.total);
-      if (selected) setSelected(await getApproval(selected.request.id));
+      if (selectedRequestId) setSelected(await getApproval(selectedRequestId));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("approval.error.load"));
     } finally {
@@ -412,7 +470,7 @@ export function ApprovalCenterTab() {
     createdTo,
     deferredKeyword,
     page,
-    selected?.request.id,
+    selectedRequestId,
     statuses,
     t,
     typeFilter,
@@ -443,7 +501,7 @@ export function ApprovalCenterTab() {
     return () => {
       cancelled = true;
     };
-  }, [connection?.connectionId, isAdmin, t]);
+  }, [connection, isAdmin, t]);
 
   const typeNames = useMemo(
     () => new Map(types.map((type) => [type.typeKey, localizedJson(type.nameI18nJson)])),
@@ -478,9 +536,24 @@ export function ApprovalCenterTab() {
     [t]
   );
 
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteApproval(deleteTarget.id);
+      setDeleteTarget(null);
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("approval.error.delete"));
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget, reload, t]);
+
   const act = useCallback(
     async (
-      action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
+      action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "retry" | "close",
       comment?: string
     ) => {
       if (!selected) return;
@@ -643,8 +716,11 @@ export function ApprovalCenterTab() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="min-h-0 flex-1 overflow-auto p-0">
-                <Table containerClassName="overflow-visible" className="min-w-[1560px] table-fixed">
+              <CardContent className="min-h-0 flex-1 overflow-hidden px-6 py-0">
+                <Table
+                  containerClassName="h-full overscroll-x-contain [scrollbar-gutter:stable]"
+                  className="min-w-[1680px] table-fixed"
+                >
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[300px]`}>
@@ -668,24 +744,29 @@ export function ApprovalCenterTab() {
                       <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[200px]`}>
                         {t("approval.column.updatedAt")}
                       </TableHead>
+                      <TableHead
+                        className={`${STICKY_ACTION_HEAD_CLASS} ${isAdmin ? "w-[200px]" : "w-[120px]"} text-right`}
+                      >
+                        {t("approval.column.actions")}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="h-40 text-center text-muted-foreground">
                           {t("approval.loading")}
                         </TableCell>
                       </TableRow>
                     ) : pageRequests.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="h-40 text-center text-muted-foreground">
                           {t("approval.empty")}
                         </TableCell>
                       </TableRow>
                     ) : (
                       pageRequests.map((request) => (
-                        <TableRow key={request.id}>
+                        <TableRow key={request.id} className="group transition-colors">
                           <TableCell>
                             <button
                               className="break-all text-left font-mono text-xs font-medium text-primary hover:underline"
@@ -729,10 +810,40 @@ export function ApprovalCenterTab() {
                             </Badge>
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                            {new Date(request.createdAt).toLocaleString()}
+                            {new Date(request.createdAt).toLocaleString(locale)}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                            {new Date(request.updatedAt).toLocaleString()}
+                            {new Date(request.updatedAt).toLocaleString(locale)}
+                          </TableCell>
+                          <TableCell className={STICKY_ACTION_CELL_CLASS}>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1.5 rounded-md px-2.5 text-primary hover:bg-primary/10 hover:text-primary"
+                                onClick={() => void openDetail(request.id)}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                {t("approval.viewDetails")}
+                              </Button>
+                              {isAdmin ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 gap-1.5 rounded-md px-2.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  disabled={request.status === "RUNNING"}
+                                  title={
+                                    request.status === "RUNNING"
+                                      ? t("approval.delete.runningDisabled")
+                                      : t("approval.delete")
+                                  }
+                                  onClick={() => setDeleteTarget(request)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {t("approval.delete")}
+                                </Button>
+                              ) : null}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -740,7 +851,7 @@ export function ApprovalCenterTab() {
                   </TableBody>
                 </Table>
               </CardContent>
-              <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between border-t px-6 py-3 text-xs text-muted-foreground">
                 <span>
                   {t("approval.pagination.range")
                     .replace("{from}", String(requestTotal ? (page - 1) * PAGE_SIZE + 1 : 0))
@@ -789,6 +900,30 @@ export function ApprovalCenterTab() {
           </TabsContent>
         )}
       </Tabs>
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("approval.delete.confirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("approval.delete.confirmDescription")
+                .replace("{requestNo}", deleteTarget?.requestNo ?? "")
+                .replace("{title}", deleteTarget?.title ?? "")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {t("approval.delete.cascadeNotice")}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>
+              {t("approval.delete.cancel")}
+            </Button>
+            <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleting ? t("approval.delete.deleting") : t("approval.delete.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -802,7 +937,7 @@ function TypeDefinitionsManager({
   definitions: ApprovalTypeDefinition[];
   onSaved: (definition: ApprovalTypeDefinition) => void;
 }) {
-  const { t } = useUiPreferences();
+  const { locale, t } = useUiPreferences();
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -874,8 +1009,11 @@ function TypeDefinitionsManager({
           />
         </div>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 overflow-auto p-0">
-        <Table containerClassName="overflow-visible" className="min-w-[900px] table-fixed">
+      <CardContent className="min-h-0 flex-1 overflow-hidden px-6 py-0">
+        <Table
+          containerClassName="h-full overscroll-x-contain [scrollbar-gutter:stable]"
+          className="min-w-[980px] table-fixed"
+        >
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[190px]`}>
@@ -893,7 +1031,7 @@ function TypeDefinitionsManager({
               <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[70px]`}>
                 {t("approval.revision")}
               </TableHead>
-              <TableHead className={`${APPROVAL_TABLE_HEAD_CLASS} w-[100px] text-right`}>
+              <TableHead className={`${STICKY_ACTION_HEAD_CLASS} w-[120px] text-right`}>
                 {t("approval.type.column.actions")}
               </TableHead>
             </TableRow>
@@ -907,7 +1045,7 @@ function TypeDefinitionsManager({
               </TableRow>
             ) : (
               pageItems.map((definition) => (
-                <TableRow key={definition.typeKey}>
+                <TableRow key={definition.typeKey} className="group transition-colors">
                   <TableCell className="max-w-0 overflow-hidden">
                     <div
                       className="truncate font-medium"
@@ -916,7 +1054,7 @@ function TypeDefinitionsManager({
                       {localizedJson(definition.nameI18nJson)}
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {i18nValue(definition.descriptionI18nJson, "zh-CN")}
+                      {i18nValue(definition.descriptionI18nJson, locale)}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-0 overflow-hidden font-mono text-xs">
@@ -939,9 +1077,14 @@ function TypeDefinitionsManager({
                   <TableCell className="text-center text-muted-foreground">
                     {definition.definitionRevision}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => setEditing(definition)}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" />
+                  <TableCell className={STICKY_ACTION_CELL_CLASS}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-md px-2.5 text-primary hover:bg-primary/10 hover:text-primary"
+                      onClick={() => setEditing(definition)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
                       {t("approval.type.edit")}
                     </Button>
                   </TableCell>
@@ -951,7 +1094,7 @@ function TypeDefinitionsManager({
           </TableBody>
         </Table>
       </CardContent>
-      <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between border-t px-6 py-3 text-xs text-muted-foreground">
         <span>
           {t("approval.pagination.range")
             .replace("{from}", String(filtered.length ? (page - 1) * TYPE_PAGE_SIZE + 1 : 0))
@@ -1153,17 +1296,25 @@ function ApprovalDetailPanel({
   typeName?: string;
   onBack: () => void;
   onAction: (
-    action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "close",
+    action: "submit" | "interrupt" | "approve" | "reject" | "execute" | "retry" | "close",
     comment?: string
   ) => void;
   onSaveSql: (items: Array<{ id: string; sqlText: string }>) => Promise<boolean>;
 }) {
-  const { t } = useUiPreferences();
+  const { locale, t } = useUiPreferences();
   const [comment, setComment] = useState("");
   const [editingSql, setEditingSql] = useState(false);
   const [editedSql, setEditedSql] = useState<Record<string, string>>({});
   const request = detail.request;
   const canEditSql = isAdmin && (request.status === "DRAFT" || request.status === "SUBMITTED");
+  const hasAvailableActions =
+    request.status === "DRAFT" ||
+    (request.applicantUserId === currentUserId && request.status === "SUBMITTED") ||
+    (isAdmin &&
+      (request.status === "SUBMITTED" ||
+        request.status === "APPROVED" ||
+        request.status === "FAILED" ||
+        request.status === "RECONCILING"));
   const formattedSqlById = useMemo(
     () => new Map(detail.items.map((item) => [item.id, SqlUtils.prettyFormatQuery(item.sqlText)])),
     [detail.items]
@@ -1179,16 +1330,16 @@ function ApprovalDetailPanel({
     if (saved) setEditingSql(false);
   };
   return (
-    <Card className="h-full min-h-0 min-w-0 max-w-full overflow-hidden">
+    <Card className="h-full min-h-0 min-w-0 max-w-full overflow-hidden border-border/70 shadow-sm">
       <div className="h-full min-w-0 overflow-y-auto overflow-x-hidden">
-        <CardHeader className="space-y-3 border-b bg-gradient-to-r from-primary/[0.06] via-background to-background p-4">
+        <CardHeader className="space-y-4 border-b bg-gradient-to-br from-primary/[0.09] via-background to-muted/30 p-5">
           <Button variant="ghost" size="sm" className="mb-1 w-fit -ml-2" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             {t("approval.backToList")}
           </Button>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-xl">{request.title}</CardTitle>
+              <CardTitle className="text-xl tracking-tight">{request.title}</CardTitle>
               <p className="mt-1 font-mono text-xs text-muted-foreground">{request.requestNo}</p>
             </div>
             <Badge className="gap-1" variant="outline">
@@ -1209,80 +1360,91 @@ function ApprovalDetailPanel({
             <DetailMeta label={t("approval.detail.connection")} value={request.connectionName} />
             <DetailMeta
               label={t("approval.column.createdAt")}
-              value={new Date(request.createdAt).toLocaleString()}
+              value={new Date(request.createdAt).toLocaleString(locale)}
             />
           </div>
-          {isAdmin && (request.status === "SUBMITTED" || request.status === "FAILED") && (
-            <div className="space-y-1 pt-2">
-              <Label htmlFor={`approval-comment-${request.id}`} className="text-xs">
-                {t("approval.reviewComment")}
-              </Label>
-              <Textarea
-                id={`approval-comment-${request.id}`}
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder={t("approval.reviewComment.placeholder")}
-                className="min-h-20"
-              />
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2 pt-2">
-            {request.status === "DRAFT" && (
-              <Button size="sm" disabled={acting} onClick={() => onAction("submit")}>
-                <Send className="mr-2 h-4 w-4" />
-                {t("approval.submit")}
-              </Button>
+          {isAdmin &&
+            (request.status === "SUBMITTED" ||
+              request.status === "FAILED" ||
+              request.status === "RECONCILING") && (
+              <div className="space-y-1 pt-2">
+                <Label htmlFor={`approval-comment-${request.id}`} className="text-xs">
+                  {t("approval.reviewComment")}
+                </Label>
+                <Textarea
+                  id={`approval-comment-${request.id}`}
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  placeholder={t("approval.reviewComment.placeholder")}
+                  className="min-h-20"
+                />
+              </div>
             )}
-            {request.applicantUserId === currentUserId &&
-              (request.status === "DRAFT" || request.status === "SUBMITTED") && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={acting}
-                  onClick={() => onAction("interrupt")}
-                >
-                  <CircleStop className="mr-2 h-4 w-4" />
-                  {t("approval.interrupt")}
+          {hasAvailableActions ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background/70 p-2.5 shadow-sm backdrop-blur">
+              {request.status === "DRAFT" && (
+                <Button size="sm" disabled={acting} onClick={() => onAction("submit")}>
+                  <Send className="mr-2 h-4 w-4" />
+                  {t("approval.submit")}
                 </Button>
               )}
-            {isAdmin && request.status === "SUBMITTED" && (
-              <>
-                <Button size="sm" disabled={acting} onClick={() => onAction("approve", comment)}>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  {t("approval.approve")}
+              {request.applicantUserId === currentUserId &&
+                (request.status === "DRAFT" || request.status === "SUBMITTED") && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={acting}
+                    onClick={() => onAction("interrupt")}
+                  >
+                    <CircleStop className="mr-2 h-4 w-4" />
+                    {t("approval.interrupt")}
+                  </Button>
+                )}
+              {isAdmin && request.status === "SUBMITTED" && (
+                <>
+                  <Button size="sm" disabled={acting} onClick={() => onAction("approve", comment)}>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {t("approval.approve")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={acting || !comment.trim()}
+                    onClick={() => onAction("reject", comment)}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    {t("approval.reject")}
+                  </Button>
+                </>
+              )}
+              {isAdmin && request.status === "APPROVED" && (
+                <Button size="sm" disabled={acting} onClick={() => onAction("execute")}>
+                  <Play className="mr-2 h-4 w-4" />
+                  {t("approval.execute")}
                 </Button>
+              )}
+              {isAdmin && (request.status === "FAILED" || request.status === "RECONCILING") && (
+                <Button size="sm" disabled={acting} onClick={() => onAction("retry")}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  {t("approval.retry")}
+                </Button>
+              )}
+              {isAdmin && (request.status === "FAILED" || request.status === "RECONCILING") && (
                 <Button
                   size="sm"
-                  variant="destructive"
+                  variant="outline"
                   disabled={acting || !comment.trim()}
-                  onClick={() => onAction("reject", comment)}
+                  onClick={() => onAction("close", comment)}
                 >
                   <XCircle className="mr-2 h-4 w-4" />
-                  {t("approval.reject")}
+                  {t("approval.closeFailed")}
                 </Button>
-              </>
-            )}
-            {isAdmin && request.status === "APPROVED" && (
-              <Button size="sm" disabled={acting} onClick={() => onAction("execute")}>
-                <Play className="mr-2 h-4 w-4" />
-                {t("approval.execute")}
-              </Button>
-            )}
-            {isAdmin && request.status === "FAILED" && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={acting || !comment.trim()}
-                onClick={() => onAction("close", comment)}
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                {t("approval.closeFailed")}
-              </Button>
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
         </CardHeader>
-        <CardContent className="min-w-0 space-y-4 p-4">
-          <section>
+        <CardContent className="min-w-0 space-y-5 bg-muted/10 p-5">
+          <section className="rounded-xl border bg-background p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -1382,29 +1544,41 @@ function ApprovalDetailPanel({
           {isAdmin && (
             <ExecutionHistory requestId={request.id} requestRevision={request.revision} />
           )}
-          <section>
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              {t("approval.timeline")}
-            </h3>
-            <div className="relative ml-2 space-y-0 border-l border-border pl-6">
+          <section className="rounded-xl border bg-background p-4 shadow-sm">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <FileClock className="h-4 w-4 text-primary" />
+                {t("approval.timeline")}
+              </h3>
+              <Badge variant="secondary" className="rounded-full px-2.5 font-normal">
+                {t("approval.timeline.count").replace("{count}", String(detail.events.length))}
+              </Badge>
+            </div>
+            <div className="relative ml-2 space-y-0 border-l-2 border-primary/15 pl-7">
               {[...detail.events].reverse().map((event, index) => (
                 <div key={event.id} className="relative pb-6 last:pb-0">
                   <span
-                    className={`absolute -left-[31px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-background ${index === 0 ? "bg-primary" : "bg-muted-foreground/40"}`}
+                    className={`absolute -left-[34px] top-4 h-3 w-3 rounded-full border-2 border-background ring-4 ring-background ${index === 0 ? "bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.14)]" : "bg-muted-foreground/40"}`}
                   />
-                  <div className="rounded-lg border bg-card p-3 shadow-sm">
+                  <div
+                    className={`rounded-xl border p-4 transition-colors ${index === 0 ? "border-primary/25 bg-primary/[0.035] shadow-sm" : "bg-card hover:bg-muted/30"}`}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{event.eventType}</div>
-                      <time className="text-xs text-muted-foreground">
-                        {new Date(event.createdAt).toLocaleString()}
+                      <div className="text-sm font-semibold">
+                        {auditEventLabel(event.eventType, t)}
+                      </div>
+                      <time className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                        {new Date(event.createdAt).toLocaleString(locale)}
                       </time>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
                       {event.actorDisplayName || t("approval.timeline.system")}
                     </div>
                     {event.safeMessage ? (
-                      <div className="mt-2 text-xs text-muted-foreground">{event.safeMessage}</div>
+                      <div className="mt-3 rounded-md border-l-2 border-primary/25 bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                        {auditMessage(event.safeMessage, t)}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -1471,8 +1645,11 @@ function ExecutionHistory({
   }, [requestId, requestRevision, t]);
 
   return (
-    <section>
-      <h3 className="mb-2 text-sm font-semibold">{t("approval.execution.title")}</h3>
+    <section className="rounded-xl border bg-background p-4 shadow-sm">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Play className="h-4 w-4 text-primary" />
+        {t("approval.execution.title")}
+      </h3>
       {loading ? (
         <p className="text-xs text-muted-foreground">{t("approval.loading")}</p>
       ) : error ? (
@@ -1480,9 +1657,9 @@ function ExecutionHistory({
       ) : executions.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t("approval.execution.empty")}</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {executions.map((execution) => (
-            <div key={execution.id} className="rounded-md border p-3 text-xs">
+            <div key={execution.id} className="rounded-lg border bg-muted/15 p-3.5 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">
                   {t("approval.execution.attempt")} {execution.attemptNo} · #{execution.ordinal}

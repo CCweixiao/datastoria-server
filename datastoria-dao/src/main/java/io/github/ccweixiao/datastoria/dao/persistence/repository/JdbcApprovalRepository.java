@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -27,6 +29,8 @@ import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
 
 @Repository
 public class JdbcApprovalRepository implements ApprovalRepository {
+
+  private static final Logger log = LoggerFactory.getLogger(JdbcApprovalRepository.class);
 
   private final NamedParameterJdbcTemplate jdbc;
 
@@ -143,8 +147,9 @@ public class JdbcApprovalRepository implements ApprovalRepository {
       List<ApprovalItem> items,
       String idempotencyKey,
       ApprovalEvent createdEvent) {
-    jdbc.update(
-        """
+    int nodeExecutions =
+        jdbc.update(
+            """
         INSERT INTO ds_approval_request (
           id, tenant_id, request_no, type, work_order_type_key, work_order_type_revision,
           type_definition_checksum, title, summary, applicant_user_id, applicant_display_name,
@@ -161,7 +166,7 @@ public class JdbcApprovalRepository implements ApprovalRepository {
           :revision, :createdAt, :updatedAt,
           :planVersion, :planHash, :envSnapshotJson, :policyVersionRef)
         """,
-        requestParameters(request).addValue("idempotencyKey", idempotencyKey));
+            requestParameters(request).addValue("idempotencyKey", idempotencyKey));
     for (ApprovalItem item : items) {
       insertItem(item);
     }
@@ -184,6 +189,35 @@ public class JdbcApprovalRepository implements ApprovalRepository {
                 "idempotencyKey", idempotencyKey),
             String.class);
     return ids.isEmpty() ? Optional.empty() : findDetail(tenantId, ids.get(0));
+  }
+
+  @Override
+  public Optional<ApprovalRequest> findSubmittedByConversationAndType(
+      String tenantId,
+      String applicantUserId,
+      String sourceSessionId,
+      String workOrderTypeKey,
+      String excludedRequestId) {
+    return jdbc
+        .query(
+            """
+            SELECT * FROM ds_approval_request
+            WHERE tenant_id = :tenantId AND applicant_user_id = :applicantUserId
+              AND source_session_id = :sourceSessionId
+              AND work_order_type_key = :workOrderTypeKey
+              AND id <> :excludedRequestId AND status <> 'DRAFT'
+              AND deleted_at IS NULL
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            Map.of(
+                "tenantId", tenantId,
+                "applicantUserId", applicantUserId,
+                "sourceSessionId", sourceSessionId,
+                "workOrderTypeKey", workOrderTypeKey,
+                "excludedRequestId", excludedRequestId),
+            JdbcApprovalRepository::mapRequest)
+        .stream()
+        .findFirst();
   }
 
   @Override
@@ -248,6 +282,65 @@ public class JdbcApprovalRepository implements ApprovalRepository {
             Map.of("tenantId", tenantId, "requestId", requestId),
             JdbcApprovalRepository::mapEvent);
     return Optional.of(new ApprovalDetail(requests.get(0), items, events));
+  }
+
+  @Override
+  @Transactional
+  public boolean deleteAggregate(String tenantId, String requestId) {
+    Map<String, ?> parameters = Map.of("tenantId", tenantId, "requestId", requestId);
+    List<String> statuses =
+        jdbc.queryForList(
+            """
+            SELECT status FROM ds_approval_request
+            WHERE tenant_id = :tenantId AND id = :requestId AND deleted_at IS NULL
+            FOR UPDATE
+            """,
+            parameters,
+            String.class);
+    if (statuses.isEmpty() || ApprovalStatus.RUNNING.name().equals(statuses.get(0))) {
+      return false;
+    }
+
+    int nodeExecutions =
+        jdbc.update(
+            """
+        DELETE node FROM ds_approval_node_execution node
+        INNER JOIN ds_approval_execution execution
+          ON execution.tenant_id = node.tenant_id AND execution.id = node.execution_id
+        WHERE execution.tenant_id = :tenantId AND execution.request_id = :requestId
+        """,
+            parameters);
+    int executions =
+        jdbc.update(
+            "DELETE FROM ds_approval_execution WHERE tenant_id = :tenantId AND request_id = :requestId",
+            parameters);
+    int resourceClaims =
+        jdbc.update(
+            "DELETE FROM ds_approval_resource_claim WHERE tenant_id = :tenantId AND request_id = :requestId",
+            parameters);
+    int events =
+        jdbc.update(
+            "DELETE FROM ds_approval_event WHERE tenant_id = :tenantId AND request_id = :requestId",
+            parameters);
+    int items =
+        jdbc.update(
+            "DELETE FROM ds_approval_item WHERE tenant_id = :tenantId AND request_id = :requestId",
+            parameters);
+    int requests =
+        jdbc.update(
+            "DELETE FROM ds_approval_request WHERE tenant_id = :tenantId AND id = :requestId",
+            parameters);
+    log.info(
+        "Approval aggregate deleted: tenantId={}, requestId={}, requests={}, items={}, events={}, resourceClaims={}, executions={}, nodeExecutions={}",
+        tenantId,
+        requestId,
+        requests,
+        items,
+        events,
+        resourceClaims,
+        executions,
+        nodeExecutions);
+    return requests == 1;
   }
 
   @Override

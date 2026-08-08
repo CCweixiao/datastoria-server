@@ -49,7 +49,7 @@ public final class ApprovalAgentTools {
   public Mono<String> listTypes() {
     return executionPolicy.guard(
         "list_approval_work_order_types",
-        service.listTypes(connectionId, identity).map(this::json));
+        service.listTypeSummaries(connectionId, identity).map(this::json));
   }
 
   @Tool(

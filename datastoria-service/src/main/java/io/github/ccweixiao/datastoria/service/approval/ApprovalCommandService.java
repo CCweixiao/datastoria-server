@@ -14,6 +14,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalPageResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalSqlPlanUpdateRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTransitionRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalTypeUpdateRequest;
+import io.github.ccweixiao.datastoria.common.dto.approval.ApprovalWorkOrderTypeResponse;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareRequest;
 import io.github.ccweixiao.datastoria.common.dto.approval.DdlApprovalPrepareResponse;
 import io.github.ccweixiao.datastoria.common.error.AdminAccessRequiredException;
@@ -57,6 +60,8 @@ import reactor.core.scheduler.Scheduler;
 
 @Service
 public class ApprovalCommandService {
+
+  private static final Logger log = LoggerFactory.getLogger(ApprovalCommandService.class);
 
   private static final DateTimeFormatter REQUEST_DATE =
       DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
@@ -105,17 +110,26 @@ public class ApprovalCommandService {
     return connections
         .findById(command.connectionId(), identity)
         .flatMap(
-            connection ->
-                schema(command, identity)
-                    .map(
-                        schema ->
-                            createDraft(
-                                command,
-                                identity,
-                                connection,
-                                definition,
-                                schema,
-                                compiler.compile(command.intent(), definition, schema))))
+            connection -> {
+              validateTargetCluster(command.intent(), connection);
+              return schema(command, definition, identity)
+                  .flatMap(
+                      schema -> {
+                        CompiledDdlPlan plan =
+                            compiler.compile(command.intent(), definition, schema);
+                        return validatePreparePreconditions(command, plan, identity)
+                            .then(
+                                Mono.fromCallable(
+                                    () ->
+                                        createDraft(
+                                            command,
+                                            identity,
+                                            connection,
+                                            definition,
+                                            schema,
+                                            plan)));
+                      });
+            })
         .subscribeOn(jdbcScheduler);
   }
 
@@ -132,6 +146,18 @@ public class ApprovalCommandService {
               }
               ApprovalTypeDefinition current =
                   catalog.requireEnabled(request.tenantId(), request.workOrderTypeKey());
+              if (!isBlank(request.sourceSessionId())
+                  && repository
+                      .findSubmittedByConversationAndType(
+                          request.tenantId(),
+                          request.applicantUserId(),
+                          request.sourceSessionId(),
+                          request.workOrderTypeKey(),
+                          request.id())
+                      .isPresent()) {
+                return Mono.error(
+                    new ConflictException(ApiErrorCode.APPROVAL_CONVERSATION_DUPLICATE));
+              }
               if (current.definitionRevision() != request.workOrderTypeRevision()
                   || !current.checksum().equals(request.typeDefinitionChecksum())) {
                 return Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED));
@@ -182,8 +208,6 @@ public class ApprovalCommandService {
               ApprovalStatus target;
               if (decision == ApprovalStatus.REJECTED) {
                 target = ApprovalStatus.REJECTED;
-              } else if ("AUTO_AFTER_APPROVAL".equals(request.executionMode())) {
-                target = ApprovalStatus.QUEUED;
               } else {
                 target = ApprovalStatus.APPROVED;
               }
@@ -693,6 +717,52 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler);
   }
 
+  public Mono<Void> delete(String requestId, Identity identity) {
+    requireAdmin(identity);
+    return Mono.fromRunnable(
+            () -> {
+              Optional<ApprovalDetail> existing =
+                  repository.findDetail(identity.tenantId(), requestId);
+              if (existing.isEmpty()) {
+                log.info(
+                    "Approval delete treated as idempotent success: tenantId={}, requestId={}, actorUserId={}, reason=already_absent",
+                    identity.tenantId(),
+                    requestId,
+                    identity.userId());
+                return;
+              }
+              ApprovalDetail detail = existing.get();
+              if (detail.request().status() == ApprovalStatus.RUNNING) {
+                log.info(
+                    "Approval delete blocked: tenantId={}, requestId={}, actorUserId={}, status=RUNNING",
+                    identity.tenantId(),
+                    requestId,
+                    identity.userId());
+                throw new ConflictException(ApiErrorCode.APPROVAL_DELETE_RUNNING);
+              }
+              log.info(
+                  "Approval delete requested: tenantId={}, requestId={}, requestNo={}, actorUserId={}, status={}",
+                  identity.tenantId(),
+                  requestId,
+                  detail.request().requestNo(),
+                  identity.userId(),
+                  detail.request().status());
+              if (!repository.deleteAggregate(identity.tenantId(), requestId)) {
+                if (repository.findDetail(identity.tenantId(), requestId).isEmpty()) {
+                  log.info(
+                      "Approval delete completed concurrently: tenantId={}, requestId={}, actorUserId={}",
+                      identity.tenantId(),
+                      requestId,
+                      identity.userId());
+                  return;
+                }
+                throw new ConflictException(ApiErrorCode.APPROVAL_DELETE_RUNNING);
+              }
+            })
+        .subscribeOn(jdbcScheduler)
+        .then();
+  }
+
   public Mono<ApprovalPageResponse> list(
       List<ApprovalStatus> statuses,
       String workOrderTypeKey,
@@ -775,6 +845,23 @@ public class ApprovalCommandService {
         .subscribeOn(jdbcScheduler);
   }
 
+  /**
+   * Work-order contract summaries for the {@code list_approval_work_order_types} agent tool. Unlike
+   * {@link #listTypes}, this projects each type through {@link ApprovalWorkOrderTypeResponse#from}
+   * so the agent receives the field contract (intentSchema, required fields) and the
+   * natural-language ruleGuide — the same view the admin capabilities API returns.
+   */
+  public Mono<List<ApprovalWorkOrderTypeResponse>> listTypeSummaries(
+      String connectionId, Identity identity) {
+    return connections
+        .findById(connectionId, identity)
+        .thenReturn(
+            catalog.listEnabled(identity.tenantId(), connectionId).stream()
+                .map(ApprovalWorkOrderTypeResponse::from)
+                .toList())
+        .subscribeOn(jdbcScheduler);
+  }
+
   public Mono<List<ApprovalTypeDefinition>> listTypeDefinitions(Identity identity) {
     requireAdmin(identity);
     return Mono.fromCallable(() -> catalog.listAll(identity.tenantId())).subscribeOn(jdbcScheduler);
@@ -830,7 +917,7 @@ public class ApprovalCommandService {
       String contentJson = mapper.writeValueAsString(content);
       String digest = canonicalJsonDigest(content);
       String planHash = computePlanHash(command.intent(), content.get("statements"));
-      String envSnapshotJson = envSnapshot(command.connectionId(), definition, schema);
+      String envSnapshotJson = envSnapshot(command, definition, schema);
       String policyVersionRef = definition.definitionRevision() + ":v1";
       int planVersion =
           current == null
@@ -1012,12 +1099,136 @@ public class ApprovalCommandService {
    * instead of waiting for ClickHouse to reject the duplicate.
    */
   private String preconditionJson(CompiledDdlStatement statement) {
+    if (statement.operationKind() == DdlOperationKind.CREATE_DATABASE
+        && statement.objectRefs() != null
+        && !statement.objectRefs().isEmpty()) {
+      return "{\"check\":\"database-exists\",\"database\":\""
+          + statement.objectRefs().get(0)
+          + "\"}";
+    }
     if (statement.operationKind() == DdlOperationKind.CREATE_TABLE
         && statement.objectRefs() != null
         && !statement.objectRefs().isEmpty()) {
       return "{\"check\":\"table-exists\",\"object\":\"" + statement.objectRefs().get(0) + "\"}";
     }
     return null;
+  }
+
+  /**
+   * Read-only checks performed before a draft is persisted. Execution-time checks remain in place
+   * to close the time-of-check/time-of-use window, but they are the safety net rather than the
+   * first user-visible failure.
+   */
+  private Mono<Void> validatePreparePreconditions(
+      DdlApprovalPrepareRequest command, CompiledDdlPlan plan, Identity identity) {
+    return Flux.fromIterable(plan.statements())
+        .concatMap(
+            statement -> {
+              if (statement.objectRefs().isEmpty()) return Mono.empty();
+              if (statement.operationKind() == DdlOperationKind.CREATE_DATABASE) {
+                return schemaInspector
+                    .databaseExists(command.connectionId(), statement.objectRefs().get(0), identity)
+                    .flatMap(
+                        exists ->
+                            exists
+                                ? Mono.error(
+                                    new ConflictException(ApiErrorCode.DDL_TARGET_ALREADY_EXISTS))
+                                : Mono.empty());
+              }
+              if (statement.operationKind() == DdlOperationKind.CREATE_TABLE) {
+                String object = statement.objectRefs().get(0);
+                int dot = object.indexOf('.');
+                if (dot <= 0 || dot == object.length() - 1) return Mono.empty();
+                String database = object.substring(0, dot);
+                String table = object.substring(dot + 1);
+                return schemaInspector
+                    .databaseExists(command.connectionId(), database, identity)
+                    .flatMap(
+                        databaseExists -> {
+                          if (!databaseExists) {
+                            return Mono.error(
+                                new ConflictException(ApiErrorCode.DDL_DATABASE_REQUIRED));
+                          }
+                          return schemaInspector
+                              .objectExists(command.connectionId(), database, table, identity)
+                              .flatMap(
+                                  exists ->
+                                      exists
+                                          ? Mono.error(
+                                              new ConflictException(
+                                                  ApiErrorCode.DDL_TARGET_ALREADY_EXISTS))
+                                          : Mono.empty());
+                        });
+              }
+              if (statement.operationKind() == DdlOperationKind.RENAME_TABLE) {
+                return validateRenamePreconditions(command, statement, identity);
+              }
+              if (statement.operationKind() == DdlOperationKind.DROP_TABLE
+                  || statement.operationKind() == DdlOperationKind.TRUNCATE_TABLE) {
+                return requireTableExists(
+                    command.connectionId(), statement.objectRefs().get(0), identity);
+              }
+              if (statement.operationKind() == DdlOperationKind.ALTER_TABLE_DROP_INDEX) {
+                String[] parts = statement.objectRefs().get(0).split("\\.", 4);
+                if (parts.length != 4) return Mono.empty();
+                return requireTableExists(
+                        command.connectionId(), parts[0] + "." + parts[1], identity)
+                    .then(
+                        schemaInspector.indexExists(
+                            command.connectionId(), parts[0], parts[1], parts[3], identity))
+                    .flatMap(
+                        exists ->
+                            exists
+                                ? Mono.empty()
+                                : Mono.error(
+                                    new ConflictException(ApiErrorCode.DDL_TARGET_NOT_FOUND)));
+              }
+              if (statement.operationKind() == DdlOperationKind.ALTER_TABLE_ADD_COLUMN
+                  || statement.operationKind() == DdlOperationKind.ALTER_TABLE_MODIFY_COLUMN
+                  || statement.operationKind() == DdlOperationKind.ALTER_TABLE_DROP_COLUMN
+                  || statement.operationKind() == DdlOperationKind.ALTER_TABLE_ADD_INDEX
+                  || statement.operationKind() == DdlOperationKind.ALTER_TABLE_MATERIALIZE_INDEX) {
+                return requireTableExists(
+                    command.connectionId(), tableObject(statement.objectRefs().get(0)), identity);
+              }
+              return Mono.empty();
+            })
+        .then();
+  }
+
+  private Mono<Void> validateRenamePreconditions(
+      DdlApprovalPrepareRequest command, CompiledDdlStatement statement, Identity identity) {
+    if (statement.objectRefs().size() < 2) return Mono.empty();
+    String source = statement.objectRefs().get(0);
+    String target = statement.objectRefs().get(1);
+    return requireTableExists(command.connectionId(), source, identity)
+        .then(tableExists(command.connectionId(), target, identity))
+        .flatMap(
+            exists ->
+                exists
+                    ? Mono.error(new ConflictException(ApiErrorCode.DDL_TARGET_ALREADY_EXISTS))
+                    : Mono.empty());
+  }
+
+  private Mono<Void> requireTableExists(String connectionId, String object, Identity identity) {
+    return tableExists(connectionId, object, identity)
+        .flatMap(
+            exists ->
+                exists
+                    ? Mono.empty()
+                    : Mono.error(new ConflictException(ApiErrorCode.DDL_TARGET_NOT_FOUND)));
+  }
+
+  private Mono<Boolean> tableExists(String connectionId, String object, Identity identity) {
+    int dot = object.indexOf('.');
+    if (dot <= 0 || dot == object.length() - 1) return Mono.just(false);
+    return schemaInspector.objectExists(
+        connectionId, object.substring(0, dot), object.substring(dot + 1), identity);
+  }
+
+  private static String tableObject(String objectRef) {
+    String[] parts = objectRef.split("\\.", 3);
+    return parts.length < 2 ? objectRef : parts[0] + "." + parts[1];
   }
 
   private Mono<Void> executeItem(
@@ -1059,24 +1270,58 @@ public class ApprovalCommandService {
     }
     try {
       JsonNode pre = mapper.readTree(item.preconditionJson());
-      if (!"table-exists".equals(pre.path("check").asText())) {
-        return Mono.empty();
+      String check = pre.path("check").asText();
+      if ("table-exists".equals(check)) {
+        String object = pre.path("object").asText("");
+        int dot = object.indexOf('.');
+        if (isBlank(object) || dot < 0) {
+          return Mono.empty();
+        }
+        String database = object.substring(0, dot);
+        String table = object.substring(dot + 1);
+        // CREATE TABLE requires the database to exist; BLOCK early with an actionable message
+        // instead of letting ClickHouse reject the statement mid-execution (Code 81
+        // UNKNOWN_DATABASE).
+        return schemaInspector
+            .databaseExists(request.connectionId(), database, identity)
+            .flatMap(
+                dbExists -> {
+                  if (!dbExists) {
+                    return Mono.<Void>error(
+                        new ExecutionFailedException(
+                            "Database '"
+                                + database
+                                + "' does not exist; create it before creating tables (e.g. via a"
+                                + " CLICKHOUSE_CREATE_DATABASE work order)"));
+                  }
+                  return schemaInspector
+                      .objectExists(request.connectionId(), database, table, identity)
+                      .flatMap(
+                          tableExists ->
+                              tableExists
+                                  ? Mono.<Void>error(
+                                      new ExecutionFailedException(
+                                          "Target object already exists: " + object))
+                                  : Mono.<Void>empty());
+                });
       }
-      String object = pre.path("object").asText("");
-      int dot = object.indexOf('.');
-      if (isBlank(object) || dot < 0) {
-        return Mono.empty();
+      if ("database-exists".equals(check)) {
+        String database = pre.path("database").asText("");
+        if (isBlank(database)) {
+          return Mono.empty();
+        }
+        // CREATE DATABASE is idempotent: BLOCK if the database already exists rather than letting
+        // ClickHouse raise DATABASE_ALREADY_EXISTS.
+        return schemaInspector
+            .databaseExists(request.connectionId(), database, identity)
+            .flatMap(
+                exists ->
+                    exists
+                        ? Mono.<Void>error(
+                            new ExecutionFailedException("Database already exists: " + database))
+                        : Mono.<Void>empty());
       }
-      String database = object.substring(0, dot);
-      String table = object.substring(dot + 1);
-      return schemaInspector
-          .objectExists(request.connectionId(), database, table, identity)
-          .flatMap(
-              exists ->
-                  exists
-                      ? Mono.error(
-                          new ExecutionFailedException("Target object already exists: " + object))
-                      : Mono.<Void>empty());
+      return Mono.empty();
     } catch (Exception exception) {
       return Mono.empty();
     }
@@ -1186,7 +1431,11 @@ public class ApprovalCommandService {
     return Mono.<Void>fromRunnable(
             () -> {
               String code = exception.getClass().getSimpleName();
-              String message = "ClickHouse rejected approval item #" + item.ordinal();
+              String message =
+                  "ClickHouse rejected approval item #"
+                      + item.ordinal()
+                      + ": "
+                      + rootMessage(exception);
               if (nodeExecutionId != null) {
                 repository.finishNodeExecution(
                     request.tenantId(), nodeExecutionId, false, duration, code, message);
@@ -1195,7 +1444,10 @@ public class ApprovalCommandService {
                   request.tenantId(), executionId, false, duration, code, message);
             })
         .subscribeOn(jdbcScheduler)
-        .then(Mono.error(new ExecutionFailedException("DDL item #" + item.ordinal() + " failed")));
+        .then(
+            Mono.error(
+                new ExecutionFailedException(
+                    "DDL item #" + item.ordinal() + " failed: " + rootMessage(exception))));
   }
 
   private static Endpoint endpoint(String url) {
@@ -1241,16 +1493,35 @@ public class ApprovalCommandService {
     }
   }
 
-  private Mono<DdlSchemaSnapshot> schema(DdlApprovalPrepareRequest command, Identity identity) {
-    if ("CLICKHOUSE_CREATE_TABLE".equals(command.workOrderTypeKey())) {
+  private Mono<DdlSchemaSnapshot> schema(
+      DdlApprovalPrepareRequest command, ApprovalTypeDefinition definition, Identity identity) {
+    if ("CLICKHOUSE_CREATE_TABLE".equals(command.workOrderTypeKey())
+        || "CLICKHOUSE_CREATE_DATABASE".equals(command.workOrderTypeKey())) {
       return Mono.just(DdlSchemaSnapshot.EMPTY);
     }
     String database = command.intent().path("database").asText("").trim();
-    String table = command.intent().path("table").asText("").trim();
+    String table = schemaTable(command.intent().path("table").asText("").trim(), definition);
     if (database.isEmpty() || table.isEmpty()) {
       return Mono.error(PlainTextException.badRequest(ApiErrorCode.INVALID_REQUEST));
     }
     return schemaInspector.inspect(command.connectionId(), database, table, identity);
+  }
+
+  private String schemaTable(String table, ApprovalTypeDefinition definition) {
+    if (table.isEmpty()) return table;
+    try {
+      return schemaTable(table, mapper.readTree(definition.generationRuleJson()));
+    } catch (Exception exception) {
+      throw PlainTextException.badRequest(ApiErrorCode.DDL_RULE_VIOLATION);
+    }
+  }
+
+  private static String schemaTable(String table, JsonNode rules) {
+    String localSuffix = rules.path("localSuffix").asText("_local");
+    String distributedSuffix = rules.path("distributedSuffix").asText("_all");
+    return table.endsWith(localSuffix) || table.endsWith(distributedSuffix)
+        ? table
+        : table + localSuffix;
   }
 
   /**
@@ -1268,9 +1539,14 @@ public class ApprovalCommandService {
       if (!frozenColumns.isArray() || frozenColumns.isEmpty()) {
         return Mono.empty();
       }
-      JsonNode intent = mapper.readTree(detail.request().contentJson()).path("intent");
-      String database = intent.path("database").asText();
-      String table = intent.path("table").asText();
+      String database = env.path("schemaDatabase").asText();
+      String table = env.path("schemaTable").asText();
+      if (isBlank(database) || isBlank(table)) {
+        JsonNode content = mapper.readTree(detail.request().contentJson());
+        JsonNode intent = content.path("intent");
+        database = intent.path("database").asText();
+        table = schemaTable(intent.path("table").asText(), content.path("generationRule"));
+      }
       if (isBlank(database) || isBlank(table)) return Mono.empty();
       Set<String> frozenColumnSet = jsonToStringSet(frozenColumns);
       Set<String> frozenProtectedSet = jsonToStringSet(env.path("schema").path("protectedColumns"));
@@ -1308,12 +1584,17 @@ public class ApprovalCommandService {
         return Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
       }
       JsonNode content = mapper.readTree(detail.request().contentJson());
-      if (content.path("manualSqlOverride").asBoolean(false)) {
-        return manualPlanMatches(content.path("statements"), detail.items())
-            ? Mono.empty()
-            : Mono.error(new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED));
-      }
       JsonNode intent = content.path("intent");
+      if (content.path("manualSqlOverride").asBoolean(false)) {
+        return validateTargetCluster(intent, detail.request().connectionId(), identity)
+            .then(
+                Mono.defer(
+                    () ->
+                        manualPlanMatches(content.path("statements"), detail.items())
+                            ? Mono.empty()
+                            : Mono.error(
+                                new ConflictException(ApiErrorCode.APPROVAL_CONTENT_CHANGED))));
+      }
       String typeKey = content.path("workOrderTypeKey").asText();
       if (!detail.request().workOrderTypeKey().equals(typeKey)
           || !detail
@@ -1333,18 +1614,40 @@ public class ApprovalCommandService {
               null,
               null,
               null);
-      return schema(frozenCommand, identity)
-          .map(schema -> compiler.compile(intent, definition, schema))
-          .flatMap(
-              plan ->
-                  frozenPlanMatches(plan, detail.items())
-                      ? Mono.empty()
-                      : Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED)));
+      return validateTargetCluster(intent, frozenCommand.connectionId(), identity)
+          .then(
+              schema(frozenCommand, definition, identity)
+                  .map(schema -> compiler.compile(intent, definition, schema))
+                  .flatMap(
+                      plan ->
+                          frozenPlanMatches(plan, detail.items())
+                              ? Mono.empty()
+                              : Mono.error(
+                                  new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED))));
     } catch (RuntimeException exception) {
       return Mono.error(exception);
     } catch (Exception exception) {
       return Mono.error(new ConflictException(ApiErrorCode.DDL_REVALIDATION_REQUIRED));
     }
+  }
+
+  private static void validateTargetCluster(
+      JsonNode intent, ClickHouseConnectionResponse connection) {
+    String targetCluster = trimToNull(intent.path("cluster").asText(null));
+    if (targetCluster == null) return;
+    String connectionCluster = trimToNull(connection.cluster());
+    if (connectionCluster == null || !connectionCluster.equals(targetCluster)) {
+      throw new ConflictException(ApiErrorCode.DDL_CLUSTER_CONNECTION_MISMATCH);
+    }
+  }
+
+  private Mono<Void> validateTargetCluster(
+      JsonNode intent, String connectionId, Identity identity) {
+    if (trimToNull(intent.path("cluster").asText(null)) == null) return Mono.empty();
+    return connections
+        .findById(connectionId, identity)
+        .doOnNext(connection -> validateTargetCluster(intent, connection))
+        .then();
   }
 
   private ApprovalTypeDefinition frozenDefinition(ApprovalRequest request) {
@@ -1443,7 +1746,7 @@ public class ApprovalCommandService {
     }
   }
 
-  private static ApprovalEvent event(
+  private ApprovalEvent event(
       ApprovalRequest request,
       Identity actor,
       String type,
@@ -1457,8 +1760,46 @@ public class ApprovalCommandService {
         actor.userId(),
         actor.userId(),
         safeMessage,
-        detailsJson,
+        sanitizeDetails(detailsJson),
         Instant.now());
+  }
+
+  /**
+   * Guarantees the audit event {@code details_json} is valid JSON for the MySQL JSON column. Some
+   * callers pass free-text details (a failure message or an admin close-failed comment); a
+   * non-null, non-JSON value makes MySQL reject the insert with "Invalid JSON text", masking the
+   * original outcome with a 500. Null/blank stays null; already-valid JSON passes through; anything
+   * else is wrapped as {@code {"message": "..."}}.
+   */
+  private String sanitizeDetails(String detailsJson) {
+    if (detailsJson == null || detailsJson.isBlank()) {
+      return null;
+    }
+    try {
+      mapper.readTree(detailsJson);
+      return detailsJson;
+    } catch (Exception notJson) {
+      try {
+        return mapper.writeValueAsString(java.util.Map.of("message", detailsJson));
+      } catch (Exception impossible) {
+        return null;
+      }
+    }
+  }
+
+  /** Deepest non-blank message in a causal chain (ClickHouse errors arrive wrapped). */
+  private static String rootMessage(Throwable throwable) {
+    String message = throwable.getMessage();
+    Throwable current = throwable;
+    for (int depth = 0;
+        depth < 10 && current.getCause() != null && current.getCause() != current;
+        depth++) {
+      current = current.getCause();
+      if (current.getMessage() != null && !current.getMessage().isBlank()) {
+        message = current.getMessage();
+      }
+    }
+    return message == null ? throwable.getClass().getSimpleName() : message;
   }
 
   private static void validatePrepare(DdlApprovalPrepareRequest command) {
@@ -1526,19 +1867,9 @@ public class ApprovalCommandService {
     return sha256(mapper.writeValueAsString(canonicalJson(value)));
   }
 
-  /**
-   * Execution mode comes from the type's risk_policy_json: default {@code MANUAL_TRIGGER}; {@code
-   * AUTO_AFTER_APPROVAL} opts a type into async execution via the worker.
-   */
+  /** Agent-created DDL is intentionally never auto-executed in the current product boundary. */
   private String executionMode(ApprovalTypeDefinition definition) {
-    try {
-      JsonNode policy = mapper.readTree(definition.riskPolicyJson());
-      return "AUTO_AFTER_APPROVAL".equals(policy.path("executionMode").asText(""))
-          ? "AUTO_AFTER_APPROVAL"
-          : "MANUAL_TRIGGER";
-    } catch (Exception exception) {
-      return "MANUAL_TRIGGER";
-    }
+    return "MANUAL_TRIGGER";
   }
 
   /**
@@ -1570,11 +1901,17 @@ public class ApprovalCommandService {
 
   /** Captures the environment facts the Plan was validated against; drift-detected in P2. */
   private String envSnapshot(
-      String connectionId, ApprovalTypeDefinition definition, DdlSchemaSnapshot schema)
+      DdlApprovalPrepareRequest command,
+      ApprovalTypeDefinition definition,
+      DdlSchemaSnapshot schema)
       throws Exception {
     ObjectNode snapshot = mapper.createObjectNode();
-    snapshot.put("connectionId", connectionId);
+    snapshot.put("connectionId", command.connectionId());
     snapshot.put("workOrderTypeKey", definition.typeKey());
+    if (!schema.columns().isEmpty()) {
+      snapshot.put("schemaDatabase", command.intent().path("database").asText());
+      snapshot.put("schemaTable", schemaTable(command.intent().path("table").asText(), definition));
+    }
     ObjectNode schemaNode = mapper.createObjectNode();
     ArrayNode columns = mapper.createArrayNode();
     schema.columns().stream().sorted().forEach(columns::add);

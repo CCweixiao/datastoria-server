@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -24,9 +26,20 @@ import io.github.ccweixiao.datastoria.dao.repository.ApprovalRepository;
 class DdlWorkOrderTypeCatalogTest {
 
   @Test
+  void resourceManifestDefinesAndSeedsAllRegisteredTypes() {
+    ApprovalRepository repository = mock(ApprovalRepository.class);
+    DdlWorkOrderTypeCatalog catalog = catalog(repository);
+    when(repository.findTypes("tenant")).thenReturn(List.of());
+
+    catalog.listAll("tenant");
+
+    verify(repository, times(10)).createTypeIfAbsent(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void administratorCannotDisableMandatoryKeyProtection() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
-    DdlWorkOrderTypeCatalog catalog = new DdlWorkOrderTypeCatalog(repository, new ObjectMapper());
+    DdlWorkOrderTypeCatalog catalog = catalog(repository);
     when(repository.findType("tenant", "CLICKHOUSE_DROP_COLUMN"))
         .thenReturn(Optional.of(definition("drop_column", protectedRules())));
 
@@ -45,7 +58,7 @@ class DdlWorkOrderTypeCatalogTest {
   @Test
   void administratorCanNarrowIndexRulesAndDisableType() {
     ApprovalRepository repository = mock(ApprovalRepository.class);
-    DdlWorkOrderTypeCatalog catalog = new DdlWorkOrderTypeCatalog(repository, new ObjectMapper());
+    DdlWorkOrderTypeCatalog catalog = catalog(repository);
     ApprovalTypeDefinition current =
         definition(
             "add_index", "{\"allowedIndexTypes\":[\"minmax\",\"set\"],\"maxGranularity\":8192}");
@@ -108,6 +121,25 @@ class DdlWorkOrderTypeCatalogTest {
 
   private static ApprovalTypeUpdateRequest command(String rules) {
     return new ApprovalTypeUpdateRequest(1, "Name", "名称", "Description", "描述", rules, false);
+  }
+
+  private static DdlWorkOrderTypeCatalog catalog(ApprovalRepository repository) {
+    ObjectMapper mapper = new ObjectMapper();
+    return new DdlWorkOrderTypeCatalog(
+        repository,
+        mapper,
+        new DdlWorkOrderTypeSpecificationRegistry(mapper),
+        List.of(
+            new CreateDatabaseDescriptor(),
+            new CreateStandardTableDescriptor(),
+            new AddColumnDescriptor(),
+            new ModifyColumnDescriptor(),
+            new DropColumnDescriptor(),
+            new AddIndexDescriptor(),
+            new RenameTableDescriptor(),
+            new DropTableDescriptor(),
+            new TruncateTableDescriptor(),
+            new DropIndexDescriptor()));
   }
 
   private static ApprovalTypeDefinition definition(String generator, String rules) {

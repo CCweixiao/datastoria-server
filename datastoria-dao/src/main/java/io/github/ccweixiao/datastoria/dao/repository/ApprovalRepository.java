@@ -47,6 +47,13 @@ public interface ApprovalRepository {
   Optional<ApprovalDetail> findDetailByIdempotencyKey(
       String tenantId, String applicantUserId, String idempotencyKey);
 
+  Optional<ApprovalRequest> findSubmittedByConversationAndType(
+      String tenantId,
+      String applicantUserId,
+      String sourceSessionId,
+      String workOrderTypeKey,
+      String excludedRequestId);
+
   boolean updateDraft(
       ApprovalRequest request,
       long expectedRevision,
@@ -55,6 +62,9 @@ public interface ApprovalRepository {
       ApprovalEvent updatedEvent);
 
   Optional<ApprovalDetail> findDetail(String tenantId, String requestId);
+
+  /** Permanently deletes the complete aggregate unless it is currently running. */
+  boolean deleteAggregate(String tenantId, String requestId);
 
   List<ApprovalRequest> findRequests(
       String tenantId,

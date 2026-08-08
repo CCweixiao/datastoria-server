@@ -115,39 +115,24 @@ public final class HarnessAgentFactory {
     return runnable(context, agent, messages, 0L, config.outputReasoning());
   }
 
-  /**
-   * Recreates a paused AgentScope call from the shared state store, or primes the minimal safe
-   * state from persisted chat + pending tool metadata after a JVM restart.
-   */
+  /** Resumes a permission pause exclusively from AgentScope's persisted native state. */
   public RunnableAgent resumeApprovals(
       RunContext context,
       ModelAdapter modelAdapter,
       AgentRuntimeConfig config,
       AgentRunCapabilities capabilities,
-      List<ChatTurn> history,
       ApprovalResumeRequest resume) {
     Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
     PermissionContextState permissionContext =
         capabilities.permissionContext() == null
             ? allowRegisteredServerTools(toolkit)
             : capabilities.permissionContext();
-    List<ToolUseBlock> pending =
-        resume.decisions().stream()
-            .map(
-                decision ->
-                    ToolUseBlock.builder()
-                        .id(decision.toolCallId())
-                        .name(decision.toolName())
-                        .input(decision.input())
-                        .content(writeToolInput(decision.input()))
-                        .state(ToolCallState.ASKING)
-                        .build())
-            .toList();
-    primeRestartState(context, history, pending, permissionContext, resume.replyId());
+    AgentState nativeState = requireNativeAgentState(context);
 
     List<ConfirmResult> confirmations = new ArrayList<>();
-    for (int i = 0; i < pending.size(); i++) {
-      confirmations.add(new ConfirmResult(resume.decisions().get(i).confirmed(), pending.get(i)));
+    for (ApprovalResumeRequest.Decision decision : resume.decisions()) {
+      ToolUseBlock pending = requireNativePendingTool(nativeState, decision.toolCallId());
+      confirmations.add(new ConfirmResult(decision.confirmed(), pending));
     }
     Msg confirmation =
         Msg.builder()
@@ -164,28 +149,19 @@ public final class HarnessAgentFactory {
         config.outputReasoning());
   }
 
-  /** Restores a server-suspended question and supplies its durable response as a tool result. */
+  /** Resumes a suspended tool exclusively from AgentScope's persisted native state. */
   public RunnableAgent resumeQuestion(
       RunContext context,
       ModelAdapter modelAdapter,
       AgentRuntimeConfig config,
       AgentRunCapabilities capabilities,
-      List<ChatTurn> history,
       QuestionResumeRequest resume) {
     Toolkit toolkit = toolRegistry.createToolkit(capabilities.tools());
     PermissionContextState permissionContext =
         capabilities.permissionContext() == null
             ? allowRegisteredServerTools(toolkit)
             : capabilities.permissionContext();
-    ToolUseBlock pending =
-        ToolUseBlock.builder()
-            .id(resume.toolCallId())
-            .name(resume.toolName())
-            .input(resume.input())
-            .content(writeToolInput(resume.input()))
-            .state(ToolCallState.ALLOWED)
-            .build();
-    primeRestartState(context, history, List.of(pending), permissionContext, resume.replyId());
+    requireNativeAgentState(context);
 
     ToolResultBlock result =
         new ToolResultBlock(
@@ -318,30 +294,24 @@ public final class HarnessAgentFactory {
             .build());
   }
 
-  private void primeRestartState(
-      RunContext context,
-      List<ChatTurn> history,
-      List<ToolUseBlock> pending,
-      PermissionContextState permissionContext,
-      String replyId) {
-    if (stateStore.exists(context.userId(), context.runId())) {
-      return;
-    }
-    List<Msg> restored = historyMessages(history);
-    restored.add(
-        Msg.builder()
-            .role(MsgRole.ASSISTANT)
-            .content(pending.stream().map(ContentBlock.class::cast).toList())
-            .build());
-    AgentState state =
-        AgentState.builder()
-            .userId(context.userId())
-            .sessionId(context.runId())
-            .replyId(replyId)
-            .context(restored)
-            .permissionContext(permissionContext)
-            .build();
-    stateStore.save(context.userId(), context.runId(), "agent_state", state);
+  private AgentState requireNativeAgentState(RunContext context) {
+    return stateStore
+        .get(context.userId(), context.runId(), "agent_state", AgentState.class)
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "AgentScope state is unavailable for suspended run " + context.runId()));
+  }
+
+  private ToolUseBlock requireNativePendingTool(AgentState state, String toolCallId) {
+    return state.getContext().stream()
+        .flatMap(message -> message.getContentBlocks(ToolUseBlock.class).stream())
+        .filter(tool -> toolCallId.equals(tool.getId()) && tool.getState() == ToolCallState.ASKING)
+        .findFirst()
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "AgentScope pending tool is unavailable for call " + toolCallId));
   }
 
   private List<Msg> historyMessages(List<ChatTurn> history) {

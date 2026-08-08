@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,7 +47,7 @@ public class ApprovalController {
       @RequestParam String connectionId) {
     return IdentityContext.current()
         .flatMap(identity -> service.listTypes(connectionId, identity))
-        .map(types -> types.stream().map(this::summary).toList())
+        .map(types -> types.stream().map(ApprovalWorkOrderTypeResponse::from).toList())
         .map(ResponseEntity::ok);
   }
 
@@ -169,6 +170,14 @@ public class ApprovalController {
         .map(ResponseEntity::ok);
   }
 
+  @DeleteMapping("/admin/approvals/{id}")
+  @AdminAccess
+  public Mono<ResponseEntity<Void>> delete(@PathVariable String id) {
+    return IdentityContext.current()
+        .flatMap(identity -> service.delete(id, identity))
+        .thenReturn(ResponseEntity.noContent().build());
+  }
+
   @GetMapping("/admin/approvals/{id}/executions/{executionId}/nodes")
   @AdminAccess
   public Mono<ResponseEntity<List<ApprovalNodeExecution>>> nodeExecutions(
@@ -198,70 +207,8 @@ public class ApprovalController {
         .map(ResponseEntity::ok);
   }
 
-  private ApprovalWorkOrderTypeResponse summary(ApprovalTypeDefinition type) {
-    return new ApprovalWorkOrderTypeResponse(
-        type.typeKey(),
-        type.nameI18nJson(),
-        type.descriptionI18nJson(),
-        requiredFields(type.generatorKey()),
-        intentSchema(type.generatorKey()),
-        safeRuleSummary(type.generatorKey()),
-        type.definitionRevision());
-  }
-
-  private static List<String> requiredFields(String generatorKey) {
-    return switch (generatorKey) {
-      case "create_local_distributed_table" -> List.of(
-          "database", "table", "cluster", "columns", "orderBy", "shardingKey");
-      case "add_column", "modify_column" -> List.of("database", "table", "column", "type");
-      case "drop_column" -> List.of("database", "table", "column");
-      case "add_index" -> List.of(
-          "database", "table", "index", "column", "indexType", "granularity");
-      default -> List.of();
-    };
-  }
-
-  private static List<ApprovalWorkOrderTypeResponse.IntentField> intentSchema(String generatorKey) {
-    return switch (generatorKey) {
-      case "create_local_distributed_table" -> List.of(
-          field("database", "identifier", "user-provided"),
-          field("table", "identifier", "user-provided"),
-          field("cluster", "identifier", "user-provided"),
-          field("columns", "array", "mixed"),
-          field("orderBy", "array", "agent-derived"),
-          field("shardingKey", "identifier", "agent-derived"));
-      case "add_column", "modify_column" -> List.of(
-          field("database", "identifier", "user-provided"),
-          field("table", "identifier", "user-provided"),
-          field("column", "identifier", "user-provided"),
-          field("type", "columnType", "user-provided"));
-      case "drop_column" -> List.of(
-          field("database", "identifier", "user-provided"),
-          field("table", "identifier", "user-provided"),
-          field("column", "identifier", "user-provided"));
-      case "add_index" -> List.of(
-          field("database", "identifier", "user-provided"),
-          field("table", "identifier", "user-provided"),
-          field("index", "identifier", "user-provided"),
-          field("column", "identifier", "user-provided"),
-          field("indexType", "identifier", "user-provided"),
-          field("granularity", "number", "user-provided"));
-      default -> List.of();
-    };
-  }
-
-  private static ApprovalWorkOrderTypeResponse.IntentField field(
-      String name, String type, String source) {
-    return new ApprovalWorkOrderTypeResponse.IntentField(name, type, true, source);
-  }
-
-  private static String safeRuleSummary(String generatorKey) {
-    return switch (generatorKey) {
-      case "create_local_distributed_table" -> "CREATE_LOCAL_AND_DISTRIBUTED_PAIR";
-      case "modify_column", "drop_column" -> "PROTECT_KEY_COLUMNS";
-      case "add_column" -> "REQUIRE_MISSING_COLUMN";
-      case "add_index" -> "VALIDATE_SKIPPING_INDEX";
-      default -> "SERVER_VALIDATED";
-    };
-  }
+  // Work-order field contract (requiredIntentFields / intentSchema / ruleSummary / ruleGuide) lives
+  // on ApprovalWorkOrderTypeResponse.from(...) so the admin API and the
+  // list_approval_work_order_types
+  // agent tool share one source of truth.
 }

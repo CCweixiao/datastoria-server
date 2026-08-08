@@ -149,12 +149,6 @@ public enum ApiErrorCode {
       "The requested operation is not allowed in the current work order state.",
       "工单状态不允许此操作",
       "当前工单状态不允许执行所请求的操作。"),
-  APPROVAL_SELF_APPROVAL_FORBIDDEN(
-      409,
-      "Self-approval is not allowed",
-      "An administrator cannot approve their own work order submission.",
-      "不允许自批",
-      "管理员不能审批自己提交的工单。"),
   APPROVAL_RESOURCE_CONFLICT(
       409,
       "DDL resource is already claimed",
@@ -167,12 +161,54 @@ public enum ApiErrorCode {
       "A required object is being created by another active work order. Submit this request after it finishes.",
       "暂不支持跨工单依赖",
       "所需对象正在由另一个活动工单创建，请等待其完成后再提交。"),
+  APPROVAL_CONVERSATION_DUPLICATE(
+      409,
+      "Duplicate work order in conversation",
+      "A work order of this type has already been submitted from this conversation.",
+      "对话中存在重复工单",
+      "当前对话已提交过同类型工单，不能重复提交。"),
+  APPROVAL_DELETE_RUNNING(
+      409,
+      "Running work order cannot be deleted",
+      "Interrupt or wait for the running work order to finish before deleting it.",
+      "执行中的工单不能删除",
+      "请先中断工单或等待执行完成后再删除。"),
+  DDL_CLUSTER_CONNECTION_MISMATCH(
+      409,
+      "Target cluster does not match the selected connection",
+      "DDL work orders cannot target a cluster other than the cluster configured for the selected connection.",
+      "目标集群与当前连接不一致",
+      "DDL 工单不能操作当前所选连接配置以外的集群。"),
+  DDL_TARGET_ALREADY_EXISTS(
+      409,
+      "DDL target already exists",
+      "The target database object already exists, so no work order was created.",
+      "DDL 目标已存在",
+      "目标数据库对象已存在，因此未生成工单。"),
+  DDL_TARGET_NOT_FOUND(
+      409,
+      "DDL target does not exist",
+      "The target database object does not exist, so no work order was created.",
+      "DDL 目标不存在",
+      "目标数据库对象不存在，因此未生成工单。"),
+  DDL_DATABASE_REQUIRED(
+      409,
+      "Target database does not exist",
+      "The target database does not exist. Submit and execute a create-database work order first.",
+      "目标数据库不存在",
+      "目标数据库不存在，请先提交并执行创建数据库工单。"),
   DDL_OPERATION_UNSUPPORTED(
       400,
       "Unsupported DDL operation",
       "The SQL cannot be classified as an enabled and supported DDL operation.",
       "不支持的 DDL 操作",
       "该 SQL 无法识别为已启用且受支持的 DDL 操作。"),
+  DDL_INTENT_INVALID(
+      400,
+      "DDL request needs clarification",
+      "One or more required DDL intent fields are missing or invalid. Complete the questions provided by the work order type contract.",
+      "DDL 请求需要澄清",
+      "一个或多个 DDL 意图字段缺失或无效，请根据工单类型契约补充所需信息。"),
   DDL_RULE_VIOLATION(
       400,
       "DDL rule validation failed",

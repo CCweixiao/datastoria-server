@@ -50,6 +50,30 @@ describe("application i18n", () => {
     expect(translate("zh-CN", "approval.sql.editNotice")).toContain("草稿");
   });
 
+  it("translates approval table actions and audit timeline events in both catalogs", () => {
+    expect(translate("en", "approval.viewDetails")).toBe("View");
+    expect(translate("zh-CN", "approval.viewDetails")).toBe("查看");
+    expect(translate("en", "approval.timeline.event.EXECUTION_SUCCEEDED")).toBe(
+      "Execution succeeded"
+    );
+    expect(translate("zh-CN", "approval.timeline.event.EXECUTION_SUCCEEDED")).toBe("执行成功");
+    expect(translate("en", "approval.timeline.message.manualExecutionStarted")).toContain(
+      "manual DDL execution"
+    );
+    expect(translate("zh-CN", "approval.timeline.message.manualExecutionStarted")).toContain(
+      "手工执行 DDL"
+    );
+  });
+
+  it("translates destructive approval actions and cascade warnings in both catalogs", () => {
+    expect(translate("en", "approval.delete")).toBe("Delete");
+    expect(translate("zh-CN", "approval.delete")).toBe("删除");
+    expect(translate("en", "approval.delete.runningDisabled")).toContain("running");
+    expect(translate("zh-CN", "approval.delete.runningDisabled")).toContain("执行中");
+    expect(translate("en", "approval.delete.cascadeNotice")).toContain("execution records");
+    expect(translate("zh-CN", "approval.delete.cascadeNotice")).toContain("执行记录");
+  });
+
   it("translates cluster monitoring titles and summaries using the active locale", () => {
     expect(translate("en", "monitor.cluster.mergeSourceParts.title")).toBe("Merge Source Parts");
     expect(translate("zh-CN", "monitor.cluster.mergeSourceParts.title")).toBe("合并源 Part 数");

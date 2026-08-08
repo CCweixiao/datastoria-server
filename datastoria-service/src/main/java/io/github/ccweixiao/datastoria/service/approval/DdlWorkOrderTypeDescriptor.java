@@ -8,6 +8,8 @@ public interface DdlWorkOrderTypeDescriptor {
 
   String generatorKey();
 
+  void validateRules(JsonNode rules);
+
   CompiledDdlPlan compile(
       JsonNode intent, ApprovalTypeDefinition definition, DdlSchemaSnapshot schema);
 }
