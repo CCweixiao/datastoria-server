@@ -18,4 +18,5 @@ public record FeedbackUpsertRequest(
     String reasonCode,
     String freeText,
     FeedbackPayload payload,
-    Boolean recoveryActionTaken) {}
+    Boolean recoveryActionTaken,
+    Boolean ephemeral) {}

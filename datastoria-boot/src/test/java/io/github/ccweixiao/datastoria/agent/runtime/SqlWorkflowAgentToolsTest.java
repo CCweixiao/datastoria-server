@@ -33,7 +33,7 @@ class SqlWorkflowAgentToolsTest {
   @Test
   void generateAndOptimizeUseNestedModelThenRealValidationBoundary() throws Exception {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
-    when(service.query(anyString(), anyString(), any(), any()))
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
         .thenReturn(Mono.just("{\"data\":[{\"explain\":\"ok\"}]}"));
     ClickHouseAgentTools clickHouse =
         new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));

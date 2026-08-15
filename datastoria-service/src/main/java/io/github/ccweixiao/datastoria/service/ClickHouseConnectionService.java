@@ -223,7 +223,10 @@ public class ClickHouseConnectionService {
         .subscribeOn(jdbcScheduler);
   }
 
-  public Mono<String> query(
+  /**
+   * Executes one server-gated read-only query. Used by Agent tools and trusted preflight checks.
+   */
+  public Mono<String> queryReadOnly(
       String id, String sql, Map<String, Object> parameters, Identity identity) {
     return Mono.defer(
             () -> {
@@ -238,6 +241,23 @@ public class ClickHouseConnectionService {
                   decryptPassword(connection),
                   gatedSql,
                   enforceReadOnlyLimits(parameters, querySecurity));
+            })
+        .subscribeOn(jdbcScheduler);
+  }
+
+  /** Executes administrator-authorized SQL, including approved DDL, without the read-only gate. */
+  public Mono<String> executeAdminSql(
+      String id, String sql, Map<String, Object> parameters, Identity identity) {
+    requireAdmin(identity);
+    return Mono.defer(
+            () -> {
+              ClickHouseConnection connection = require(id, identity);
+              if (!connection.enabled()) {
+                return Mono.error(
+                    new IllegalArgumentException("ClickHouse connection is disabled: " + id));
+              }
+              return remoteClient.execute(
+                  connection, decryptPassword(connection), sql, copyParameters(parameters));
             })
         .subscribeOn(jdbcScheduler);
   }

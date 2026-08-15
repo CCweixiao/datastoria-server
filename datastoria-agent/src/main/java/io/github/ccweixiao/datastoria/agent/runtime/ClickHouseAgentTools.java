@@ -111,7 +111,8 @@ public final class ClickHouseAgentTools {
             .flatMap(
                 connection -> {
                   String safeSql = sqlClassifier.requireReadOnly(sql, connection.cluster());
-                  return service.query(connectionId, safeSql, EXECUTE_SQL_SETTINGS, identity);
+                  return service.queryReadOnly(
+                      connectionId, safeSql, EXECUTE_SQL_SETTINGS, identity);
                 })
             .map(this::executeSqlJson)
             .onErrorResume(this::executeSqlFailure));
@@ -161,7 +162,9 @@ public final class ClickHouseAgentTools {
             + safeLimit;
     return executionPolicy.guard(
         "get_tables",
-        service.query(connectionId, sql, READ_ONLY_SETTINGS, identity).map(this::dataArrayJson));
+        service
+            .queryReadOnly(connectionId, sql, READ_ONLY_SETTINGS, identity)
+            .map(this::dataArrayJson));
   }
 
   @Tool(
@@ -221,7 +224,7 @@ public final class ClickHouseAgentTools {
     return executionPolicy.guard(
         "explore_schema",
         service
-            .query(connectionId, sql, READ_ONLY_SETTINGS, identity)
+            .queryReadOnly(connectionId, sql, READ_ONLY_SETTINGS, identity)
             .map(raw -> schemaJson(raw, tables)));
   }
 
@@ -238,7 +241,7 @@ public final class ClickHouseAgentTools {
     return executionPolicy.guard(
         "validate_sql",
         service
-            .query(connectionId, "EXPLAIN SYNTAX " + sql, READ_ONLY_SETTINGS, identity)
+            .queryReadOnly(connectionId, "EXPLAIN SYNTAX " + sql, READ_ONLY_SETTINGS, identity)
             .map(ignored -> validationJson(true, null))
             .onErrorResume(this::validationFailure));
   }
@@ -303,7 +306,7 @@ public final class ClickHouseAgentTools {
               + " ORDER BY event_time DESC LIMIT 1";
       resolvedSql =
           service
-              .query(connectionId, lookup, READ_ONLY_SETTINGS, identity)
+              .queryReadOnly(connectionId, lookup, READ_ONLY_SETTINGS, identity)
               .map(this::firstQueryText);
     }
     Mono<String> operation =
@@ -311,7 +314,7 @@ public final class ClickHouseAgentTools {
             candidate -> {
               String safeSql = sqlClassifier.requireReadOnly(candidate);
               Mono<String> indexes =
-                  service.query(
+                  service.queryReadOnly(
                       connectionId, "EXPLAIN indexes = 1 " + safeSql, READ_ONLY_SETTINGS, identity);
               if (!"full".equals(resolvedMode)) {
                 return indexes.map(
@@ -320,7 +323,7 @@ public final class ClickHouseAgentTools {
                             safeSql, queryId, resolvedGoal, resolvedMode, raw, null, requested));
               }
               Mono<String> pipeline =
-                  service.query(
+                  service.queryReadOnly(
                       connectionId, "EXPLAIN PIPELINE " + safeSql, READ_ONLY_SETTINGS, identity);
               return Mono.zip(indexes, pipeline)
                   .map(
@@ -364,7 +367,7 @@ public final class ClickHouseAgentTools {
     return executionPolicy.guard(
         "search_query_log",
         service
-            .query(connectionId, query.sql(), READ_ONLY_SETTINGS, identity)
+            .queryReadOnly(connectionId, query.sql(), READ_ONLY_SETTINGS, identity)
             .map(raw -> queryLogJson(raw, query)));
   }
 
@@ -448,7 +451,7 @@ public final class ClickHouseAgentTools {
             + " (SELECT count() FROM system.processes) AS current_queries";
     Mono<String> operation =
         service
-            .query(connectionId, sql, READ_ONLY_SETTINGS, identity)
+            .queryReadOnly(connectionId, sql, READ_ONLY_SETTINGS, identity)
             .flatMap(
                 raw -> {
                   if (!"windowed".equals(mode)) {
@@ -559,7 +562,7 @@ public final class ClickHouseAgentTools {
             + " GROUP BY database, table ORDER BY active_parts DESC LIMIT 100";
     Mono<String> operation =
         service
-            .query(connectionId, sql, READ_ONLY_SETTINGS, identity)
+            .queryReadOnly(connectionId, sql, READ_ONLY_SETTINGS, identity)
             .map(
                 raw ->
                     highPartCountRcaJson(
@@ -1282,7 +1285,7 @@ public final class ClickHouseAgentTools {
             + " AND type IN ('QueryFinish', 'ExceptionWhileProcessing')"
             + " GROUP BY timestamp ORDER BY timestamp";
     return service
-        .query(connectionId, sql, READ_ONLY_SETTINGS, identity)
+        .queryReadOnly(connectionId, sql, READ_ONLY_SETTINGS, identity)
         .map(
             raw -> {
               try {

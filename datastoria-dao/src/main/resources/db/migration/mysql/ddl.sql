@@ -268,8 +268,6 @@ CREATE TABLE ds_feedback_event (
     created_at              datetime(6)   NOT NULL,
     updated_at              datetime(6)   NOT NULL,
     CONSTRAINT chk_feedback_source CHECK (source = 'auto_explain_error'),
-    CONSTRAINT fk_feedback_session FOREIGN KEY (tenant_id, session_id)
-        REFERENCES ds_chat_session(tenant_id, id) ON DELETE CASCADE,
     UNIQUE KEY uk_feedback_upsert (tenant_id, user_id, source, session_id, message_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

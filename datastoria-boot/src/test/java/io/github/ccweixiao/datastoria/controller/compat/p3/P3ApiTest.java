@@ -1186,6 +1186,38 @@ class P3ApiTest extends AbstractP3ApiTest {
           .jsonPath("$.title")
           .isEqualTo("Referenced message does not exist");
     }
+
+    @Test
+    @DisplayName("A10-ephemeral-feedback: query diagnosis feedback only requires owned session")
+    void a10EphemeralFeedbackDoesNotRequirePersistedAssistantMessage() {
+      String sessionId = "019523a0f0a64d6c8a3e2b9c1f0d7e21";
+      createSession(sessionId, "ch-test", "T");
+
+      web.post()
+          .uri("/api/ai/chat/feedback/auto-explain")
+          .header("x-datastoria-user-email", OWNER_EMAIL)
+          .contentType(MediaType.APPLICATION_JSON)
+          .bodyValue(
+              Map.of(
+                  "source",
+                  "auto_explain_error",
+                  "sessionId",
+                  sessionId,
+                  "messageId",
+                  "ephemeral-assistant-message",
+                  "solved",
+                  true,
+                  "ephemeral",
+                  true,
+                  "payload",
+                  Map.of("queryId", "q_ephemeral")))
+          .exchange()
+          .expectStatus()
+          .isOk()
+          .expectBody()
+          .jsonPath("$.recorded")
+          .isEqualTo(true);
+    }
   }
 
   // ============================================================== cross-tenant

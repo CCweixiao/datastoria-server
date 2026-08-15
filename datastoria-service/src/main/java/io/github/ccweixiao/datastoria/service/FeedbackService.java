@@ -80,8 +80,13 @@ public class FeedbackService {
                 return RecordedOrAccepted.accepted();
               }
               validate(req);
-              if (!messageRepo.exists(
-                  identity.tenantId(), identity.userId(), req.sessionId(), req.messageId())) {
+              boolean ephemeral = Boolean.TRUE.equals(req.ephemeral());
+              boolean targetExists =
+                  ephemeral
+                      ? true
+                      : messageRepo.exists(
+                          identity.tenantId(), identity.userId(), req.sessionId(), req.messageId());
+              if (!targetExists) {
                 throw new FeedbackTargetNotFoundException(
                     "message not found: session="
                         + req.sessionId()
