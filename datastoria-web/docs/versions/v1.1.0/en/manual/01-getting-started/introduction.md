@@ -9,21 +9,23 @@ head:
 
 # Introduction to DataStoria
 
-Welcome to **DataStoria**, an AI-native ClickHouse console that transforms how you interact with your data and manage your clusters.
+Welcome to **DataStoria**, an AI-native workbench for ClickHouse. One sentence of natural language summons a rigorous SQL query; one click reveals the whole execution plan — data conversations and cluster governance finally happen in the same place.
 
 ## What is DataStoria?
 
-DataStoria is a comprehensive web-based interface for ClickHouse that combines powerful query capabilities with artificial intelligence to make database management more intuitive, efficient, and accessible.
+In day-to-day data work, a gap usually stretches between "noticing a problem" and "proving the answer": queries written from memory, execution plans read from a terminal, slow-query diagnosis assembled from scattered clues. DataStoria closes that gap into one continuous workflow — connection management, a SQL workbench, cluster observability, AI-assisted diagnostics and shareable sessions, all in a single browser interface.
+
+What sets it apart from typical ClickHouse clients is that **AI is not a bolt-on chat window but a native capability**: every SQL statement the AI produces is validated through read-only tools, and every optimization suggestion arrives with evidence you can re-check. All of it runs inside a server-side security boundary — credentials never reach the browser, and your data never leaves your control.
 
 ### Core Philosophy
 
-DataStoria is built on three fundamental principles:
+Three principles shape DataStoria's design:
 
-1. **Backend Security Boundary** — Spring Boot stores encrypted credentials and executes ClickHouse and model requests. The browser never receives saved secrets.
+1. **A Server-Side Security Boundary** — Credentials are encrypted and held by the Spring Boot backend, which also executes every ClickHouse request and model call. The browser never touches a saved secret: the most sensitive link in an enterprise environment stays locked on the server.
 
-2. **AI-Enhanced Intelligence** — Leverage cutting-edge AI to convert natural language into optimized SQL queries, get intelligent query suggestions, and generate visualizations automatically.
+2. **Evidence-Driven AI** — Turning natural language into SQL is never a guess. The AI inspects the real schema through read-only tools, validates syntax, and gathers runtime evidence before drawing conclusions — every suggestion traceable, every visualization verifiable.
 
-3. **Complete Control** — Manage multiple ClickHouse clusters, monitor performance, and explore schemas—all from a single, unified interface.
+3. **One Console, Full Control** — Multi-cluster connections, live dashboards, schema exploration, system-log introspection and AI sessions converge in one interface, with pausable, approvable, resumable agent runs that make exploring data as composed as governing it.
 
 ## Key Features
 
@@ -75,4 +77,4 @@ checkout locally.
 
 ---
 
-*DataStoria — AI-native ClickHouse workflows for query, visualization, and diagnostics.*
+*DataStoria — every conversation with your data, backed by evidence.*

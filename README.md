@@ -1,36 +1,55 @@
 # DataStoria
 
-DataStoria 是面向 ClickHouse 的开源智能数据工作台。它把连接管理、SQL 工作流、集群可观测、
-AI 辅助诊断和团队会话放在一个浏览器界面中，让开发者与数据库管理员可以从“发现问题”连续
-走到“验证结论”。
+**AI 原生的 ClickHouse 智能数据工作台** —— 集自然语言查询、基于证据的智能优化、集群诊断与可视化于一体，让每一次与数据的对话都有证据可依。
 
-项目采用单仓库和 Maven 多模块结构：
+在 DataStoria 出现之前，"发现问题"与"验证结论"之间隔着一堆割裂的工具。DataStoria 把连接管理、SQL 工作台、集群观测、AI 辅助诊断与可分享的会话收进一个浏览器界面；而与常见 ClickHouse 客户端不同，它的 AI 能力构建在 **Java 服务端安全边界**之内——凭据加密托管、只读工具验证、证据可溯源，适合个人开发者，也经得起企业环境的审视。
 
-- `datastoria-common/`：共享领域对象、DTO、身份、错误和通用配置；
-- `datastoria-dao/`：Repository 契约、MyBatis-Plus Mapper/Entity 与数据库迁移；
-- `datastoria-service/`：业务服务和外部服务访问；
-- `datastoria-agent/`：AgentScope、Agent 用例、Tool 与 Skill；
-- `datastoria-controller/`：Spring WebFlux HTTP/SSE Controller；
-- `datastoria-boot/`：Spring Boot 入口、环境配置与测试；
-- `datastoria-web/`：Next.js 管理平台及其 Maven 构建模块；
-- `bin/`：统一安装包、运行管理和本地开发辅助脚本；
-- `docs/`：产品、架构、开发、部署和操作文档。
+## 🚀 核心特性
 
-## 核心能力
+### 🤖 AI 能力
 
-- 管理单节点或集群 ClickHouse 连接，自动发现分片与副本；
-- SQL 编辑、执行、历史、Explain、错误诊断和可视化；
-- 节点/集群 Dashboard 与系统表观测；
-- 配置 OpenAI 兼容模型供应商，发现和管理多个模型；
-- 基于 AgentScope Java 的流式 AI 会话、只读 SQL 工具、审批/提问和断点恢复；
-- Skill、Agent、会话、反馈和用户偏好的服务端持久化；
-- 开发、测试和生产统一使用 MySQL 5.7 与同一套 Flyway/MyBatis-Plus 结构。
+- **自然语言数据探索** —— 用平实的语言描述需求，即刻获得经只读工具验证的 ClickHouse 查询
+- **基于证据的查询优化** —— AI 检视真实 schema、验证 SQL、收集运行证据，给出条条可溯源的性能建议
+- **智能可视化** —— 一句提示词生成时序图、饼图、数据表等可视化结果
+- **Agent 会话与技能** —— 基于 AgentScope Java 的流式会话，支持审批/提问交互、断点恢复与可复用 Skill
 
-## 5 分钟本地启动
+### ⚡ 查询体验
 
-前置要求：JDK 17、Node.js 22、npm、MySQL 5.7，以及已初始化的 Git submodule。开发库默认
-使用 `datastoria/datastoria` 账号连接本机 `datastoria` 数据库，也可通过 `DATASTORIA_DB_*`
-覆盖。
+- **高级 SQL 编辑器** —— 语法高亮、自动补全、查询格式化与代码片段
+- **一键错误诊断** —— 精确到行列的错误定位，可一键获取 AI 修复建议
+- **Query Log Inspector** —— 时间线视图、拓扑图与执行指标深度剖析查询过程
+- **可视化 Explain** —— AST 与 Pipeline 双视图，执行计划一目了然
+
+### 📊 集群监控与管理
+
+- **多集群连接** —— 自动发现分片与副本，单一界面管理多套 ClickHouse
+- **节点/集群仪表盘** —— 实时指标、merge 操作与副本状态一览
+- **系统日志内省** —— query_log、part_log、ZooKeeper、OpenTelemetry 等系统表开箱即用
+- **Schema Explorer** —— 树形视图浏览数据库、表与列结构
+
+### 🔒 隐私与安全
+
+- **服务端安全边界** —— ClickHouse 密码与模型凭据 AES-256 加密存储，经 Spring Boot 执行所有请求，浏览器永不接触密钥
+- **查询安全护栏** —— 只读强制、扫描量与执行时间上限，AI 查询与人工查询同级约束
+- **自带 API Key** —— 供应商凭据直接交给后端托管，不进浏览器、不进前端请求
+
+## 📦 快速开始
+
+### 统一安装包（推荐）
+
+从 [releases](https://github.com/CCweixiao/datastoria-server/releases) 下载并校验：
+
+```bash
+sha256sum -c SHA256SUMS
+tar -xzf datastoria-<version>.tar.gz && cd datastoria-<version>
+bin/datastoria init && bin/datastoria start
+```
+
+单进程部署：Spring Boot 同时托管 API 与前端，打开 `http://localhost:8080` 即用，无需 Nginx、无需单独的 Node.js。全部配置项说明见[安装与配置](https://ccweixiao.github.io/datastoria-server/manual/01-getting-started/installation)。
+
+### 从源码运行
+
+前置要求：JDK 17、Node.js 22、npm、MySQL 5.7，以及已初始化的 Git submodule。开发库默认使用 `datastoria/datastoria` 账号连接本机 `datastoria` 数据库，可通过 `DATASTORIA_DB_*` 覆盖。
 
 ```bash
 git submodule update --init --recursive
@@ -52,57 +71,52 @@ NEXT_PUBLIC_DATASTORIA_DEV_USER_EMAIL=dev@example.com \
 npm run dev
 ```
 
-打开 `http://localhost:3000`，健康检查为 `http://127.0.0.1:8080/actuator/health`。
-本地配置只能用于开发。dev profile 使用内置的 `datastoria.master-key`；生产部署优先读取
-`DATASTORIA_MASTER_KEY`，未设置时首次启动自动生成 `data/master.key`（0600），必须稳定备份。
-轮换密钥时把旧 key 放入 `DATASTORIA_MASTER_KEY_LEGACY` 以保持存量密文可解密。
+打开 `http://localhost:3000`，健康检查为 `http://127.0.0.1:8080/actuator/health`。本地配置只能用于开发。dev profile 使用内置的 `datastoria.master-key`；生产部署优先读取 `DATASTORIA_MASTER_KEY`，未设置时首次启动自动生成 `data/master.key`（0600），必须稳定备份。轮换密钥时把旧 key 放入 `DATASTORIA_MASTER_KEY_LEGACY` 以保持存量密文可解密。
 
-## 构建与验证
+## 🧰 技术栈与架构
+
+后端为 Java 单体多模块（Maven），前端为 Next.js，文档站为 VitePress（中英双语、按版本组织）：
+
+- `datastoria-common/` —— 共享领域对象、DTO、身份、加密与通用配置
+- `datastoria-dao/` —— Repository 契约、MyBatis-Plus Mapper/Entity 与 Flyway 迁移
+- `datastoria-service/` —— 业务服务与外部访问
+- `datastoria-agent/` —— AgentScope Java、Agent 用例、Tool 与 Skill
+- `datastoria-controller/` —— Spring WebFlux HTTP/SSE Controller
+- `datastoria-boot/` —— Spring Boot 入口、环境配置与测试
+- `datastoria-web/` —— Next.js 管理平台（React 19）与文档站
+- `bin/`、`docs/` —— 统一安装包脚本与工程文档
+
+开发、测试和生产统一使用 MySQL 5.7 与同一套 Flyway/MyBatis-Plus 结构；HTTP 契约以 OpenAPI 基线管理，并由后端测试与前端调用清单双向校验。
+
+## 🛠️ 构建与验证
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./mvnw spotless:check test
 
 cd datastoria-web
-npm run format:check
-npm run typecheck
-npm run lint
-npm test -- --run
-npm run build
+npm run format:check && npm run typecheck && npm run lint
+npm test -- --run && npm run build
 ```
 
-也可以在仓库根目录通过 Maven 构建或调试前端：
+生成包含前后端和启动脚本的统一安装包：
 
 ```bash
-./mvnw -pl datastoria-web package
-./mvnw -pl datastoria-web -Pweb-dev generate-resources
+DATASTORIA_PACKAGE_VERSION=1.1.0 bin/build-package.sh   # 产物位于 target/dist/
 ```
 
-生成包含前后端和启动脚本的安装包：
+## 📖 文档
 
-```bash
-DATASTORIA_PACKAGE_VERSION=0.1.0-preview bin/build-package.sh
-```
-
-产物位于 `target/dist/datastoria-<version>.tar.gz`。
-
-## 文档
-
-- [在线文档](https://ccweixiao.github.io/datastoria-server/)
-- [HTTP API 文档](https://ccweixiao.github.io/datastoria-server/reference/api/)
-- [OpenAPI YAML](https://ccweixiao.github.io/datastoria-server/api/openapi.yaml)
+- [在线文档](https://ccweixiao.github.io/datastoria-server/)（中英双语，支持版本切换）
+- [HTTP API 文档](https://ccweixiao.github.io/datastoria-server/reference/api/) / [OpenAPI YAML](https://ccweixiao.github.io/datastoria-server/api/openapi.yaml)
+- [产品愿景](docs/product/vision.md) · [系统架构](docs/architecture/overview.md) · [Agent 架构](docs/architecture/agent-runtime.md)
+- [开发与调试](docs/development/getting-started.md) · [生产部署](docs/deployment/production.md)
 - [仓库内工程文档](docs/README.md)
-- [产品愿景](docs/product/vision.md)
-- [系统架构](docs/architecture/overview.md)
-- [AgentScope Java AI Agent 架构](docs/architecture/agent-runtime.md)
-- [功能模块](docs/product/modules.md)
-- [开发与调试](docs/development/getting-started.md)
-- [datastoria-web 开发与调试](docs/development/datastoria-web.md)
-- [生产部署](docs/deployment/production.md)
-- [管理平台操作手册](docs/manual/admin-console.md)
-- [安全与敏感信息](docs/security/secrets.md)
 
-## 开源协作
+## 🤝 致谢
 
-提交改动前请运行与改动范围匹配的 Java、前端测试和格式检查。架构决策记录在
-`docs/adr/`；HTTP/流式契约及自动化 fixture 位于 `docs/api/` 和 `docs/fixtures/`。
+本项目的产品形态与前端交互设计参考并致敬 [FrankChen021/datastoria](https://github.com/FrankChen021/datastoria)。在其理念基础上，本项目将架构重构为 Java 服务端（Spring Boot + AgentScope Java + MySQL），以服务端安全边界、统一单进程部署和版本化双语文档为主要差异化方向。感谢原作者的开源分享。
+
+## 📜 License
+
+[Apache License 2.0](LICENSE)
