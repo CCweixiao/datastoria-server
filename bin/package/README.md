@@ -33,9 +33,10 @@ bin/datastoria logs 200
 
 Set `DATASTORIA_PROFILE` in `conf/datastoria.env`:
 
-- `dev`: MySQL 5.7 with local identity headers and convenient connection defaults.
-- `prod`: MySQL 5.7 with OAuth; set the database, master-key, tenant, CORS and auth URL variables
-  documented in `conf/datastoria.env.example`.
+- `dev`: MySQL 5.7 with convenient local defaults (built-in dev master key and bootstrap admin).
+- `prod`: MySQL 5.7 with environment-owned credentials; set the database, JWT secret and bootstrap
+  admin variables documented in `conf/datastoria.env.example`. The credential master key is
+  optional: unset, a random key is generated into `data/master.key` on first start — back it up.
 
 Deployment values belong in `conf/datastoria.env`. Database upgrades always use the single packaged
 MySQL Flyway migration set.
