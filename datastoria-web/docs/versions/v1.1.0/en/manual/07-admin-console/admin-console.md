@@ -115,10 +115,9 @@ OpenAI-compatible API root.
 1. Select the ClickHouse connection and the model;
 2. Start a new session and describe the problem;
 3. Review the AI's SQL, tool results and evidence;
-4. Choose Approve or Deny for actions requiring authorization;
-5. Answer follow-up questions when asked; the server resumes the original run through the Action
+4. Answer follow-up questions when asked; the server resumes the original run through the Action
    API;
-6. After a network interruption the page reconnects using event sequence numbers — do not
+5. After a network interruption the page reconnects using event sequence numbers — do not
    re-submit the same question.
 
 Sessions created with "no connection" do not automatically pick up connections added later. Start

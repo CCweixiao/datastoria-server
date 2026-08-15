@@ -28,7 +28,7 @@ features:
     details: Discover shards and replicas, inspect system logs and switch dashboard monitoring scope.
   - icon: 🤖
     title: Evidence-based AI
-    details: Generate and optimize SQL with read-only tools, approval actions and resumable Agent runs.
+    details: Generate and optimize SQL with read-only tools and resumable Agent runs.
   - icon: 🔐
     title: Server-managed Secrets
     details: Java encrypts ClickHouse and model credentials; saved secrets are never returned to the browser.

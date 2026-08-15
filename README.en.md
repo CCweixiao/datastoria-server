@@ -39,7 +39,7 @@ Before DataStoria, a pile of disconnected tools stretched between "noticing a pr
 - **Natural Language Data Exploration** — describe what you need in plain language and get ClickHouse queries validated by read-only tools
 - **Evidence-Based Query Optimization** — the AI inspects the real schema, validates SQL and gathers runtime evidence before suggesting improvements you can trace
 - **Intelligent Visualization** — one prompt produces time series, pie charts and data tables
-- **Agent Sessions & Skills** — streaming AgentScope Java sessions with approvals, follow-up questions, resumable runs and reusable skills
+- **Agent Sessions & Skills** — streaming AgentScope Java sessions with follow-up questions, resumable runs and reusable skills
 
 ### ⚡ Query Experience
 

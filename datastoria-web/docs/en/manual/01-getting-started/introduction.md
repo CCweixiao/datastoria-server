@@ -25,7 +25,7 @@ Three principles shape DataStoria's design:
 
 2. **Evidence-Driven AI** — Turning natural language into SQL is never a guess. The AI inspects the real schema through read-only tools, validates syntax, and gathers runtime evidence before drawing conclusions — every suggestion traceable, every visualization verifiable.
 
-3. **One Console, Full Control** — Multi-cluster connections, live dashboards, schema exploration, system-log introspection and AI sessions converge in one interface, with pausable, approvable, resumable agent runs that make exploring data as composed as governing it.
+3. **One Console, Full Control** — Multi-cluster connections, live dashboards, schema exploration, system-log introspection and AI sessions converge in one interface, with pausable, resumable agent runs that make exploring data as composed as governing it.
 
 ## Key Features
 

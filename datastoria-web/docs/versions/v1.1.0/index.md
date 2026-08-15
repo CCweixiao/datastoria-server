@@ -28,7 +28,7 @@ features:
     details: 发现分片与副本、内省系统日志，并切换仪表盘监控范围。
   - icon: 🤖
     title: 基于证据的 AI
-    details: 以只读工具、审批动作和可恢复的 Agent 运行来生成和优化 SQL。
+    details: 以只读工具和可恢复的 Agent 运行来生成和优化 SQL。
   - icon: 🔐
     title: 服务端管理的密钥
     details: 由 Java 加密 ClickHouse 与模型凭据；已保存的密钥永不返回浏览器。
