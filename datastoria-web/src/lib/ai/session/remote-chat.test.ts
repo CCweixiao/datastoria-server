@@ -98,4 +98,21 @@ describe("RemoteChat", () => {
       expect.objectContaining({ type: "data-pending-action", id: "action-1" }),
     ]);
   });
+
+  it("propagates resume transport failures so clarification answers can be retried", async () => {
+    const chat = new RemoteChat({
+      id: "chat-3",
+      messages: [],
+      sendRequest: async () => streamResponse([]),
+      resumeRequest: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+
+    await expect(chat.resumeStream()).rejects.toThrow("Failed to fetch");
+    expect(chat.getSnapshot()).toMatchObject({
+      status: "error",
+      error: expect.objectContaining({ message: "Failed to fetch" }),
+    });
+  });
 });

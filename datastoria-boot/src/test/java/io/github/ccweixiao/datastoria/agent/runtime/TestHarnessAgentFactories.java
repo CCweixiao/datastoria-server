@@ -2,6 +2,7 @@ package io.github.ccweixiao.datastoria.agent.runtime;
 
 import java.time.Clock;
 
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 
 /** Test-only factory helpers; production wiring always supplies MysqlAgentStateStore. */
@@ -15,5 +16,9 @@ public final class TestHarnessAgentFactories {
 
   public static HarnessAgentFactory create(Clock clock) {
     return new HarnessAgentFactory(clock, new AgentToolRegistry(), new InMemoryAgentStateStore());
+  }
+
+  public static HarnessAgentFactory create(AgentStateStore stateStore) {
+    return new HarnessAgentFactory(Clock.systemUTC(), new AgentToolRegistry(), stateStore);
   }
 }

@@ -27,6 +27,7 @@ import { useAgentCommands } from "../agent-command-context";
 import { ChatTokenStatus } from "../message/chat-token-status";
 import type { ChatComposerInput } from "../view/use-chat-panel";
 import { ChatInputCommands, type ChatInputCommandsType } from "./chat-input-commands";
+import { navigateChatInputHistory, type ChatInputHistoryCursor } from "./chat-input-history";
 import {
   ChatInputSuggestions,
   type ChatInputSuggestionItem,
@@ -75,6 +76,7 @@ interface ChatInputProps {
   tokenUsage?: LanguageModelUsage;
   onNewChat?: () => void;
   externalInput?: ChatComposerInput;
+  inputHistory?: string[];
 }
 
 export interface ChatInputHandle {
@@ -86,6 +88,7 @@ interface ChatInputContentProps {
   onSubmit: ChatInputProps["onSubmit"];
   onNewChat?: ChatInputProps["onNewChat"];
   externalInput?: ChatInputProps["externalInput"];
+  inputHistory: string[];
   forwardedRef: React.ForwardedRef<ChatInputHandle>;
 }
 
@@ -606,6 +609,7 @@ const ChatInputContent = React.memo(
     onSubmit,
     onNewChat,
     externalInput,
+    inputHistory,
     forwardedRef,
   }: ChatInputContentProps) {
     const { t } = useUiPreferences();
@@ -639,6 +643,11 @@ const ChatInputContent = React.memo(
     const hoveredCodeTokenCloseTimeoutRef = React.useRef<number | null>(null);
     const prevExternalInputNonceRef = React.useRef<number | undefined>(undefined);
     const inputRef = React.useRef(input);
+    const historyCursorRef = React.useRef<ChatInputHistoryCursor>({ index: null, draft: "" });
+
+    React.useEffect(() => {
+      historyCursorRef.current = { index: null, draft: "" };
+    }, [inputHistory]);
 
     // Mention state
     const [suggestionStartPos, setSuggestionStartPos] = React.useState(0);
@@ -1353,6 +1362,7 @@ const ChatInputContent = React.memo(
         const nextText = serializeEditor(editor);
         const selection = getSelectionOffsets(editor);
         const nextOffset = selection?.end ?? nextText.length;
+        historyCursorRef.current = { index: null, draft: "" };
 
         if (isComposingRef.current) {
           setInput(nextText);
@@ -1519,6 +1529,27 @@ const ChatInputContent = React.memo(
           return;
         }
 
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          const selection = getSelectionOffsets(e.currentTarget);
+          const browsing = historyCursorRef.current.index !== null;
+          const canStartBrowsing =
+            e.key === "ArrowUp" && selection?.start === 0 && selection.end === 0;
+          if (browsing || canStartBrowsing) {
+            const result = navigateChatInputHistory(
+              inputHistory,
+              historyCursorRef.current,
+              input,
+              e.key === "ArrowUp" ? "previous" : "next"
+            );
+            if (result) {
+              e.preventDefault();
+              historyCursorRef.current = result.cursor;
+              setInputAndSelection(result.value, result.value.length);
+              return;
+            }
+          }
+        }
+
         if (e.key === "Backspace" || e.key === "Delete") {
           const removedToken = removeTokenAtCaret(e.key);
           if (removedToken) {
@@ -1526,7 +1557,7 @@ const ChatInputContent = React.memo(
           }
         }
       },
-      [handleSubmit, input, removeTokenAtCaret, setInputAndSelection]
+      [handleSubmit, input, inputHistory, removeTokenAtCaret, setInputAndSelection]
     );
 
     const handlePaste = React.useCallback(
@@ -1702,6 +1733,7 @@ const ChatInputContent = React.memo(
     prevProps.onSubmit === nextProps.onSubmit &&
     prevProps.onNewChat === nextProps.onNewChat &&
     prevProps.externalInput === nextProps.externalInput &&
+    prevProps.inputHistory === nextProps.inputHistory &&
     prevProps.forwardedRef === nextProps.forwardedRef
 );
 
@@ -1847,7 +1879,16 @@ const ChatInputSubmitButton = React.memo(function ChatInputSubmitButton({
 });
 
 export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
-  { onSubmit, onStop, isRunning, hasMessages = false, tokenUsage, onNewChat, externalInput },
+  {
+    onSubmit,
+    onStop,
+    isRunning,
+    hasMessages = false,
+    tokenUsage,
+    onNewChat,
+    externalInput,
+    inputHistory = [],
+  },
   ref
 ) {
   const runtimeValue = React.useMemo(
@@ -1861,6 +1902,7 @@ export const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(funct
         onSubmit={onSubmit}
         onNewChat={onNewChat}
         externalInput={externalInput}
+        inputHistory={inputHistory}
         forwardedRef={ref}
       />
     </ChatInputRuntimeContext.Provider>

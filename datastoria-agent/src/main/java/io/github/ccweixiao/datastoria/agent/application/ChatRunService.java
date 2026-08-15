@@ -366,11 +366,12 @@ public class ChatRunService {
             run.modelId(),
             run.createdAt());
     AgentRunCapabilities capabilities = resolvePinnedCapabilities(identity, run, context, adapter);
-    java.util.List<ChatTurn> history = loadPersistedHistory(run.sessionId(), run.tenantId(), null);
-
     runRepository.transition(
         run.tenantId(), run.id(), AgentRunStatus.RUNNING, RunTransition.starting(Instant.now()));
-    RunRequest request = new RunRequest(context, adapter, config, capabilities, history, "");
+    // AgentScope reloads the suspended context from AgentStateStore by (userId, runId). Product
+    // chat history is intentionally excluded from resume so it can never become a fallback state.
+    RunRequest request =
+        new RunRequest(context, adapter, config, capabilities, java.util.List.of(), "");
     if (question) {
       var action = actions.get(0);
       var call = checkpoint.toolCalls().get(0);

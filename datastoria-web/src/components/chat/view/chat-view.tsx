@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuthSession } from "@/components/auth-session-provider";
 import { useConnection } from "@/components/connection/connection-context";
 import type { AppUIMessage } from "@/lib/ai/ai-types";
 import { MentionContext } from "@/lib/ai/mention-context";
@@ -24,6 +25,7 @@ import {
   type ChatInputHandle,
   type ChatInputImageAttachment,
 } from "../input/chat-input";
+import { appendChatInputHistory, resetChatInputHistory } from "../input/chat-input-history";
 import { ChatMessageList } from "../message/chat-message-list";
 import { SampleQuestions } from "./sample-questions";
 import { type ChatComposerInput } from "./use-chat-panel";
@@ -61,9 +63,11 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
   ref
 ) {
   const { connection } = useConnection();
+  const { user } = useAuthSession();
   const chatInputRef = useRef<ChatInputHandle | null>(null);
   const [promptInput, setPromptInput] = useState<ChatComposerInput | undefined>(externalInput);
   const promptInputNonceRef = useRef(0);
+  const historySyncKeyRef = useRef("");
 
   // Update promptInput when externalInput changes
   useEffect(() => {
@@ -74,6 +78,35 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
     setPromptInput(undefined);
   }, [chat.id, externalInput]);
   const { messages, error, sendMessage, status, stop } = useRemoteChat(chat);
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      historySyncKeyRef.current = "";
+      setInputHistory([]);
+      return;
+    }
+    const userMessages = (messages as AppUIMessage[]).flatMap((message) =>
+      message.role === "user"
+        ? [
+            message.parts
+              .filter((part): part is { type: "text"; text: string } => part.type === "text")
+              .map((part) => part.text)
+              .join("\n")
+              .trim(),
+          ].filter(Boolean)
+        : []
+    );
+    const syncKey = `${user.id}:${chat.id}:${JSON.stringify(userMessages)}`;
+    if (historySyncKeyRef.current === syncKey) return;
+    historySyncKeyRef.current = syncKey;
+    const restored = resetChatInputHistory(user.id, chat.id, userMessages);
+    setInputHistory((current) =>
+      current.length === restored.length && current.every((item, index) => item === restored[index])
+        ? current
+        : restored
+    );
+  }, [chat.id, messages, user?.id]);
 
   // Focus input when ChatView is mounted
   useEffect(() => {
@@ -101,6 +134,10 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
         database: currentDatabase,
         ...getDatabaseContextFromConnection(connection),
       }));
+
+      if (user?.id && text.trim()) {
+        setInputHistory(appendChatInputHistory(user.id, chat.id, text));
+      }
 
       sendMessage({
         id: messageId,
@@ -225,6 +262,7 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
           tokenUsage={tokenUsage}
           onNewChat={onNewChat}
           externalInput={promptInput}
+          inputHistory={inputHistory}
         />
       </div>
     </ChatActionProvider>

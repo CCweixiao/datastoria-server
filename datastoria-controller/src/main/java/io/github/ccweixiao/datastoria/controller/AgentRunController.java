@@ -74,6 +74,29 @@ public class AgentRunController {
                     identity, runId, actionId, PendingActionStatus.RESPONDED, body.response()));
   }
 
+  /** Atomically resolves a clarification answer and resumes the same run as one SSE request. */
+  @PostMapping("/{runId}/actions/{actionId}:respond-and-resume")
+  public Mono<Void> respondAndResume(
+      @PathVariable String runId,
+      @PathVariable String actionId,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+      @Valid @RequestBody ResolutionBody body,
+      ServerWebExchange exchange) {
+    requireIdempotencyKey(idempotencyKey);
+    return IdentityContext.current()
+        .flatMap(
+            identity ->
+                service
+                    .resolve(
+                        identity, runId, actionId, PendingActionStatus.RESPONDED, body.response())
+                    .then(chatRuns.resume(runId, identity))
+                    .flatMap(
+                        events ->
+                            writeSse(
+                                exchange,
+                                replay.encodeAndRecord(identity.tenantId(), events, null))));
+  }
+
   @PostMapping("/{runId}/actions/{actionId}:approve")
   public Mono<AgentPendingAction> approve(
       @PathVariable String runId,

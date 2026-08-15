@@ -53,7 +53,7 @@ describe("MessageToolSearchFile", () => {
         <MessageToolSearchFile
           part={createToolPart({ matches: [{}, {}, {}], hasMore: false })}
           isRunning={false}
-        />,
+        />
       );
     });
     expand(container);
@@ -68,9 +68,7 @@ describe("MessageToolSearchFile", () => {
     // error must be surfaced.
     const errorText = "Tool execution failed: Input length = 1";
     act(() => {
-      root.render(
-        <MessageToolSearchFile part={createToolPart(errorText)} isRunning={false} />,
-      );
+      root.render(<MessageToolSearchFile part={createToolPart(errorText)} isRunning={false} />);
     });
     // Render completed past the destructuring line without throwing.
     expect(container.textContent).toContain("Search File");

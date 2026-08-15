@@ -4,6 +4,7 @@ import type { ResponsiveLayouts } from "react-grid-layout";
 export const STORAGE_KEY_PREFIX = "dashboard-layout:";
 const CURRENT_VERSION = 1;
 const layouts = new Map<string, SavedLayout>();
+let hydration: Promise<void> | null = null;
 
 export interface SavedLayout {
   version: number;
@@ -12,10 +13,21 @@ export interface SavedLayout {
   updatedAt: string;
 }
 
-if (typeof window !== "undefined") {
-  void listUserState<SavedLayout>("dashboard-layout")
-    .then((entries) => entries.forEach((entry) => layouts.set(entry.key, entry.value)))
-    .catch((error) => console.error("Failed to load dashboard layouts:", error));
+/**
+ * Loads persisted layouts on demand after the authenticated application mounts.
+ * Keeping network access out of module evaluation prevents public routes such as
+ * the login page from issuing user-state requests while authentication is starting.
+ */
+export function hydrateDashboardLayouts(): Promise<void> {
+  if (!hydration) {
+    hydration = listUserState<SavedLayout>("dashboard-layout")
+      .then((entries) => entries.forEach((entry) => layouts.set(entry.key, entry.value)))
+      .catch((error) => {
+        hydration = null;
+        throw error;
+      });
+  }
+  return hydration;
 }
 
 function sectionKey(dashboardId: string, sectionIndex: number): string {

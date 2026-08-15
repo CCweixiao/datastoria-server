@@ -76,7 +76,7 @@ function inferLanguage(filePath: string): string {
 
 function buildResolvedHeader(
   input: ReadFileInput,
-  output?: ReadFileOutput | ToolOutputError,
+  output?: ReadFileOutput | ToolOutputError
 ): string {
   const path =
     output && "path" in output && typeof output.path === "string" && output.path.length > 0

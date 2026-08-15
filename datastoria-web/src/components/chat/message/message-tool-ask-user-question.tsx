@@ -130,6 +130,36 @@ function normalizeAskUserQuestionInput(value: unknown): AskUserQuestionInput | u
     };
   }
 
+  // Object options carrying at least a label (e.g. { label, description }), emitted by providers
+  // that follow the semantic tool description but omit the strict { id, label, input } contract.
+  // Mirrors the labeled-choices branch but for the `options` key; each option is a discrete choice.
+  if (
+    typeof header === "string" &&
+    header.trim().length > 0 &&
+    Array.isArray(options) &&
+    options.length > 0 &&
+    options.every(
+      (opt) =>
+        opt !== null &&
+        typeof opt === "object" &&
+        typeof (opt as { label?: unknown }).label === "string" &&
+        ((opt as { label: string }).label as string).trim().length > 0
+    )
+  ) {
+    return {
+      questions: [
+        {
+          header: header.trim(),
+          options: options.map((opt, index) => ({
+            id: `option-${index + 1}`,
+            label: (opt as { label: string }).label.trim(),
+            input: "none" as const,
+          })),
+        },
+      ],
+    };
+  }
+
   return undefined;
 }
 

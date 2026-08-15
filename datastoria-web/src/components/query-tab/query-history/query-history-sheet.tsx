@@ -38,7 +38,12 @@ interface QueryHistorySheetProps {
   connectionId?: string;
 }
 
-export function QueryHistorySheet({ open, onOpenChange, onRun, connectionId }: QueryHistorySheetProps) {
+export function QueryHistorySheet({
+  open,
+  onOpenChange,
+  onRun,
+  connectionId,
+}: QueryHistorySheetProps) {
   const { t } = useUiPreferences();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<QueryHistoryEntry[]>([]);
