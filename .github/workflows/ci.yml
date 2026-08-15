@@ -153,4 +153,6 @@ jobs:
           cache: maven
 
       - name: Run MySQL schema and repository contracts
-        run: ./mvnw -B -ntp verify
+        # The frontend job builds datastoria-web (it needs the git submodules and pnpm);
+        # skipping it here keeps this job focused on the database contracts.
+        run: ./mvnw -B -ntp verify -Ddatastoria.web.skip
