@@ -4,7 +4,7 @@
     <parent>
         <groupId>io.github.ccweixiao.datastoria</groupId>
         <artifactId>datastoria-parent</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
     </parent>
     <artifactId>datastoria-common</artifactId>
     <name>DataStoria Common</name>
