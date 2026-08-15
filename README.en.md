@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="datastoria-web/docs/public/logo.png" alt="DataStoria" width="120" />
+<img src=".github/assets/logo.png" alt="DataStoria" width="150" />
 
 # DataStoria
 
