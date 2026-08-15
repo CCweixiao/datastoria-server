@@ -1,19 +1,128 @@
 import { defineConfig } from 'vitepress'
+import { manualSidebar, apiSidebar } from './sidebar-data.mjs'
+import { listVersions, loadManifest, localePrefix, rewriteDest, srcToUrl } from './versions.mjs'
 
 const docsBase = process.env.DOCS_BASE || '/'
 const docsOrigin = process.env.DOCS_ORIGIN || 'https://ccweixiao.github.io'
 const docsAsset = (path: string) => `${docsBase}${path.replace(/^\/+/, '')}`
 const docsUrl = (path: string) => `${docsOrigin}${docsAsset(path)}`
 
+// ---------------------------------------------------------------------------
+// Versions: snapshots under docs/versions/<vX.Y.Z>/ are discovered at build
+// time. The latest content lives at the site root and has no version segment.
+// ---------------------------------------------------------------------------
+const versions = listVersions()
+const versionEntries = versions.map((v) => ({
+  version: v,
+  date: loadManifest(v)?.date ?? null,
+}))
+
+/** Latest-version flag for the version switcher UI. */
+const LATEST = 'latest'
+
+/**
+ * Builds the full sidebar map for one locale across all versions. Versioned
+ * prefixes use the sidebar frozen in that version's manifest so later content
+ * changes never leak into old snapshots.
+ */
+function buildSidebar(lang: 'en' | 'zh') {
+  const sidebar: Record<string, any> = {}
+  const applyPrefix = (groups: any[], prefix: string) =>
+    JSON.parse(JSON.stringify(groups)).map((group: any) => {
+      const fix = (item: any) => {
+        if (item.link !== undefined) item.link = item.link === '' ? prefix.slice(0, -1) || '/' : `${prefix}${item.link}`
+        if (item.items) item.items = item.items.map(fix)
+        return item
+      }
+      return fix(group)
+    })
+
+  // Latest version (site root, no version segment)
+  const enPrefix = localePrefix('en')
+  const zhPrefix = localePrefix('zh')
+  const rootPrefix = lang === 'zh' ? zhPrefix : enPrefix
+  sidebar[`${rootPrefix}manual/`] = applyPrefix(manualSidebar(lang), `${rootPrefix}manual/`)
+  sidebar[`${rootPrefix}reference/api/`] = applyPrefix(apiSidebar(lang), `${rootPrefix}reference/api/`)
+
+  // Versioned snapshots
+  for (const version of versions) {
+    const manifest = loadManifest(version)
+    const groups =
+      manifest?.sidebar?.[lang] ??
+      // Manifests written before this locale existed fall back to current data.
+      manualSidebar(lang)
+    const prefix = localePrefix(lang, version)
+    sidebar[`${prefix}manual/`] = applyPrefix(groups, `${prefix}manual/`)
+    sidebar[`${prefix}reference/api/`] = applyPrefix(apiSidebar(lang), `${prefix}reference/api/`)
+  }
+  return sidebar
+}
+
+function buildNav(lang: 'en' | 'zh') {
+  const prefix = localePrefix(lang)
+  return [
+    { text: lang === 'zh' ? '首页' : 'Home', link: prefix || '/' },
+    { text: lang === 'zh' ? '使用手册' : 'Manual', link: `${prefix}manual/` },
+    { text: 'API', link: `${prefix}reference/api/` },
+    { component: 'VersionSwitcher' },
+  ]
+}
+
+/** Computes the base-less site path of a page from its source relativePath. */
+function sitePath(relativePath: string): string {
+  const rewritten = srcToUrl(relativePath)
+  if (rewritten !== undefined) return `/${rewritten}`
+  return `/${relativePath.replace(/(?:^|\/)index\.md$/, '').replace(/\.md$/, '')}`
+}
+
 export default defineConfig({
   title: 'DataStoria Documentation',
   description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management. Modern web interface for ClickHouse database administration.',
   base: docsBase,
   ignoreDeadLinks: false,
-  lang: 'en-US', // SEO: Language declaration
 
   // SEO: Clean URLs without .html extension
   cleanUrls: true,
+
+  // Rewrites: docs/versions/<v>/** → /<v>/**, docs/versions/<v>/zh/** → /zh/<v>/**
+  rewrites: (id) => rewriteDest(id) as any,
+
+  locales: {
+    root: {
+      label: 'English',
+      lang: 'en-US',
+      themeConfig: {
+        nav: buildNav('en'),
+        sidebar: buildSidebar('en'),
+        outline: {
+          level: [2, 3],
+          label: 'On this page',
+        },
+        footer: {
+          message: 'Released under the Apache License 2.0',
+          copyright: 'Copyright © 2025 DataStoria',
+        },
+      },
+    },
+    zh: {
+      label: '简体中文',
+      lang: 'zh-CN',
+      title: 'DataStoria 文档',
+      description: 'AI 驱动的 ClickHouse 管理控制台：自然语言查询、智能优化与集群管理，现代化的 ClickHouse 数据库管理 Web 界面。',
+      themeConfig: {
+        nav: buildNav('zh'),
+        sidebar: buildSidebar('zh'),
+        outline: {
+          level: [2, 3],
+          label: '本页内容',
+        },
+        footer: {
+          message: '基于 Apache License 2.0 发布',
+          copyright: 'Copyright © 2025 DataStoria',
+        },
+      },
+    },
+  },
 
   // SEO: Global meta tags
   head: [
@@ -110,13 +219,13 @@ export default defineConfig({
           '@type': 'ListItem',
           position: 1,
           name: 'Home',
-          item: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/'
+          item: docsUrl('/')
         },
         {
           '@type': 'ListItem',
           position: 2,
           name: 'Documentation',
-          item: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs/manual/'
+          item: docsUrl('/manual/')
         }
       ]
     })],
@@ -143,7 +252,7 @@ export default defineConfig({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'DataStoria Documentation',
-      url: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs'
+      url: docsUrl('/')
     })],
 
     // Preconnect to CDN for faster resource loading
@@ -160,7 +269,7 @@ export default defineConfig({
       (function() {
         let mermaidInitialized = false;
         let mermaidLoaded = false;
-        
+
         // Lazy load Mermaid only when needed (when mermaid diagrams are present)
         function checkAndLoadMermaid() {
           const hasMermaid = document.querySelector('.mermaid');
@@ -169,35 +278,35 @@ export default defineConfig({
             initMermaid();
           }
         }
-        
+
         function initMermaid() {
           if (typeof window.mermaid === 'undefined') {
             // Wait for script to load
             setTimeout(initMermaid, 50);
             return;
           }
-          
+
           if (!mermaidInitialized) {
-            window.mermaid.initialize({ 
+            window.mermaid.initialize({
               startOnLoad: false,
               theme: 'default',
               securityLevel: 'loose'
             });
             mermaidInitialized = true;
           }
-          
+
           // Render all mermaid diagrams
           renderMermaidDiagrams();
         }
-        
+
         function renderMermaidDiagrams() {
           if (typeof window.mermaid === 'undefined' || !mermaidInitialized) {
             return;
           }
-          
+
           const mermaidElements = document.querySelectorAll('.mermaid:not([data-processed])');
           if (mermaidElements.length === 0) return;
-          
+
           mermaidElements.forEach((element, index) => {
             const id = 'mermaid-' + Date.now() + '-' + index + '-' + Math.random().toString(36).substr(2, 9);
             // Get the text content and unescape HTML entities
@@ -208,10 +317,10 @@ export default defineConfig({
               .replace(/&gt;/g, '>')
               .replace(/&quot;/g, '"')
               .replace(/&#39;/g, "'");
-            
+
             if (code) {
               element.setAttribute('data-processed', 'true');
-              
+
               try {
                 // Use the async render API
                 window.mermaid.render(id, code).then((result) => {
@@ -234,7 +343,7 @@ export default defineConfig({
             }
           });
         }
-        
+
         // Use Intersection Observer for lazy loading (better performance)
         if ('IntersectionObserver' in window) {
           const observer = new IntersectionObserver((entries) => {
@@ -245,31 +354,31 @@ export default defineConfig({
               }
             });
           }, { rootMargin: '50px' });
-          
+
           // Observe mermaid elements when DOM is ready
           function observeMermaidElements() {
             document.querySelectorAll('.mermaid:not([data-processed])').forEach((el) => {
               observer.observe(el);
             });
           }
-          
+
           if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', observeMermaidElements);
           } else {
             observeMermaidElements();
           }
-          
+
           // Re-observe on route changes (VitePress SPA navigation)
           if (typeof window !== 'undefined') {
             const mutationObserver = new MutationObserver(() => {
               observeMermaidElements();
             });
-            
+
             setTimeout(() => {
               if (document.body) {
-                mutationObserver.observe(document.body, { 
-                  childList: true, 
-                  subtree: true 
+                mutationObserver.observe(document.body, {
+                  childList: true,
+                  subtree: true
                 });
               }
             }, 100);
@@ -288,17 +397,27 @@ export default defineConfig({
 
   // SEO: Automatic sitemap generation
   sitemap: {
-    hostname: 'https://github.com/CCweixiao/datastoria-server/tree/master/docs',
+    hostname: docsUrl('/'),
     lastmodDateOnly: false, // Include time in lastmod
     transformItems: (items) => {
-      // Add priority and changefreq to sitemap items
+      const versionRoots = new Set<string>()
+      const versionPrefixes: string[] = []
+      for (const v of versions) {
+        versionRoots.add(`/${v}/`)
+        versionRoots.add(`/zh/${v}/`)
+        versionPrefixes.push(`/${v}/`)
+      }
       return items.map((item) => {
-        // Homepage gets highest priority
-        if (item.url === '/') {
+        // Homepages get the highest priority
+        if (item.url === '/' || item.url === '/zh/' || versionRoots.has(item.url)) {
           return { ...item, priority: 1.0, changefreq: 'weekly' }
         }
+        // Versioned snapshots are frozen content
+        if (versionPrefixes.some((p) => item.url.startsWith(p) || item.url.startsWith(`/zh${p}`))) {
+          return { ...item, priority: 0.4, changefreq: 'yearly' }
+        }
         // Manual pages get high priority
-        if (item.url.startsWith('/manual/')) {
+        if (item.url.startsWith('/manual/') || item.url.startsWith('/zh/manual/')) {
           return { ...item, priority: 0.8, changefreq: 'weekly' }
         }
         // Other pages get standard priority
@@ -312,9 +431,10 @@ export default defineConfig({
 
   // SEO: Generate meta tags for each page
   transformPageData(pageData) {
-    const canonicalUrl = `https://github.com/CCweixiao/datastoria-server/tree/master/docs/${pageData.relativePath}`
-      .replace(/\/index\.md$/, '/')
-      .replace(/\.md$/, '')
+    const path = sitePath(pageData.relativePath)
+    const canonicalUrl = docsUrl(path)
+    const isZh = path === '/zh/' || path.startsWith('/zh/')
+    const titleSuffix = isZh ? 'DataStoria 文档' : 'DataStoria Documentation'
 
     pageData.frontmatter.head ??= []
     // Ensure only one canonical URL exists per page.
@@ -337,15 +457,33 @@ export default defineConfig({
       { property: 'og:url', content: canonicalUrl }
     ])
 
+    // Per-locale Open Graph locale, with the other language as alternate.
+    if (isZh) {
+      pageData.frontmatter.head.push(['meta', { property: 'og:locale', content: 'zh_CN' }])
+      pageData.frontmatter.head.push(['meta', { property: 'og:locale:alternate', content: 'en_US' }])
+    }
+
+    // hreflang alternates for pages that exist in both languages (dev/ notes are
+    // English-only). Path shape: /{zh/}?{vX/}?rest → sibling in the other locale.
+    const localeless = path.replace(/^\/zh(?=\/)/, '')
+    const isTranslated = localeless === '/' || /^\/(v[\d.]+\/)?(manual|reference)\//.test(localeless)
+    if (isTranslated) {
+      const enUrl = docsUrl(localeless)
+      const zhUrl = docsUrl(`/zh${localeless === '/' ? '/' : localeless}`)
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'en', href: enUrl }])
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'zh', href: zhUrl }])
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'x-default', href: enUrl }])
+    }
+
     // Add page-specific title and description to Open Graph
     if (pageData.title) {
       pageData.frontmatter.head.push([
         'meta',
-        { property: 'og:title', content: `${pageData.title} | DataStoria Documentation` }
+        { property: 'og:title', content: `${pageData.title} | ${titleSuffix}` }
       ])
       pageData.frontmatter.head.push([
         'meta',
-        { name: 'twitter:title', content: `${pageData.title} | DataStoria Documentation` }
+        { name: 'twitter:title', content: `${pageData.title} | ${titleSuffix}` }
       ])
     }
 
@@ -393,102 +531,13 @@ export default defineConfig({
   themeConfig: {
     logo: '/logo.png', // VitePress applies base to theme asset paths.
 
-    nav: [
-      { text: 'Home', link: '/' },
-      { text: 'Manual', link: '/manual/' },
-      { text: 'API', link: '/reference/api/' },
-    ],
-
-    // Left sidebar navigation (document tree)
-    // Only '/manual/' is included - docs/dev/ and docs/plan/ are excluded
-    sidebar: {
-      '/reference/api/': [
-        {
-          text: 'API Reference',
-          items: [
-            { text: 'HTTP API', link: '/reference/api/' },
-          ],
-        },
+    // Version metadata consumed by the VersionSwitcher nav component.
+    versions: {
+      latest: LATEST,
+      entries: [
+        { version: LATEST },
+        ...versionEntries,
       ],
-      '/manual/': [
-        {
-          text: 'Getting Started',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/manual/01-getting-started/introduction' },
-            { text: 'Installation & Setup', link: '/manual/01-getting-started/installation' },
-            { text: 'First Connection', link: '/manual/01-getting-started/first-connection' },
-          ]
-        },
-        {
-          text: 'AI-Powered Intelligence',
-          collapsed: false,
-          items: [
-            { text: 'AI Model Configuration', link: '/manual/02-ai-features/ai-model-configuration' },
-            { text: 'Natural Language Data Exploration', link: '/manual/02-ai-features/natural-language-sql' },
-            { text: 'Query Optimization', link: '/manual/02-ai-features/query-optimization' },
-            { text: 'Intelligent Visualization', link: '/manual/02-ai-features/intelligent-visualization' },
-            { text: 'Ask AI for Help', link: '/manual/02-ai-features/ask-ai-for-help' },
-            { text: 'Slash Commands', link: '/manual/02-ai-features/slash-commands' },
-            { text: 'Agent Skills', link: '/manual/02-ai-features/skills' },
-          ]
-        },
-        {
-          text: 'Query Experience',
-          collapsed: false,
-          items: [
-            { text: 'SQL Editor', link: '/manual/03-query-experience/sql-editor' },
-            { text: 'Query Execution', link: '/manual/03-query-experience/query-execution' },
-            { text: 'Query Explain', link: '/manual/03-query-experience/query-explain' },
-            { text: 'Query Log Inspector', link: '/manual/03-query-experience/query-log-inspector' },
-            { text: 'Error Diagnostics', link: '/manual/03-query-experience/error-diagnostics' },
-          ]
-        },
-        {
-          text: 'Database Management',
-          collapsed: false,
-          items: [
-            { text: 'Schema Explorer', link: '/manual/04-cluster-management/schema-explorer' },
-            {
-              text: 'Database & Table Views',
-              collapsed: false,
-              items: [
-                { text: 'Database View', link: '/manual/04-cluster-management/database-view' },
-                { text: 'Table View', link: '/manual/04-cluster-management/table-view' },
-                { text: 'Dependency View', link: '/manual/04-cluster-management/dependency-view' },
-              ]
-            },
-            {
-              text: 'System Log Introspection',
-              collapsed: false,
-              items: [
-                { text: 'Overview', link: '/manual/04-cluster-management/system-log-introspection' },
-                { text: 'system.ddl_distribution_queue', link: '/manual/04-cluster-management/system-ddl-distributed-queue' },
-                { text: 'system.opentelemetry_span_log', link: '/manual/04-cluster-management/opentelemetry-span-log' },
-                { text: 'system.part_log', link: '/manual/04-cluster-management/system-part-log' },
-                { text: 'system.query_log', link: '/manual/04-cluster-management/system-query-log' },
-                { text: 'system.query_views_log', link: '/manual/04-cluster-management/system-query-views-log' },
-                { text: 'system.processes', link: '/manual/04-cluster-management/system-processes' },
-              ]
-            },
-          ]
-        },
-        {
-          text: 'Monitoring & Dashboards',
-          collapsed: false,
-          items: [
-            { text: 'Node Dashboard', link: '/manual/05-monitoring-dashboards/node-dashboard' },
-            { text: 'Cluster Dashboard', link: '/manual/05-monitoring-dashboards/cluster-dashboard' },
-          ]
-        },
-        {
-          text: 'Security & Privacy',
-          collapsed: false,
-          items: [
-            { text: 'Privacy Features', link: '/manual/06-security-privacy/privacy-features' },
-          ]
-        }
-      ]
     },
 
     socialLinks: [
@@ -496,15 +545,46 @@ export default defineConfig({
     ],
 
     search: {
-      provider: 'local'
+      provider: 'local',
+      options: {
+        // Default miniSearch tokenization treats a CJK sentence as one token,
+        // which makes Chinese content unsearchable. Use word + CJK n-gram.
+        miniSearch: {
+          options: {
+            tokenize: (text: string) => {
+              const tokens: string[] = []
+              for (const match of text.matchAll(/[A-Za-z0-9_]+/g)) {
+                tokens.push(match[0].toLowerCase())
+              }
+              const cjkRuns = text.match(/[㐀-鿿豈-﫿]+/g) ?? []
+              for (const run of cjkRuns) {
+                for (let i = 0; i < run.length; i++) {
+                  tokens.push(run[i])
+                  if (i + 1 < run.length) tokens.push(run[i] + run[i + 1])
+                }
+              }
+              return tokens
+            },
+          },
+        },
+      },
+      locales: {
+        zh: {
+          translations: {
+            button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
+            modal: {
+              noResultsText: '未找到相关结果',
+              resetButtonTitle: '清除查询',
+              footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' },
+            },
+          },
+        },
+      },
     },
 
     // Right sidebar: Table of Contents (TOC) / Outline
     // Automatically generated from h2, h3, etc. in your markdown
-    outline: {
-      level: [2, 3], // Show h2 and h3 headings in TOC
-      label: 'On this page' // Customize the TOC title
-    },
+    // (label moved into per-locale themeConfig)
 
     footer: {
       message: 'Released under the Apache License 2.0',

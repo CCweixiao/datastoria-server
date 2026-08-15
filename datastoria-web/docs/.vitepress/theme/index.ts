@@ -6,6 +6,7 @@ import vImageViewer from 'vitepress-plugin-image-viewer/lib/vImageViewer.vue'
 import DefaultTheme from 'vitepress/theme'
 import FeatureCarousel from '../components/FeatureCarousel.vue'
 import Video from '../components/Video.vue'
+import VersionSwitcher from '../components/VersionSwitcher.vue'
 import './custom.css'
 
 export default {
@@ -16,6 +17,8 @@ export default {
     // Register video component
     app.component('Video', Video)
     app.component('FeatureCarousel', FeatureCarousel)
+    // Version switcher used by the nav { component: 'VersionSwitcher' } entry
+    app.component('VersionSwitcher', VersionSwitcher)
     
     // Add accessibility enhancements
     if (typeof window !== 'undefined') {

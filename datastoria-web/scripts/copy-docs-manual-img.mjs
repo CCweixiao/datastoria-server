@@ -1,7 +1,8 @@
 /**
- * Copy video files from any docs/manual/.../img into docs/public so VitePress
- * includes them in the build (images use markdown and are bundled; Video component
- * uses string props so only videos need copying). docs/public/manual is gitignored.
+ * Copy video files from any docs/manual/.../img (latest tree and version snapshots)
+ * into docs/public so VitePress includes them in the build (images use markdown and
+ * are bundled; Video component uses string props so only videos need copying).
+ * docs/public/manual and docs/public/vX.Y.Z/ are gitignored.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -9,8 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const manualDir = path.join(root, "docs", "manual");
-const publicManualDir = path.join(root, "docs", "public", "manual");
+const docsDir = path.join(root, "docs");
 
 const VIDEO_EXT = new Set([".webm", ".mp4", ".mov", ".avi", ".mkv"]);
 
@@ -42,9 +42,19 @@ function copyVideosOnly(srcImgDir, destImgDir) {
   }
 }
 
-const imgDirs = findImgDirs(manualDir);
+const imgDirs = findImgDirs(docsDir);
 for (const srcImg of imgDirs) {
-  const rel = path.relative(manualDir, path.dirname(srcImg));
-  const destImg = path.join(publicManualDir, rel, "img");
+  // Map docs/<...>/<chapter>/img → public/<...>/<chapter>/img, where <...> is
+  // manual for the latest tree or versions/<vX.Y.Z>/manual for snapshots. Skip
+  // public/ itself and any zh tree.
+  const chapterDir = path.dirname(path.dirname(srcImg));
+  const relFromDocs = path.relative(docsDir, chapterDir);
+  if (relFromDocs.startsWith("public") || relFromDocs.startsWith(".vitepress") || relFromDocs.startsWith("zh")) {
+    continue;
+  }
+  // Snapshot trees live under versions/<v>/manual/** but their video sources point at
+  // /<v>/manual/** in public — mirror that layout.
+  const publicRel = relFromDocs.replace(/^versions[/\\]/, "");
+  const destImg = path.join(docsDir, "public", publicRel, "img");
   copyVideosOnly(srcImg, destImg);
 }
