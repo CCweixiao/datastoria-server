@@ -1,89 +1,89 @@
 ---
-title: Cluster Dashboard
-description: Monitor entire ClickHouse cluster with aggregate metrics, performance visualization, and real-time health indicators. High-level overview of multi-node cluster performance and status.
+title: Cluster Dashboard（集群仪表盘）
+description: 通过聚合指标、性能可视化和实时健康指示器监控整个 ClickHouse 集群。多节点集群性能与状态的高层概览。
 head:
   - - meta
     - name: keywords
       content: cluster dashboard, ClickHouse cluster, cluster monitoring, cluster metrics, multi-node monitoring, cluster health, cluster performance, aggregate metrics, cluster visualization
 ---
 
-# Cluster Dashboard
+# Cluster Dashboard（集群仪表盘）
 
-The Cluster Dashboard provides a high-level overview of your entire ClickHouse cluster, showing aggregate metrics across all nodes.
+Cluster Dashboard 提供对整个 ClickHouse 集群的高层概览，展示所有节点的聚合指标。
 
-## Overview
+## 概览
 
-The Cluster Dashboard is a pre-configured monitoring view that requires no setup. It automatically:
+Cluster Dashboard 是一个无需任何配置的预置监控视图。它会自动：
 
-- **Aggregates Metrics**: Collects data from ClickHouse system tables across all nodes
-- **Visualizes Performance**: Displays metrics as charts, gauges, and tables
-- **Supports Filtering**: Allows you to filter by time range, hostname, and other dimensions
-- **Provides Drill-downs**: Click on metrics to see detailed breakdowns
-- **Updates in Real-time**: Refreshes automatically or manually to see latest data
+- **聚合指标**：从所有节点的 ClickHouse 系统表收集数据
+- **可视化性能**：以图表、仪表和表格展示指标
+- **支持过滤**：允许按时间范围、主机名等维度过滤
+- **提供下钻**：点击指标查看详细的拆解
+- **实时更新**：自动或手动刷新以查看最新数据
 
-## Prerequisite
+## 前置条件
 
-Your database connection must be configured as cluster.
+你的数据库连接必须配置为集群模式。
 
-## Opening the Cluster Dashboard
+## 打开 Cluster Dashboard
 
-1. **Open Cluster Tab**: Click on the cluster name in the sidebar or navigate to the cluster view
-2. **View Dashboard**: The cluster dashboard displays automatically
+1. **打开集群标签页**：点击侧边栏中的集群名称，或导航到集群视图
+2. **查看 Dashboard**：集群 Dashboard 自动显示
 
-![Opening cluster dashboard from sidebar navigation showing cluster selection interface](./img/dashboards-open-cluster-status.jpg)
+![从侧边栏导航打开集群 Dashboard，展示集群选择界面](../../en/manual/05-monitoring-dashboards/img/dashboards-open-cluster-status.jpg)
 
-## Cluster Dashboard Overview
+## Cluster Dashboard 概览
 
-![Cluster dashboard displaying key metrics including CPU usage, memory, disk space, and query performance across all nodes](./img/dashboard-cluster-status.jpg)
+![集群 Dashboard，展示关键指标，包括所有节点的 CPU 使用率、内存、磁盘空间和查询性能](../../en/manual/05-monitoring-dashboards/img/dashboard-cluster-status.jpg)
 
-## Dashboard Features
+## Dashboard 功能
 
-### Time Range Selection
+### 时间范围选择
 
-The dashboard supports flexible time range selection:
+Dashboard 支持灵活的时间范围选择：
 
-- **Predefined Ranges**: Last 15 minutes, Last hour, Today, This week, etc.
-- **Custom Range**: Select specific start and end times
-- **Auto-refresh**: Automatically refresh data at intervals (where supported)
+- **预定义范围**：最近 15 分钟、最近 1 小时、今天、本周等
+- **自定义范围**：选择具体的开始和结束时间
+- **自动刷新**：按间隔自动刷新数据（在支持的情况下）
 
-### Filtering
+### 过滤
 
-- **Hostname Filter**: Filter by specific nodes
+- **主机名过滤器**：按特定节点过滤
 
-### Chart Types
+### 图表类型
 
-The dashboard uses various visualization types:
+Dashboard 使用多种可视化类型：
 
-- **Stat Cards**: Single-value metrics with drill-downs
-- **Line Charts**: Time-series data with multiple series
-- **Bar Charts**: Distribution and comparison data
-- **Gauges**: Percentage and threshold indicators
-- **Tables**: Detailed data with sorting and pagination
+- **Stat 卡片**：带下钻的单值指标
+- **折线图**：含多条时间序列的数据
+- **柱状图**：分布与对比数据
+- **仪表盘**：百分比和阈值指示器
+- **表格**：支持排序和分页的详细数据
 
-### Drill-downs
+### 下钻
 
-Many metrics support drill-down functionality to view the breakdown of original metric.
-
-
-### Refresh and Auto-refresh
-
-- **Manual Refresh**: Click the refresh button to update data
-- **Auto-refresh**: Enable automatic updates (where supported)
+许多指标支持下钻功能，可查看原始指标的拆解。
 
 
-## Limitations
+### 刷新与自动刷新
 
-- **System Table Access**: Requires read access to ClickHouse system tables
-- **Data Retention**: Metrics depend on ClickHouse's system tables retention settings
-- **Availability**: Requires your ClickHouse nodes to be available
-- **Version Compatibility**: Some metrics may not be available in older ClickHouse versions
-- **Performance Impact**: Querying large time ranges may be slow and consumes resources of your ClickHouse cluster
+- **手动刷新**：点击刷新按钮更新数据
+- **自动刷新**：启用自动更新（在支持的情况下）
 
-> **Deep dive**: Explore [System Log Introspection](../04-cluster-management/system-log-introspection.md) for detailed analysis of system tables.
 
-## Next Steps
+## 限制
 
-- **[Node Dashboard](./node-dashboard.md)** — View detailed metrics for individual nodes
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze specific query performance
-- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** — Explore your database structure
-- **[System Log Introspection](../04-cluster-management/system-log-introspection.md)** — Deep dive into query and part logs
+- **系统表访问**：需要对 ClickHouse 系统表的读权限
+- **数据保留期**：指标取决于 ClickHouse 系统表的保留设置
+- **可用性**：要求 ClickHouse 节点可用
+- **版本兼容性**：部分指标在较旧的 ClickHouse 版本中可能不可用
+- **性能影响**：查询较大的时间范围可能较慢，并消耗 ClickHouse 集群的资源
+
+> **深入了解**：探索[系统日志内省](../04-cluster-management/system-log-introspection.md)，对系统表进行详细分析。
+
+## 下一步
+
+- **[Node Dashboard](./node-dashboard.md)** —— 查看单个节点的详细指标
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析具体查询性能
+- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** —— 探索数据库结构
+- **[系统日志内省](../04-cluster-management/system-log-introspection.md)** —— 深入了解查询和 Part 日志

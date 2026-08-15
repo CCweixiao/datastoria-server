@@ -1,81 +1,81 @@
 ---
-title: system.zookeeper Introspection
-description: Browse and inspect ClickHouse ZooKeeper data with a tree-table interface. Explore znodes, view path hierarchy, node values, and metadata for cluster coordination and replication.
+title: system.zookeeper 内省
+description: 使用树表结构界面浏览和检视 ClickHouse 的 ZooKeeper 数据。探索 znode、查看路径层级、节点值与元数据，用于集群协调与复制状态管理。
 head:
   - - meta
     - name: keywords
-      content: system.zookeeper, zookeeper introspection, zookeeper browser, znode explorer, ClickHouse zookeeper, cluster coordination, replication metadata, zookeeper path, zookeeper tree view
+      content: system.zookeeper, ZooKeeper 内省, ZooKeeper 浏览器, znode 资源管理器, ClickHouse ZooKeeper, 集群协调, 复制元数据, ZooKeeper 路径, ZooKeeper 树视图
 ---
 
-# system.zookeeper Introspection
+# system.zookeeper 内省
 
-The ZooKeeper Introspection tool provides a tree-table interface to browse and inspect ZooKeeper data used by your ClickHouse cluster. It lets you explore the hierarchical structure of znodes, view node values, and inspect metadata such as creation time, modification time, and child counts—all without writing SQL queries against the `system.zookeeper` table.
+ZooKeeper 内省工具提供树表结构界面，用于浏览和检视 ClickHouse 集群使用的 ZooKeeper 数据。无需针对 `system.zookeeper` 表编写 SQL 查询，即可探索 znode 的层级结构、查看节点值，并检视创建时间、修改时间和子节点数等元数据。
 
-## Prerequisites
+## 前置条件
 
-> **Note**: 
+> **注意**：
 >
-> 1. ZooKeeper must be configured for your ClickHouse cluster.
-> 2. Read access to the `system.zookeeper` table is required to use this introspection tool. Ensure your user has the necessary system table privileges. 
+> 1. 你的 ClickHouse 集群必须已配置 ZooKeeper。
+> 2. 使用此内省工具需要对 `system.zookeeper` 表的读取权限。请确认用户具备必要的系统表权限。
 
-## UI
+## 界面
 
-![system-table-zookeeper](./img/system-zookeeper.jpg)
+![system-table-zookeeper](../../en/manual/04-cluster-management/img/system-zookeeper.jpg)
 
-The ZooKeeper Introspection tool displays a tree-table with the following columns:
+ZooKeeper 内省工具以树表形式展示以下列：
 
-- **Path** — Hierarchical tree of znodes. Expand nodes to load and view their children. Nodes with children show a count (e.g., `clickhouse (5)`).
-- **Created** — Creation timestamp of the znode.
-- **Modified** — Last modification timestamp of the znode.
-- **Size** — Data length of the znode (hidden when zero).
-- **Value** — Node value with truncation; click to view full content in a dialog.
+- **Path** — znode 的层级树。展开节点以加载并查看其子节点。有子节点的节点会显示数量（例如 `clickhouse (5)`）。
+- **Created** — znode 的创建时间戳。
+- **Modified** — znode 的最近修改时间戳。
+- **Size** — znode 的数据长度（为零时隐藏）。
+- **Value** — 截断显示的节点值；点击后在对话框中查看完整内容。
 
-A refresh button in the header reloads data from the root path. The Path column is resizable by dragging its right edge.
+顶部的刷新按钮会从根路径重新加载数据。Path 列可以通过拖拽右边缘调整宽度。
 
-## Features
+## 功能特性
 
-### Tree Navigation
+### 树形导航
 
-- **Lazy Loading**: Children are fetched when you expand a node, reducing initial load time.
-- **Expandable Nodes**: Nodes with children (`numChildren > 0`) show an expand icon; leaf nodes do not.
-- **Child Count**: Nodes with children display the count after the name (e.g., `/ (3)`).
-- **Virtual Scrolling**: Large trees are rendered efficiently with virtualization.
+- **懒加载**：展开节点时才获取子节点，缩短初始加载时间。
+- **可展开节点**：有子节点（`numChildren > 0`）的节点显示展开图标；叶子节点不显示。
+- **子节点计数**：有子节点的节点在名称后显示数量（例如 `/ (3)`）。
+- **虚拟滚动**：通过虚拟化高效渲染大型树。
 
-### Column Details
+### 列说明
 
-- **Path**: Displays the node name with indentation for hierarchy. Folder icon for nodes with children, file icon for leaf nodes.
-- **Created / Modified**: Timestamps from ZooKeeper metadata.
-- **Size**: Data length; shown only when non-zero.
-- **Value**: Truncated text with click-to-expand for full content. Uses the truncatedText formatter for long values.
+- **Path**：显示带层级缩进的节点名称。有子节点的节点显示文件夹图标，叶子节点显示文件图标。
+- **Created / Modified**：来自 ZooKeeper 元数据的时间戳。
+- **Size**：数据长度；仅在非零时显示。
+- **Value**：截断显示的文本，点击可展开完整内容。长值使用 truncatedText 格式化器处理。
 
-### Refresh
+### 刷新
 
-- Click the refresh icon in the header to reload the tree from the root path. All expanded state is reset.
+- 点击顶部的刷新图标从根路径重新加载树。所有展开状态会被重置。
 
-## Use Cases
+## 使用场景
 
-### Cluster Coordination Inspection
+### 集群协调检视
 
-1. **Explore Replication Metadata**: Navigate paths like `/clickhouse` to inspect replication configuration.
-2. **Verify Znode Structure**: Confirm expected znodes exist and have correct hierarchy.
-3. **Check Coordination State**: Inspect leader election, locks, and coordination data.
+1. **探索复制元数据**：导航到 `/clickhouse` 等路径，检视复制配置。
+2. **校验 Znode 结构**：确认预期的 znode 存在且层级正确。
+3. **检查协调状态**：检视 leader 选举、锁和协调数据。
 
-### Troubleshooting
+### 故障排查
 
-1. **Inspect Node Values**: Click truncated values to view full content in a dialog.
-2. **Verify Timestamps**: Use Created/Modified columns to detect stale or recently changed znodes.
-3. **Identify Empty Nodes**: Size column (when shown) helps distinguish data-bearing nodes from structural ones.
+1. **检视节点值**：点击截断的值，在对话框中查看完整内容。
+2. **核对时间戳**：利用 Created/Modified 列发现过期或最近变更的 znode。
+3. **识别空节点**：Size 列（显示时）有助于区分承载数据的节点和纯结构节点。
 
-### Replication Monitoring
+### 复制监控
 
-1. **Browse Replica Paths**: Navigate replication-related znodes under `/clickhouse`.
-2. **Check Child Counts**: Use the displayed child count to quickly assess structure size.
-3. **Refresh After Changes**: Use the refresh button after cluster or config changes to see updated state.
+1. **浏览副本路径**：导航 `/clickhouse` 下与复制相关的 znode。
+2. **检查子节点数**：利用显示的子节点计数快速评估结构规模。
+3. **变更后刷新**：集群或配置变更后使用刷新按钮查看最新状态。
 
-## Next Steps
+## 下一步
 
-- **[System Log Introspection](./system-log-introspection.md)** — Overview of all system log tools
-- **[system.query_log Introspection](./system-query-log.md)** — Analyze query execution logs
-- **[system.part_log Introspection](./system-part-log.md)** — Monitor part-level operations
-- **[system.ddl_distribution_queue Introspection](./system-ddl-distributed-queue.md)** — Monitor distributed DDL operations
-- **[system.query_views_log Introspection](./system-query-views-log.md)** — Monitor query view executions
+- **[系统日志内省](./system-log-introspection.md)** — 所有系统日志工具的概述
+- **[system.query_log 内省](./system-query-log.md)** — 分析查询执行日志
+- **[system.part_log 内省](./system-part-log.md)** — 监控 part 级操作
+- **[system.ddl_distribution_queue 内省](./system-ddl-distributed-queue.md)** — 监控分布式 DDL 操作
+- **[system.query_views_log 内省](./system-query-views-log.md)** — 监控查询视图执行

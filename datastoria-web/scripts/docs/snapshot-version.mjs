@@ -4,11 +4,12 @@
 //   npm run docs:snapshot -- 1.2.0          # create versions/v1.2.0/
 //   npm run docs:snapshot -- 1.2.0 --force  # overwrite an existing snapshot
 //
-// What gets frozen per snapshot: index.md, manual/ (with img/), reference/, zh/ tree,
-// plus a manifest.json holding the sidebar structure and date. The zh tree keeps its
-// ../../../manual/... image references — the depth matches because the snapshot root
-// (versions/vX/) simply replaces the docs root. Absolute /manual/ and /zh/manual/
-// links are rewritten to the versioned path.
+// What gets frozen per snapshot: the Chinese tree (index.md, manual/ with img/,
+// reference/) plus the English tree under en/, and a manifest.json holding the
+// sidebar structure and date. Chinese pages keep their ../../en/manual/... image
+// references — the depth matches because the snapshot root (versions/vX/) simply
+// replaces the docs root. Absolute /manual/ and /en/manual/ links are rewritten
+// to the versioned path.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -38,9 +39,9 @@ if (existsSync(target)) {
   rmSync(target, { recursive: true })
 }
 
-// 1. Freeze the latest content trees.
+// 1. Freeze the latest content trees (Chinese at the snapshot root, English in en/).
 mkdirSync(target, { recursive: true })
-for (const entry of ['index.md', 'manual', 'reference', 'zh']) {
+for (const entry of ['index.md', 'manual', 'reference', 'en']) {
   const src = path.join(docsRoot, entry)
   if (!existsSync(src)) {
     console.error(`Missing ${entry} under ${docsRoot}; nothing to snapshot.`)
@@ -90,7 +91,7 @@ function rewriteTree(dir, version) {
     const base = path.dirname(path.relative(docsRoot, full)).replace(/^versions\//, '')
     let content = readFileSync(full, 'utf8')
     content = content
-      .replace(/([\s(:`"])\/zh\/manual\//g, `$1/zh/${version}/manual/`)
+      .replace(/([\s(:`"])\/en\/manual\//g, `$1/en/${version}/manual/`)
       .replace(/([\s(:`"])\/manual\//g, `$1/${version}/manual/`)
       .replace(/src="\.\/img\//g, `src="/${base}/img/`)
     writeFileSync(full, content)

@@ -1,155 +1,140 @@
 ---
-title: Admin Console Manual
-description: End-to-end operations guide for the DataStoria admin console — connections, the SQL workbench, dashboards, model providers, AI sessions, skills and agents, sharing, and troubleshooting.
+title: 管理平台操作手册
+description: DataStoria 管理控制台端到端操作指南：连接管理、SQL 工作台、仪表盘、模型供应商、AI 会话、技能与 Agent、分享及常见问题排查。
 head:
   - - meta
     - name: keywords
-      content: DataStoria admin console, ClickHouse connection, SQL workbench, dashboard, model provider, AI session, agent skills, troubleshooting
+      content: DataStoria 管理控制台, ClickHouse 连接, SQL 工作台, 仪表盘, 模型供应商, AI 会话, Agent 技能, 故障排查
 ---
 
-This manual uses the desktop browser as an example. Icon placement may vary slightly between
-versions, but object names and server-side behavior stay consistent. All illustrations use local
-demo data; passwords and API keys never appear in screenshots.
+本文以桌面浏览器为例。不同版本的图标位置可能略有变化，但对象名称和服务端行为保持一致。
+所有图例均使用本地演示数据；密码和 API Key 不会出现在图片中。
 
-[Watch the 12-second silent feature tour](./img/datastoria-tour.mp4)
+[观看 12 秒无声功能导览](../../en/manual/07-admin-console/img/datastoria-tour.mp4)
 
-## 1. First Sign-in
+## 1. 首次进入
 
-1. Open the DataStoria URL provided by your administrator;
-2. Sign in with your username and password (the bootstrap administrator is provisioned by the
-   server on first start);
-3. When you sign in with no connections configured, the page guides you through creating a
-   ClickHouse Connection.
+1. 打开管理员提供的 DataStoria 地址；
+2. 使用用户名和密码登录（引导管理员账号由服务端首次启动时自动创建）；
+3. 首次进入且没有连接时，页面会引导创建 ClickHouse Connection。
 
-![DataStoria main UI](./img/workbench-overview.jpg)
+![DataStoria 主界面](../../en/manual/07-admin-console/img/workbench-overview.jpg)
 
-## 2. Managing ClickHouse Connections
+## 2. 管理 ClickHouse 连接
 
-### Creating a Connection
+### 新建连接
 
-1. Click the connection entry on the left;
-2. Pick a built-in template or "New Connection";
-3. Enter the HTTP URL, for example `https://clickhouse.example.com:8443`;
-4. Enter the username, password and an optional Database;
-5. For cluster deployments, enter the exact Cluster name from `system.clusters`;
-6. Click Test, then save once it succeeds.
+1. 点击左侧连接入口；
+2. 选择内置模板或"新建连接"；
+3. 填写 HTTP URL，例如 `https://clickhouse.example.com:8443`；
+4. 填写用户名、密码和可选 Database；
+5. 集群环境填写 `system.clusters` 中的准确 Cluster 名；
+6. 点击测试，成功后保存。
 
-![Creating a ClickHouse connection](./img/connection-dialog.jpg)
+![创建 ClickHouse 连接](../../en/manual/07-admin-console/img/connection-dialog.jpg)
 
-Notes:
+注意：
 
-- DataStoria uses the ClickHouse HTTP port, `8123/8443` by default — not the Native protocol
-  `9000/9440`;
-- When editing a saved connection, an empty password keeps the stored password; the plaintext
-  password is never loaded back into the browser;
-- Production accounts should only be granted read access to business databases and the necessary
-  `system.*` tables;
-- When multiple clusters are discovered you must fill in the Cluster explicitly; the system does
-  not guess.
+- DataStoria 使用 ClickHouse HTTP 端口，默认是 `8123/8443`，不是 Native `9000/9440`；
+- 编辑已保存连接时，空密码表示保留原密码，不会把明文密码加载回浏览器；
+- 生产账号建议只授予业务库和必要 `system.*` 的读取权限；
+- 发现多个集群时必须明确填写 Cluster，系统不会猜测。
 
-### Switching and Deleting
+### 切换和删除
 
-Switch the active connection from the connection list on the left. Before deleting a connection,
-make sure no session bindings need to be kept; session history is not re-bound to another database
-automatically.
+从左侧连接列表切换当前连接。删除连接前确认没有需要保留的会话绑定；会话历史不会自动改绑
+到另一个数据库。
 
-## 3. SQL Workbench
+## 3. SQL 工作台
 
-1. Select the database and table in the Schema tree;
-2. Open a new Query tab;
-3. Type SQL and run it with the execute button or a keyboard shortcut;
-4. Switch between table, JSON, visualization or Explain views in the result area;
-5. Restore earlier SQL through the history.
+1. 在 Schema 树选择数据库和表；
+2. 新建 Query 标签页；
+3. 输入 SQL，使用执行按钮或快捷键运行；
+4. 在结果区切换表格、JSON、可视化或 Explain；
+5. 通过历史记录恢复之前的 SQL。
 
-When AI explains an error, the system sends the necessary error context to the configured model.
-For sensitive tables, review the SQL and the error content first — never paste business data into
-the prompt.
+AI 解释错误时，系统会把必要的错误上下文发送给已配置模型。涉及敏感表时先检查 SQL 与错误
+内容，不要把业务数据粘贴进 Prompt。
 
-## 4. Dashboards and Cluster Nodes
+## 4. Dashboard 与集群节点
 
-Open Dashboards and use the scope selector at the top:
+打开 Dashboards 后，使用顶部作用域选择器：
 
-- **Cluster summary · all shards and replicas**: aggregates every topology node;
-- **Shard N · Replica N · node name**: inspect a single replica;
-- Without cluster metadata: the current connection's entry node is used.
+- **集群汇总 · 全部分片与副本**：聚合所有拓扑节点；
+- **分片 N · 副本 N · 节点名**：只查看指定副本；
+- 没有集群元数据时：使用当前连接入口节点。
 
-![ClickHouse query dashboard](./img/dashboard-query.jpg)
+![ClickHouse 查询 Dashboard](../../en/manual/07-admin-console/img/dashboard-query.jpg)
 
-Time range, refresh interval and panel layout are adjusted at the top of the dashboard. Some
-charts depend on the ClickHouse `metric_log`, `query_log`, `part_log` or OpenTelemetry logs; when
-the target table is not enabled, that panel being unavailable does not mean the connection failed.
+时间范围、刷新间隔和面板布局可在 Dashboard 顶部调整。某些图表依赖 ClickHouse
+`metric_log`、`query_log`、`part_log` 或 OpenTelemetry 日志；目标表未启用时，该面板不可用
+不代表连接失败。
 
-When the topology contains two or more nodes, a Monitoring scope selector appears at the top;
-single-node connections do not show this control.
+当拓扑包含两个或更多节点时，顶部会出现 Monitoring scope 选择器；单节点连接不会显示这个
+控件。
 
-## 5. Configuring Model Providers
+## 5. 配置模型供应商
 
-Go to **Settings → Models**. No callable models are bundled; an administrator must configure them.
+进入 **Settings → Models**。系统没有预置可调用模型，必须由管理员配置。
 
-![Model and provider settings](./img/model-settings.jpg)
+![模型与供应商设置](../../en/manual/07-admin-console/img/model-settings.jpg)
 
-### Using Templates
+### 使用模板
 
-Start from templates such as Zhipu GLM, Kimi/Moonshot, MiniMax, Alibaba Bailian or DeepSeek:
+可从智谱 GLM、Kimi/Moonshot、MiniMax、阿里云百炼、DeepSeek 等模板开始：
 
-1. Click "Add Provider";
-2. Choose a template and verify the Base URL;
-3. Enter the API Key;
-4. Save and click Test;
-5. Click Discover Models and enable the models you need.
+1. 点击"添加供应商"；
+2. 选择模板，核对 Base URL；
+3. 输入 API Key；
+4. 保存并点击测试；
+5. 点击发现模型，选择需要启用的模型。
 
-If the service does not expose a model-list API, add the Model ID manually with a display name,
-context window, tier and multimodal capabilities. The Base URL should point at the provider's
-OpenAI-compatible API root.
+如果服务不支持模型列表 API，可手工添加 Model ID，并填写显示名称、上下文窗口、等级和
+多模态能力。Base URL 应指向供应商的 OpenAI 兼容 API 根路径。
 
-### Security Rules
+### 安全规则
 
-- Once saved, an API Key only shows "configured"; the full value is never returned;
-- Enter a new value to update the key; leaving it blank does not overwrite the stored credential;
-- Never pass keys through the chat input, browser environment variables or frontend request
-  bodies;
-- Before deleting a provider, confirm no default model, agent or running task references it.
+- API Key 保存后只显示"已配置"，不会返回完整值；
+- 更新 Key 时输入新值；留空不会覆盖已有凭据；
+- 不要在聊天输入框、浏览器环境变量或前端请求体中传 Key；
+- 删除供应商前先确认没有默认模型、Agent 或运行任务引用。
 
-## 6. AI Sessions
+## 6. AI 会话
 
-1. Select the ClickHouse connection and the model;
-2. Start a new session and describe the problem;
-3. Review the AI's SQL, tool results and evidence;
-4. Choose Approve or Deny for actions requiring authorization;
-5. Answer follow-up questions when asked; the server resumes the original run through the Action
-   API;
-6. After a network interruption the page reconnects using event sequence numbers — do not
-   re-submit the same question.
+1. 选择 ClickHouse 连接和模型；
+2. 新建会话并描述问题；
+3. 查看 AI 的 SQL、工具结果和证据；
+4. 对需要授权的动作选择 Approve 或 Deny；
+5. 遇到补充问题时填写答案，服务端通过 Action API 恢复原 Run；
+6. 网络中断后页面使用事件序号重连，不要重复提交同一问题。
 
-Sessions created with "no connection" do not automatically pick up connections added later. Start
-a new session or select the connection explicitly so the AI does not query the wrong database.
+旧会话若创建时选择"无连接"，不会自动使用后来新增的连接。请新建会话或显式选择连接，
+避免 AI 在错误数据库上执行查询。
 
-## 7. Skills and Agents
+## 7. Skill 与 Agent
 
-**Settings → Skills** lists built-in and custom skills. Administrators can create, edit, inspect
-resources and enable or disable skills; slash commands come from enabled skills.
+**Settings → Skills** 展示内置和自定义 Skill。管理员可以创建、编辑、查看资源并启停 Skill；
+Slash Command 来自已启用 Skill。
 
-Agent management consists of Agent Definitions and immutable Revisions. After editing, create a
-Revision first, then publish; deactivation only blocks new runs and must not break already
-persisted run history.
+Agent 管理由 Agent Definition 和不可变 Revision 组成。修改后先创建 Revision，再发布；停用
+只阻止新运行，不应破坏已经持久化的历史 Run。
 
-## 8. Sessions, Sharing and Feedback
+## 8. 会话、分享和反馈
 
-- The session list supports renaming and deletion;
-- Share links are read according to their permission and can be revoked by administrators;
-- Upvote/downvote AI messages with an optional note; feedback reports are visible to
-  administrators only;
-- Before sharing, check whether the session contains business SQL, table names or results.
+- 会话列表支持重命名和删除；
+- 分享链接按权限读取，管理员可以撤销；
+- 对 AI 消息提交赞/踩和说明，反馈报表仅管理员可见；
+- 分享前检查会话是否包含业务 SQL、表名或结果。
 
-## 9. Troubleshooting
+## 9. 常见问题
 
-| Symptom | Fix |
+| 现象 | 处理 |
 |---|---|
-| Add-provider button unresponsive | Refresh to the latest version and make sure the dialog is not covered by another modal |
-| Connection works but the AI session has no connection | Start a new session and select that connection |
-| Cluster summary denied | Fill in the Cluster exactly as it appears in `system.clusters` |
-| A dashboard panel reports a missing table | Enable the corresponding system log in ClickHouse, or ignore the optional panel |
-| Model discovery returns nothing | Test the provider first; add models manually when no list API exists |
-| Streaming answer interrupted | Keep the session page open; the system replays by Last-Event-ID |
+| 添加供应商按钮无响应 | 刷新到最新版本，确认弹窗没有被另一个 Modal 覆盖 |
+| 连接成功但 AI 无连接 | 新建会话并选择该连接 |
+| 集群汇总被禁止 | 连接中填写与 `system.clusters` 完全一致的 Cluster |
+| Dashboard 某面板报表不存在 | 在 ClickHouse 启用相应 system log，或忽略该可选面板 |
+| 模型发现为空 | 先测试供应商；不支持列表 API 时手工添加模型 |
+| 流式回答中断 | 保持会话页面打开，系统会按 Last-Event-ID 重放 |
 
-For more errors see the [troubleshooting guide](https://github.com/CCweixiao/datastoria-server/blob/master/docs/operations/troubleshooting.md).
+更多错误见[故障排查](https://github.com/CCweixiao/datastoria-server/blob/master/docs/operations/troubleshooting.md)。

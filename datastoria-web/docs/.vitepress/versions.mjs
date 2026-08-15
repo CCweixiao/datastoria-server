@@ -2,9 +2,10 @@
 // sidebars) and scripts/docs/snapshot-version.mjs (manifest writing).
 //
 // URL scheme: /{locale prefix}?/{vX.Y.Z/}?{page path} — locale outermost, version inside.
-// Source layout: docs/versions/<v>/** (English) and docs/versions/<v>/zh/** (Chinese).
-// The latest version lives at the site root (docs/index.md, docs/manual/**, docs/zh/**)
-// and has no version segment in its URLs.
+// Chinese is the default locale and lives at the site root (docs/index.md, docs/manual/**);
+// English lives under docs/en/**. Version snapshots mirror that layout under
+// docs/versions/<vX.Y.Z>/ (Chinese at the snapshot root, English in its en/ subtree).
+// The latest version has no version segment in its URLs.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -53,15 +54,15 @@ export function rewriteDest(id) {
   const m = /^versions\/(v\d+\.\d+\.\d+)\/(.+)$/.exec(id)
   if (!m) return undefined
   const [, version, rest] = m
-  if (rest.startsWith('zh/')) {
-    return `zh/${version}/${rest.slice(3)}`
+  if (rest.startsWith('en/')) {
+    return `en/${version}/${rest.slice(3)}`
   }
   return `${version}/${rest}`
 }
 
 /**
  * Maps a source file id (relative to srcDir, e.g. `manual/intro.md`,
- * `zh/manual/intro.md`, `versions/v1.1.0/zh/index.md`) to its public URL path
+ * `en/manual/intro.md`, `versions/v1.1.0/en/index.md`) to its public URL path
  * (without base, without extension; index pages collapse to the directory
  * URL). Returns undefined for ids that keep their natural path.
  */
@@ -75,16 +76,15 @@ export function srcToUrl(id) {
  * Inverse of srcToUrl for page-existence checks: URL path (with leading slash,
  * no extension, no locale/version prefixes yet applied) → source id.
  */
-export function urlToSrc(urlPath, { locale = 'en', version = null } = {}) {
+export function urlToSrc(urlPath, { locale = 'zh', version = null } = {}) {
   const clean = urlPath.replace(/^\/+|\/+$/g, '')
-  const localePrefix = locale === 'zh' ? 'zh/' : ''
-  const versionPrefix = version ? `${version}/` : ''
+  const localePrefix = locale === 'en' ? 'en/' : ''
   return `${version ? `versions/${version}/` : ''}${localePrefix}${clean || 'index'}`
 }
 
-/** Locale prefix for nav/sidebar link building. */
+/** Locale prefix for nav/sidebar link building: Chinese at root, English under /en/. */
 export function localePrefix(locale, version = null) {
-  const l = locale === 'zh' ? 'zh/' : ''
+  const l = locale === 'en' ? 'en/' : ''
   const v = version ? `${version}/` : ''
   return `/${l}${v}`
 }

@@ -1,171 +1,171 @@
 ---
-title: Cluster Health Advisor
-description: Use AI-powered cluster health analysis to detect issues in your ClickHouse cluster before they become critical. Get instant diagnostics, outlier detection, and actionable remediation commands for replication, disk, memory, parts, mutations, merges, errors, and connections.
+title: 集群健康顾问
+description: 使用 AI 驱动的集群健康分析，在问题变得严重之前发现 ClickHouse 集群中的隐患。获得即时诊断、离群节点检测，以及针对复制、磁盘、内存、parts、mutation、merge、错误和连接的可落地修复命令。
 head:
   - - meta
     - name: keywords
-      content: ClickHouse cluster health, ClickHouse monitoring, replication lag, disk usage, memory usage, parts explosion, stuck mutations, ClickHouse errors, ClickHouse observability, AI cluster advisor, database health check
+      content: ClickHouse 集群健康, ClickHouse 监控, 复制延迟, 磁盘使用率, 内存使用率, parts 爆炸, 卡住的 mutation, ClickHouse 错误, ClickHouse 可观测性, AI 集群顾问, 数据库健康检查
 ---
 
-# Cluster Health Advisor
+# 集群健康顾问
 
-The **Cluster Health Advisor** is an AI-powered assistant that analyzes the health of your ClickHouse cluster, identifies issues across nodes, and suggests concrete remediation steps. It helps you move from reactive firefighting to **proactive cluster operations**, even on large deployments.
+**Cluster Health Advisor**（集群健康顾问）是一个 AI 驱动的助手，用于分析 ClickHouse 集群的健康状况、识别跨节点的问题，并给出具体的修复步骤。它帮助你从被动救火转向**主动式集群运维**，即使在大型部署上也同样适用。
 
-## What the Cluster Health Advisor Does
+## 集群健康顾问做什么
 
-The Cluster Health Advisor combines live system tables with historical metrics to:
+集群健康顾问将实时系统表与历史指标相结合，用于：
 
-- **Summarize cluster health**: Quickly see if your cluster is healthy, degraded, or critical
-- **Highlight outliers**: Surface only problematic nodes and tables instead of every replica
-- **Classify severity**: Distinguish between 🟢 OK, 🟠 WARNING, and 🔴 CRITICAL conditions
-- **Recommend fixes**: Provide ready-to-run ClickHouse commands for remediation
+- **总结集群健康状况**：快速判断集群是健康、降级还是处于危急状态
+- **突出离群项**：只呈现有问题的节点和表，而非每一个副本
+- **划分严重程度**：区分 🟢 OK（正常）、🟠 WARNING（警告）和 🔴 CRITICAL（危急）状态
+- **推荐修复方案**：提供可直接运行的 ClickHouse 修复命令
 
-It understands both **single-node** deployments and **clustered** setups, using `clusterAllReplicas` where appropriate to cover all replicas without overwhelming the UI or the AI model.
+它同时理解**单节点**部署和**集群**部署，在合适的场景下使用 `clusterAllReplicas` 覆盖所有副本，同时不会让界面或 AI 模型过载。
 
-## Instant Health Checks
+## 即时健康检查
 
-### Running a Quick Health Diagnostic
+### 运行快速健康诊断
 
-To get an instant snapshot of your cluster health, open the AI chat panel and ask:
+要获得集群健康状况的即时快照，打开 AI 聊天面板并提问：
 
 - **"Check cluster health"**
 - **"Is my ClickHouse cluster healthy?"**
 - **"@health full diagnostic"**
 
-Behind the scenes, the Cluster Health Advisor uses the `collect_cluster_status` tool to query system tables and return a compact, aggregated view of your environment. Only **outlier nodes and tables** are included in detail so the response stays readable even for large clusters.
+在幕后，集群健康顾问使用 `collect_cluster_status` 工具查询系统表，并返回一个紧凑、聚合的环境视图。只有**离群的节点和表**会被详细列出，因此即使是大集群，响应也保持可读。
 
-### Health Categories Covered
+### 覆盖的健康类别
 
-The instant health check evaluates multiple categories:
+即时健康检查会评估多个类别：
 
-- **Replication**: Lag, replica availability, read-only replicas, and expired sessions
-- **Disk**: Disk usage percentage, free space, and nodes approaching capacity
-- **Memory**: Current memory usage and pressure relative to configured limits
-- **Merges**: Active merges and long-running merge operations
-- **Mutations**: Pending or stuck mutations and their age
-- **Parts**: Tables with too many active parts (part explosion)
-- **Errors**: Recent errors from `system.errors`, sorted by frequency
-- **Connections**: Active queries, active users, and remote addresses
+- **Replication（复制）**：延迟、副本可用性、只读副本以及过期的会话
+- **Disk（磁盘）**：磁盘使用率、剩余空间以及接近容量上限的节点
+- **Memory（内存）**：当前内存使用情况以及相对于配置限额的压力
+- **Merges（合并）**：进行中的 merge 以及长时间运行的 merge 操作
+- **Mutations**：待处理或卡住的 mutation 及其持续时长
+- **Parts**：活跃 parts 数量过多的表（parts 爆炸）
+- **Errors（错误）**：`system.errors` 中的近期错误，按频率排序
+- **Connections（连接）**：活跃查询、活跃用户以及远程地址
 
-For each category, the advisor summarizes:
+对于每个类别，顾问会总结：
 
-- Overall status (🟢 OK, 🟠 WARNING, 🔴 CRITICAL)
-- Key metrics (for example, max replication lag or maximum disk usage)
-- Top outliers, such as:
-  - Replicas with high lag or read-only status
-  - Disks above warning or critical thresholds
-  - Tables with extreme part counts
+- 整体状态（🟢 OK、🟠 WARNING、🔴 CRITICAL）
+- 关键指标（例如最大复制延迟或最高磁盘使用率）
+- 主要离群项，例如：
+  - 延迟高或处于只读状态的副本
+  - 超过警告或危急阈值的磁盘
+  - parts 数量异常多的表
 
-This makes it easy to see **which nodes or tables need attention right now**.
+这让你可以轻松看出**哪些节点或表当前需要关注**。
 
-## Historical Trend Analysis
+## 历史趋势分析
 
-### When to Use Historical Metrics
+### 何时使用历史指标
 
-Use historical analysis when you need to answer questions like:
+当你需要回答以下问题时，请使用历史分析：
 
-- **"Has memory usage been increasing over the last week?"**
-- **"Is this spike in resource usage new or a recurring pattern?"**
-- **"How does current pressure compare to typical off-peak hours?"**
+- **"过去一周内存使用是否持续增长？"**
+- **"这次资源使用的飙升是新出现的还是周期性模式？"**
+- **"当前压力与典型的低谷时段相比如何？"**
 
-In these cases, the Cluster Health Advisor calls the `collect_cluster_status` tool with trend mode to read from log tables such as `system.metric_log` and build **time-series trends**.
+在这些场景下，集群健康顾问会以趋势模式调用 `collect_cluster_status` 工具，读取 `system.metric_log` 等日志表，并构建**时间序列趋势**。
 
-### Current Capabilities
+### 当前能力
 
-The historical analysis currently focuses on:
+历史分析目前聚焦于：
 
-- **Memory usage trends**: Derived from `system.metric_log` using the `MemoryTracking` metric
+- **内存使用趋势**：基于 `system.metric_log` 的 `MemoryTracking` 指标得出
 
-For each historical query, the advisor returns:
+对于每次历史查询，顾问会返回：
 
-- A **time series** of aggregated points (bucketed by a configurable granularity)
-- Summary statistics:
-  - **min**, **max**, and **average** values
-  - A simple **trend direction**: `up`, `down`, `flat`, or `unknown`
+- 由聚合点构成的**时间序列**（按可配置的粒度分桶）
+- 汇总统计信息：
+  - **min**、**max** 和 **average** 值
+  - 简单的**趋势方向**：`up`（上升）、`down`（下降）、`flat`（持平）或 `unknown`（未知）
 
-The advisor combines this historical view with the instant snapshot to help you answer:
+顾问将历史视图与即时快照结合，帮助你回答：
 
-- Whether a problem is **new** or **long-standing**
-- Whether it is **getting worse** or **stabilizing**
-- Where to focus capacity planning and optimization efforts
+- 问题是**新出现的**还是**存在已久的**
+- 它在**恶化**还是**趋于稳定**
+- 容量规划和优化工作应聚焦在哪里
 
-## Typical Workflows
+## 典型工作流
 
-### 1. Routine Health Check
+### 1. 例行健康检查
 
-Use this when you want to confirm cluster health at the start of the day or before a release:
+当你想在一天开始时或发布前确认集群健康状况时使用：
 
-1. Ask: **"@health full diagnostic"**
-2. Review the summary table for overall status and number of affected nodes
-3. Inspect category sections (Replication, Disk, Memory, Parts, etc.) for warnings and critical items
-4. Apply the suggested remediation commands for the most severe issues first
+1. 提问：**"@health full diagnostic"**
+2. 查看摘要表中的整体状态和受影响节点数
+3. 检查各类别部分（Replication、Disk、Memory、Parts 等）中的警告和危急项
+4. 优先对最严重的问题应用建议的修复命令
 
-This workflow is especially useful on large clusters where manually checking all system tables would be time-consuming.
+此工作流在大型集群上尤为有用，因为手动检查所有系统表非常耗时。
 
-### 2. Investigating a Slow or Unstable Cluster
+### 2. 排查缓慢或不稳定的集群
 
-When you notice slow queries or intermittent instability:
+当你注意到查询缓慢或间歇性不稳定时：
 
-1. Ask: **"Check cluster health"** to get an instant view of current issues
-2. If memory or disk looks high, follow up with:
+1. 提问：**"Check cluster health"** 获取当前问题的即时视图
+2. 如果内存或磁盘看起来偏高，继续追问：
    - **"Show memory usage trend for the last 24 hours"**
-3. Use the historical trend to see whether:
-   - The issue is tied to a recurring pattern (for example, daily batch jobs)
-   - The problem started after a specific change or deployment
-4. Use the remediation commands to:
-   - Kill stuck mutations
-   - Optimize problematic tables
-   - Address disk or memory pressure
+3. 利用历史趋势判断：
+   - 问题是否与周期性模式相关（例如每日批处理作业）
+   - 问题是否始于某次特定变更或部署之后
+4. 使用修复命令来：
+   - 终止卡住的 mutation
+   - 优化有问题的表
+   - 缓解磁盘或内存压力
 
-### 3. Troubleshooting Replication Problems
+### 3. 排查复制问题
 
-For replication-related questions:
+针对复制相关问题：
 
-1. Ask: **"Is replication lagging anywhere?"**
-2. The advisor will:
-   - Highlight replicas with high `absolute_delay`
-   - Mark read-only or expired replicas
-   - Show the worst-lagging tables and replicas as outliers
-3. Use the recommended commands, for example:
+1. 提问：**"Is replication lagging anywhere?"**
+2. 顾问会：
+   - 高亮 `absolute_delay` 偏高的副本
+   - 标记只读或已过期的副本
+   - 将延迟最严重的表和副本作为离群项展示
+3. 使用推荐的命令，例如：
    - `SYSTEM SYNC REPLICA db.table`
-   - Commands to investigate or fix missing parts and mutations
+   - 用于排查或修复缺失 parts 和 mutation 的命令
 
-By focusing on outlier replicas, the Cluster Health Advisor helps you quickly identify **which nodes are causing cluster-wide replication issues**.
+通过聚焦离群副本，集群健康顾问帮助你快速定位**是哪些节点导致了集群范围的复制问题**。
 
-## How Severity and Outliers Are Determined
+## 严重程度与离群项如何判定
 
-The health checks internally apply **sensible default thresholds** and surface only significant deviations:
+健康检查在内部应用**合理的默认阈值**，只呈现显著偏差：
 
-- **Disk usage**
-  - 🟠 WARNING when usage is above **80%**
-  - 🔴 CRITICAL when usage is above **90%**
-- **Replication lag**
-  - 🟠 WARNING when lag is above **60 seconds**
-  - 🔴 CRITICAL when lag is above **300 seconds**
-- **Parts per table**
-  - 🟠 WARNING when parts are above **500**
-  - 🔴 CRITICAL when parts are above **1000**
+- **磁盘使用率**
+  - 使用率超过 **80%** 时为 🟠 WARNING
+  - 使用率超过 **90%** 时为 🔴 CRITICAL
+- **复制延迟**
+  - 延迟超过 **60 秒**时为 🟠 WARNING
+  - 延迟超过 **300 秒**时为 🔴 CRITICAL
+- **每表 parts 数**
+  - parts 超过 **500** 时为 🟠 WARNING
+  - parts 超过 **1000** 时为 🔴 CRITICAL
 
-For large clusters, the advisor:
+对于大型集群，顾问会：
 
-- Aggregates metrics for the whole cluster
-- Returns only the **top outliers per category** (for example, tables with the highest part counts or disks with the highest usage)
+- 对整个集群的指标进行聚合
+- 只返回**每个类别中排名靠前的离群项**（例如 parts 数最多的表或使用率最高的磁盘）
 
-This ensures that responses remain **token-efficient and readable**, even when operating on hundreds of nodes.
+这确保了即使在数百个节点上运行，响应依然**节省 Token 且保持可读**。
 
-## Best Practices
+## 最佳实践
 
-To get the most out of the Cluster Health Advisor:
+要充分发挥集群健康顾问的作用：
 
-- **Run checks regularly**: Use the advisor as part of your routine operations, not just during incidents
-- **Drill into outliers**: Focus on nodes and tables that repeatedly appear as outliers across checks
-- **Combine instant and historical views**: Use the instant snapshot to locate issues and historical trends to understand their evolution
-- **Apply remediation commands carefully**: Review suggested commands and confirm they match your environment before executing them
+- **定期运行检查**：将顾问纳入日常运维，而不仅仅在故障时使用
+- **深入离群项**：关注在多次检查中反复以离群项出现的节点和表
+- **结合即时视图与历史视图**：用即时快照定位问题，用历史趋势理解其演变
+- **谨慎应用修复命令**：在执行前审查建议的命令，确认其与你的环境相符
 
-If you run into situations where the advisor cannot access certain system tables or log tables, it will surface descriptive error messages so you can adjust permissions or configuration.
+如果顾问无法访问某些系统表或日志表，它会给出描述性的错误消息，以便你调整权限或配置。
 
-## Related AI Features
+## 相关 AI 功能
 
-- **[Ask AI for Help](./ask-ai-for-help.md)** — Let AI explain and fix SQL errors directly from the Query Editor
-- **[Natural Language SQL](./natural-language-sql.md)** — Generate ClickHouse queries from plain-language questions
-- **[Query Optimization](./query-optimization.md)** — Analyze slow queries and get evidence-based performance recommendations
+- **[Ask AI for Help](./ask-ai-for-help.md)** — 让 AI 直接在查询编辑器中解释并修复 SQL 错误
+- **[Natural Language SQL](./natural-language-sql.md)** — 从自然语言问题生成 ClickHouse 查询
+- **[Query Optimization](./query-optimization.md)** — 分析慢查询并获得基于证据的性能建议

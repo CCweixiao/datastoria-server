@@ -1,171 +1,171 @@
 ---
-title: Dependency View
-description: Visualize ClickHouse table dependencies with interactive graph visualization. Explore upstream and downstream relationships between tables, materialized views, and other database objects. Understand data lineage and table relationships.
+title: 依赖视图（Dependency View）
+description: 通过交互式图可视化 ClickHouse 表依赖。探索表、物化视图和其他数据库对象之间的上游与下游关系，理解数据血缘与表关系。
 head:
   - - meta
     - name: keywords
-      content: dependency view, table dependencies, ClickHouse dependencies, data lineage, dependency graph, table relationships, upstream dependencies, downstream dependencies, materialized view dependencies, database dependencies
+      content: dependency view, 依赖视图, table dependencies, ClickHouse dependencies, data lineage, dependency graph, table relationships, upstream dependencies, downstream dependencies, materialized view dependencies, database dependencies
 ---
 
-# Dependency View
+# 依赖视图（Dependency View）
 
-The Dependency View provides an interactive graph visualization of table dependencies in your ClickHouse database. It helps you understand how tables relate to each other, track data lineage, and identify dependencies for materialized views, views, and other database objects.
+依赖视图为 ClickHouse 数据库中的表依赖提供交互式图可视化。它帮助你理解表之间的关联、跟踪数据血缘，并识别物化视图、视图及其他数据库对象的依赖。
 
-## Overview
+## 概览
 
-The Dependency View automatically analyzes your ClickHouse schema to build a comprehensive dependency graph showing:
+依赖视图自动分析你的 ClickHouse 结构，构建全面的依赖图，展示：
 
-- **Table Dependencies**: Which tables depend on other tables
-- **Materialized View Dependencies**: Relationships between materialized views and their source tables
-- **View Dependencies**: Dependencies for regular views
-- **Upstream Dependencies**: Tables that a specific table depends on
-- **Downstream Dependencies**: Tables that depend on a specific table
-- **Interactive Navigation**: Click on nodes to view detailed table information
+- **表依赖**：哪些表依赖其他表
+- **物化视图依赖**：物化视图与其源表之间的关系
+- **视图依赖**：普通视图的依赖
+- **上游依赖**：某张表所依赖的表
+- **下游依赖**：依赖某张表的表
+- **交互式导航**：点击节点查看详细的表信息
 
-## Example
+## 示例
 
-The following example demonstrates a database dependency graph visualization.
+以下示例展示了一个数据库依赖图的可视化。
 
-![Dependency View graph visualization showing table relationships including distributed tables, local tables, Materialized Views with source and target connections, and edge labels indicating sharding keys](./img/dependency-view-database.jpg)
+![依赖视图图可视化，展示表之间的关系，包括 Distributed 表、本地表、物化视图的源与目标连接，以及标识分片键的边标签](../../en/manual/04-cluster-management/img/dependency-view-database.jpg)
 
-The dependency graph visualizes the following relationships:
+依赖图可视化以下关系：
 
-- **Distributed Table Connections**: Shows the relationship between each distributed table and its corresponding local table
-- **Materialized View Dependencies**: Displays source and target tables for materialized views, showing data flow direction
-- **Table Representation**: Each table is represented by a rectangle using a UML class diagram style for easy recognition
-- **Sharding Key Information**: Edge labels between distributed tables and local tables display the sharding key, allowing you to quickly identify whether the distributed table uses random sharding or specific column-based sharding
-- **Materialized View Data Flow**: 
-  - **Incoming Edge** (labeled as *Push To*): Represents the source table where data originates
-  - **Outgoing Edge** (labeled as *Sink to*): Represents the target table where processed data is written
-- **Interactive Details**: Clicking on any table node displays the complete DDL (Data Definition Language) statement in the right panel, providing full table structure information
+- **Distributed 表连接**：展示每个 Distributed 表与其对应本地表之间的关系
+- **物化视图依赖**：展示物化视图的源表和目标表，说明数据流向
+- **表的表示**：每个表用一个 UML 类图风格的矩形表示，便于识别
+- **分片键信息**：Distributed 表与本地表之间的边标签展示分片键，让你快速判断该 Distributed 表使用随机分片还是基于特定列的分片
+- **物化视图数据流**：
+  - **入边**（标记为 *Push To*）：表示数据来源的源表
+  - **出边**（标记为 *Sink to*）：表示处理后数据写入的目标表
+- **交互式详情**：点击任意表节点会在右侧面板展示完整的 DDL（数据定义语言）语句，提供完整的表结构信息
 
-## Accessing the Dependency View
+## 访问依赖视图
 
-The Dependency View is accessible from two locations in ClickHouse Console, each providing a different perspective on table dependencies:
+在 ClickHouse Console 中可以从两个位置访问依赖视图，各自提供不同的表依赖视角：
 
-### From Database Tab
+### 从数据库标签页
 
-1. **Open Database Tab**: Click on a database name in the Schema Explorer
-2. **Select Dependency Tab**: Click on the "Database Dependency" tab
-3. **View Graph**: The dependency graph for all tables in the database is displayed, showing the complete dependency network within the database
+1. **打开数据库标签页**：点击 Schema Explorer 中的数据库名
+2. **选择依赖标签页**：点击"Database Dependency"标签页
+3. **查看图**：展示数据库中所有表的依赖图，呈现数据库内完整的依赖网络
 
-### From Table Tab
+### 从表标签页
 
-1. **Open Table Tab**: Click on a table name in the Schema Explorer
-2. **Select Dependencies Tab**: Click on the "Dependencies" tab
-3. **View Focused Graph**: The dependency graph is filtered to show only dependencies related to the selected table, providing a focused view of upstream and downstream relationships
+1. **打开表标签页**：点击 Schema Explorer 中的表名
+2. **选择依赖标签页**：点击"Dependencies"标签页
+3. **查看聚焦图**：依赖图被过滤为仅展示与所选表相关的依赖，提供聚焦的上游和下游关系视图
 
-## Features
+## 功能
 
-### Interactive Graph Visualization
+### 交互式图可视化
 
-The dependency graph displays:
+依赖图展示：
 
-- **Nodes**: Represent tables, materialized views, and other database table objects
-- **Edges**: Represent dependency relationships (arrows show direction)
-- **Node Categories**: Different colors or styles for different table types
-- **Zoom and Pan**: Navigate large dependency graphs easily
-- **Node Highlighting**: Hover or click nodes to see details
+- **节点**：表示表、物化视图和其他数据库表对象
+- **边**：表示依赖关系（箭头指示方向）
+- **节点分类**：不同的表类型使用不同颜色或样式
+- **缩放与平移**：轻松浏览大型依赖图
+- **节点高亮**：悬停或点击节点查看详情
 
-### Upstream and Downstream Analysis
+### 上游与下游分析
 
-When viewing dependencies for a specific table:
+查看特定表的依赖时：
 
-- **Upstream Dependencies**: Shows all tables that the selected table depends on (what feeds into it)
-- **Downstream Dependencies**: Shows all tables that depend on the selected table (what it feeds into)
-- **Complete Context**: Includes both upstream and downstream in a single view
+- **上游依赖**：展示所选表依赖的所有表（什么在为它供给数据）
+- **下游依赖**：展示依赖所选表的所有表（它在为什么供给数据）
+- **完整上下文**：在单一视图中同时包含上游和下游
 
-### Table Details Panel
+### 表详情面板
 
-Click on any node in the graph to open a detailed panel showing:
+点击图中的任意节点可打开详细面板，展示：
 
-- **Table Metadata**: Database, table name, engine type
-- **Table Query**: The CREATE TABLE statement
-- **Dependencies**: List of tables this table depends on
-- **Metadata Information**: Last modification time and other metadata
+- **表元数据**：数据库、表名、引擎类型
+- **表查询**：CREATE TABLE 语句
+- **依赖**：该表依赖的表列表
+- **元数据信息**：最近修改时间和其他元数据
 
 
-## Use Cases
+## 使用场景
 
-### Understanding Data Lineage
+### 理解数据血缘
 
-- **Track Data Flow**: See how data flows from source tables to materialized views
-- **Impact Analysis**: Understand what will be affected if you modify a table
-- **Documentation**: Visualize your database architecture
+- **跟踪数据流**：查看数据如何从源表流入物化视图
+- **影响分析**：理解修改某张表会影响哪些对象
+- **文档化**：将数据库架构可视化
 
-### Schema Refactoring
+### 结构重构
 
-- **Safe Changes**: Identify all dependencies before modifying or dropping tables
-- **Migration Planning**: Understand relationships when restructuring schemas
-- **Risk Assessment**: See downstream impact of schema changes
+- **安全变更**：在修改或删除表之前识别所有依赖
+- **迁移规划**：在重构结构时理解各对象之间的关系
+- **风险评估**：查看结构变更的下游影响
 
-### Performance Optimization
+### 性能优化
 
-- **Bottleneck Identification**: Find tables with many downstream dependencies
-- **Optimization Targets**: Identify frequently used tables that might benefit from optimization
-- **Materialized View Analysis**: Understand materialized view dependencies for optimization
+- **瓶颈识别**：找出下游依赖众多的表
+- **优化目标**：识别可能受益于优化的高频使用表
+- **物化视图分析**：理解物化视图的依赖以便优化
 
-### Troubleshooting
+### 问题排查
 
-- **Error Investigation**: Trace dependencies when queries fail
-- **Data Quality**: Understand data lineage for quality issues
-- **Debugging**: Visualize relationships when debugging complex queries
+- **错误调查**：查询失败时追踪依赖
+- **数据质量**：针对质量问题理解数据血缘
+- **调试**：调试复杂查询时可视化各对象关系
 
-## Graph Navigation
+## 图导航
 
-### Zoom Controls
+### 缩放控制
 
-- **Zoom In**: Use mouse wheel or zoom controls
-- **Zoom Out**: Scroll out or use zoom controls
-- **Fit to View**: Automatically adjust to show all nodes
+- **放大**：使用鼠标滚轮或缩放控件
+- **缩小**：向外滚动或使用缩放控件
+- **适应视图**：自动调整以展示所有节点
 
-### Node Interaction
+### 节点交互
 
-- **Click Node**: Opens detailed table information panel
-- **Hover**: Highlights connected edges
-- **Select**: Focuses on specific table dependencies
+- **点击节点**：打开详细的表信息面板
+- **悬停**：高亮相连的边
+- **选择**：聚焦特定表的依赖
 
-### Panel Management
+### 面板管理
 
-- **Resize Panel**: Drag the panel border to adjust size
-- **Close Panel**: Click the close button to hide the panel
-- **Panel Content**: View table metadata, query, and dependencies
+- **调整面板大小**：拖动面板边框调整尺寸
+- **关闭面板**：点击关闭按钮隐藏面板
+- **面板内容**：查看表元数据、查询和依赖
 
-## Limitations
+## 限制
 
-When using the Dependency View, consider the following limitations:
+使用依赖视图时，请注意以下限制：
 
-- **System Tables**: Some system tables may not show dependencies correctly, as they have special structures and relationships
-- **Kafka Tables**: Kafka engine tables may have limited dependency information, as their dependencies are based on external Kafka topics rather than database objects
-- **External Tables**: URL and other external table engines may not show dependencies, as they reference external resources rather than database objects
-- **Complex Queries**: Very complex CREATE TABLE queries with nested expressions or advanced features may not parse all dependencies correctly
-- **Performance**: Large databases with many tables may take time to build the dependency graph, especially when analyzing complex relationships
-- **Real-time Updates**: Dependency graph reflects schema at the time of loading and does not automatically update when schema changes occur; refresh the view after making schema modifications
+- **系统表**：部分系统表可能无法正确展示依赖，因为它们具有特殊的结构和关系
+- **Kafka 表**：Kafka 引擎表的依赖信息可能有限，因为其依赖基于外部 Kafka topic 而非数据库对象
+- **外部表**：URL 及其他外部表引擎可能不展示依赖，因为它们引用外部资源而非数据库对象
+- **复杂查询**：包含嵌套表达式或高级特性的非常复杂的 CREATE TABLE 查询可能无法正确解析所有依赖
+- **性能**：包含大量表的大型数据库构建依赖图可能耗时，尤其是在分析复杂关系时
+- **实时更新**：依赖图反映加载时的结构，结构发生变更时不会自动更新；执行结构修改后请刷新视图
 
-## Best Practices
+## 最佳实践
 
-### Regular Updates
+### 定期更新
 
-- **Refresh After Changes**: Refresh the dependency view after schema changes
-- **Monitor Changes**: Use dependency view to track schema evolution
-- **Documentation**: Use dependency graphs for architecture documentation
+- **变更后刷新**：结构变更后刷新依赖视图
+- **监控变更**：使用依赖视图跟踪结构演进
+- **文档化**：使用依赖图进行架构文档化
 
-### Performance Considerations
+### 性能考虑
 
-- **Large Databases**: For databases with many tables, consider viewing dependencies for specific tables
-- **Caching**: Dependency data is cached for performance
-- **Selective Viewing**: Use table-specific dependency view for focused analysis
+- **大型数据库**：对于包含大量表的数据库，建议查看特定表的依赖
+- **缓存**：依赖数据会被缓存以提升性能
+- **按需查看**：使用针对特定表的依赖视图进行聚焦分析
 
-## Integration with Other Features
+## 与其他功能的集成
 
-- **Schema Explorer**: Navigate to tables from the dependency graph
-- **Table Tab**: View detailed table information from dependency nodes
-- **Database Tab**: Access database-level dependency overview
-- **Query Editor**: Use dependency information when writing queries
+- **Schema Explorer**：从依赖图导航到表
+- **表标签页**：从依赖节点查看详细的表信息
+- **数据库标签页**：访问数据库级的依赖概览
+- **Query 编辑器**：编写查询时使用依赖信息
 
-## Next Steps
+## 下一步
 
-- **[Database View](./database-view.md)** — Explore database overview and statistics
-- **[Table View](./table-view.md)** — View detailed table information and metadata
-- **[Schema Explorer](./schema-explorer.md)** — Navigate your database structure
-- **[Cluster Dashboard](../05-monitoring-dashboards/cluster-dashboard.md)** — Monitor cluster-wide metrics
+- **[数据库视图](./database-view.md)** —— 探索数据库概览和统计信息
+- **[表视图](./table-view.md)** —— 查看详细的表信息和元数据
+- **[Schema Explorer](./schema-explorer.md)** —— 浏览数据库结构
+- **[Cluster Dashboard](../05-monitoring-dashboards/cluster-dashboard.md)** —— 监控集群级指标

@@ -1,31 +1,25 @@
 ---
-title: AI Model Configuration
-description: Configure server-managed AI providers, credentials, and model catalog entries.
+title: AI 模型配置
+description: 配置由服务端管理的 AI 提供商、凭证以及模型目录条目。
 ---
 
-# AI Model Configuration
+# AI 模型配置
 
-DataStoria's model catalog and credentials are managed by Spring Boot.
+DataStoria 的模型目录与凭证由 Spring Boot 管理。
 
-Open **Settings → Models** to:
+打开 **Settings → Models**（模型）可以：
 
-- view enabled models returned by `/api/ai/models/available`;
-- enable or disable a database-backed model;
-- submit or rotate a provider credential; and
-- select the model stored in your backend user preference.
+- 查看 `/api/ai/models/available` 返回的已启用模型；
+- 启用或禁用存储在数据库中的模型；
+- 提交或轮换提供商凭证；
+- 选择保存在后端用户偏好中的模型。
 
-On first use, Spring materializes the built-in provider/model catalog in
-`ds_model_provider` and `ds_model`. Administrators can edit or replace those rows through
-`/api/admin/ai/providers` and `/api/admin/ai/models`.
+首次使用时，Spring 会将内置的提供商/模型目录物化到 `ds_model_provider` 和 `ds_model` 表中。管理员可以通过 `/api/admin/ai/providers` 和 `/api/admin/ai/models` 编辑或替换这些记录。
 
-## Credential security
+## 凭证安全
 
-The browser holds a newly typed credential only until the save request completes. Spring encrypts
-it into `ds_secret`; API responses contain only a configured flag and masked hint. Credentials are
-never accepted by chat, skill-review, or model-discovery requests.
+浏览器仅在保存请求完成之前持有新输入的凭证。Spring 会将其加密存入 `ds_secret`；API 响应中只包含一个"已配置"标志和掩码提示。聊天、Skill 审核或模型发现请求一律不接受凭证。
 
-## Adding a provider or model
+## 添加提供商或模型
 
-Use the backend admin APIs to create a provider, save its credential, discover supported models,
-and create or update catalog entries. The frontend deliberately contains no provider SDKs or
-hard-coded executable model catalog.
+使用后端管理 API 来创建提供商、保存其凭证、发现支持的模型，以及创建或更新目录条目。前端有意不包含任何提供商 SDK，也不包含硬编码的可执行模型目录。

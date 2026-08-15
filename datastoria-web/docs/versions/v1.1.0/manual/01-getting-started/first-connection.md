@@ -1,181 +1,181 @@
 ---
-title: First Connection to ClickHouse
-description: Connect DataStoria to your ClickHouse database - HTTP, HTTPS, proxy setup. Step-by-step guide with connection parameters, troubleshooting, and security best practices.
+title: 首次连接 ClickHouse
+description: 将 DataStoria 连接到你的 ClickHouse 数据库 —— HTTP、HTTPS、代理设置。包含连接参数、故障排查与安全最佳实践的逐步指南。
 head:
   - - meta
     - name: keywords
-      content: ClickHouse connection, connect to ClickHouse, ClickHouse HTTP, ClickHouse HTTPS, database connection setup, ClickHouse authentication, secure database connection
+      content: ClickHouse 连接, 连接 ClickHouse, ClickHouse HTTP, ClickHouse HTTPS, 数据库连接配置, ClickHouse 身份认证, 安全的数据库连接
 ---
 
-# First Connection
+# 首次连接
 
-This guide will walk you through connecting DataStoria to your ClickHouse instance for the first time.
+本指南将带你一步步完成 DataStoria 与 ClickHouse 实例的首次连接。
 
-## Before You Begin
+## 开始之前
 
-Make sure you have:
+请确保你已具备：
 
-- ✅ DataStoria installed and running (see [Installation & Setup](./installation.md))
-- ✅ Access to a ClickHouse server (local or remote)
-- ✅ Connection credentials (host, port, username, password, database)
+- ✅ 已安装并正在运行的 DataStoria（参见[安装与配置](./installation.md)）
+- ✅ 可访问的 ClickHouse 服务器（本地或远程）
+- ✅ 连接凭据（主机、端口、用户名、密码、数据库）
 
-## Connection Methods
+## 连接方式
 
-DataStoria supports multiple connection methods depending on your ClickHouse setup:
+DataStoria 支持多种连接方式，取决于你的 ClickHouse 部署情况：
 
-### Standard HTTP Connection
+### 标准 HTTP 连接
 
-This is the most common method for connecting to ClickHouse.
+这是连接 ClickHouse 最常见的方式。
 
-#### Connection Parameters
+#### 连接参数
 
-- **Host**: Your ClickHouse server address (e.g., `localhost`, `clickhouse.example.com`, or an IP address)
-- **Port**: ClickHouse HTTP port (default: `8123`)
-- **Database**: The database name you want to connect to (optional, can be selected later)
-- **Username**: Your ClickHouse username
-- **Password**: Your ClickHouse password
-- **Protocol**: HTTP or HTTPS
+- **Host**：你的 ClickHouse 服务器地址（例如 `localhost`、`clickhouse.example.com` 或某个 IP 地址）
+- **Port**：ClickHouse HTTP 端口（默认：`8123`）
+- **Database**：要连接的数据库名（可选，可以稍后选择）
+- **Username**：你的 ClickHouse 用户名
+- **Password**：你的 ClickHouse 密码
+- **Protocol**：HTTP 或 HTTPS
 
-### Secure HTTPS Connection
+### 安全的 HTTPS 连接
 
-For production environments, use HTTPS for encrypted connections.
+对于生产环境，请使用 HTTPS 加密连接。
 
-#### Additional Parameters
+#### 附加参数
 
-- **Protocol**: Select HTTPS
-- **Port**: Usually `443` for HTTPS (or your configured HTTPS port)
-- **SSL Verification**: Enable to verify SSL certificates
+- **Protocol**：选择 HTTPS
+- **Port**：HTTPS 通常为 `443`（或你配置的 HTTPS 端口）
+- **SSL Verification**：启用以校验 SSL 证书
 
-### Connection via Proxy
+### 通过代理连接
 
-If your ClickHouse server is behind a proxy or load balancer:
+如果你的 ClickHouse 服务器位于代理或负载均衡器之后：
 
-1. Enter the proxy address as the host
-2. Use the proxy port
-3. Ensure the proxy forwards requests to your ClickHouse server
+1. 将代理地址作为主机填写
+2. 使用代理端口
+3. 确保代理会将请求转发到你的 ClickHouse 服务器
 
-## Step-by-Step Connection Guide
+## 逐步连接指南
 
-### Step 1: Open DataStoria
+### 第 1 步：打开 DataStoria
 
-1. Navigate to `http://localhost:3000` (or your configured port)
-2. You'll see the DataStoria welcome screen
+1. 访问 `http://localhost:3000`（或你配置的端口）
+2. 你将看到 DataStoria 的欢迎界面
 
-![DataStoria Welcome Screen](./img/welcome.png)
+![DataStoria 欢迎界面](../../en/manual/01-getting-started/img/welcome.png)
 
-### Step 2: Create Your First Connection
+### 第 2 步：创建你的第一个连接
 
-Click the 'Create Your First Connection' button, it will brings you to the connection setup dialog
+点击 'Create Your First Connection'（创建你的第一个连接）按钮，将进入连接配置对话框。
 
-![DataStoria Connection Dialog](./img/create-new-connection.png)
+![DataStoria 连接对话框](../../en/manual/01-getting-started/img/create-new-connection.png)
 
-### Step 3: Enter Connection Details
+### 第 3 步：填写连接详情
 
-Fill in the connection form with your ClickHouse details:
+在连接表单中填写你的 ClickHouse 信息：
 
-| Property | Description | Example |
+| 属性 | 说明 | 示例 |
 |----------|------------|---------|
-| URL | The ClickHouse server URL with protocol and port | `http://localhost:8123` |
-| User | Your ClickHouse username | `default` |
-| Password | (Optional) Your ClickHouse instance password | `<your ClickHouse instance password>` |
-| Cluster | (Optional) If your ClickHouse cluster has multiple replicas, you can set this to your cluster name so that you can access all nodes in the this application. <br/><br/>If configured, it should be the name from your cluster configuration (SHOW CLUSTERS). | `my_cluster` |
-| Connection Name | A friendly name to identify this connection. By default it's auto filled by the host name in the URL, but it's recommended to change it to your own. | `My ClickHouse` | 
+| URL | 带协议和端口的 ClickHouse 服务器 URL | `http://localhost:8123` |
+| User | 你的 ClickHouse 用户名 | `default` |
+| Password | （可选）你的 ClickHouse 实例密码 | `<你的 ClickHouse 实例密码>` |
+| Cluster | （可选）如果你的 ClickHouse 集群有多个副本，可以将其设置为集群名称，从而在本应用中访问所有节点。<br/><br/>如果配置，它应当是你集群配置中的名称（SHOW CLUSTERS）。 | `my_cluster` |
+| Connection Name | 用于标识该连接的友好名称。默认取 URL 中的主机名自动填充，建议改为自定义名称。 | `My ClickHouse` |
 
-### Step 4: Test Connection
+### 第 4 步：测试连接
 
-1. Click **"Test Connection"** to verify your settings
-2. Wait for the connection test to complete
-3. If successful, you'll see a confirmation message will be shown on the left of the button
+1. 点击 **"Test Connection"**（测试连接）以验证你的配置
+2. 等待连接测试完成
+3. 如果成功，按钮左侧会显示一条确认消息
 
-![Successful connection test dialog showing green checkmark and connection confirmation message](./img/test-connection-ok.png)
+![连接测试成功的对话框，显示绿色对勾和连接确认消息](../../en/manual/01-getting-started/img/test-connection-ok.png)
 
-> **NOTE**
+> **注意**
 >
-> If connection fails despite correct settings, the cause may be **CORS**. ClickHouse 23.11 and later enable CORS by default. For earlier versions, configure CORS manually in `config.xml`. See [PR #56483](https://github.com/ClickHouse/ClickHouse/pull/56483) for configuration details.
+> 如果配置正确但连接仍然失败，原因可能是 **CORS**。ClickHouse 23.11 及之后版本默认启用 CORS。对于更早的版本，需要在 `config.xml` 中手动配置 CORS。配置细节参见 [PR #56483](https://github.com/ClickHouse/ClickHouse/pull/56483)。
 >
 
-### Step 5: Save and Connect
+### 第 5 步：保存并连接
 
-Click **"Save"** to store the connection and the application will connect to your ClickHouse instance and bring you to the main UI.
+点击 **"Save"**（保存）存储该连接，应用将连接到你的 ClickHouse 实例并进入主界面。
 
-> NOTE: Connection information is saved in your local NOT the server side for privacy consideration.
-
-
-## Basic Navigation
-
-Once connected, the application automatically opens the query editor and dashboard of the node where the first response is returned, and you'll see the main DataStoria interface like below:
-
-![DataStoria main interface showing sidebar navigation, schema tree, query editor, and dashboard components](./img/main-page.png)
+> 注意：出于隐私考虑，连接信息保存在你本地，而不是服务端。
 
 
-### Main Components
+## 基本导航
 
-1. **Sidebar** — Navigate between:
-   - Connections
-   - Query Tabs
-   - Chat Tabs
-   - Dashboards
-   - System Tables Instrospection
-   - Settings
+连接成功后，应用会自动打开查询编辑器，以及最先返回响应的那个节点的 Dashboard，你会看到如下所示的 DataStoria 主界面：
 
-2. **Schema Tree**
-   
-   The view shows all database/tables/columns information and support global search capability.
-   It's also the main entry point of other features like table metadata.
-
-3. **Main Tab Region**
-   The main work region, including query editors, dashboards...
-
-4. **Right panel**
-   By default it's hidden, and chat panel can be displayed there
-
-### Your First Query
-
-Click the 'Query' tab or click the query icon button from the side bar, it shows the query view, and write the SQL in the editor and run it.
-
-![Query editor displaying first SQL query execution with results table showing data from ClickHouse](./img/first-query.png)
+![DataStoria 主界面，显示侧边栏导航、Schema 树、查询编辑器和 Dashboard 组件](../../en/manual/01-getting-started/img/main-page.png)
 
 
-## Multiple Connections
+### 主要组件
 
-DataStoria supports managing multiple ClickHouse clusters:
+1. **侧边栏（Sidebar）** —— 在以下入口之间导航：
+   - 连接
+   - 查询页签
+   - 聊天页签
+   - Dashboard
+   - 系统表内省
+   - 设置
 
-1. **Add New Connection**: Move mouse to the database icon button on the side bar, and  choose "Add Connection"
-2. **Switch Between Connections**: Select connection from the drop down list of the database icon button on the side bar
-3. **Manage Connections**: Click the 'Edit' icon button of a selected connection from the drop down connection list of database icon button on the side bar
+2. **Schema 树**
 
-## Connection Troubleshooting
+   该视图展示所有数据库/表/列的信息，并支持全局搜索能力。
+   它也是表元数据等其他功能的主要入口。
 
-### Common Issues
+3. **主页签区域**
+   主要的工作区域，包括查询编辑器、Dashboard 等。
 
-#### Connection Refused
+4. **右侧面板**
+   默认隐藏，可用于展示聊天面板。
 
-**Problem**: "Connection refused" or "Cannot connect to server"
+### 你的第一条查询
 
-**Solutions**:
-- Verify ClickHouse is running
-- Check firewall settings
-- Verify the host and port are correct
-- Ensure ClickHouse HTTP interface is enabled
-- Verify HTTPS or HTTP
+点击 'Query' 页签，或点击侧边栏上的查询图标按钮，即可显示查询视图；在编辑器中编写 SQL 并运行。
 
-#### Authentication Failed
-
-**Problem**: "Authentication failed" or "Invalid credentials"
-
-**Solutions**:
-- Double-check username and password
-- Verify the user exists in ClickHouse
-- Check if the user has proper permissions
-- Try connecting with the `default` user first
+![查询编辑器中执行第一条 SQL 查询，结果表显示来自 ClickHouse 的数据](../../en/manual/01-getting-started/img/first-query.png)
 
 
-## What's Next?
+## 多连接管理
 
-Now that you're connected, explore these features:
+DataStoria 支持管理多个 ClickHouse 集群：
 
-- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** — Browse your databases and tables
-- **[SQL Editor](../03-query-experience/sql-editor.md)** — Start writing and executing queries
-- **[Natural Language Queries](../02-ai-features/natural-language-sql.md)** — Ask questions in plain English
+1. **添加新连接**：将鼠标移到侧边栏的数据库图标按钮上，选择 "Add Connection"
+2. **在连接之间切换**：从侧边栏数据库图标按钮的下拉列表中选择连接
+3. **管理连接**：在侧边栏数据库图标按钮的下拉连接列表中，点击所选连接的 'Edit'（编辑）图标按钮
+
+## 连接故障排查
+
+### 常见问题
+
+#### 连接被拒绝
+
+**问题**："Connection refused" 或 "Cannot connect to server"
+
+**解决方案**：
+- 确认 ClickHouse 正在运行
+- 检查防火墙设置
+- 确认主机和端口正确
+- 确保 ClickHouse HTTP 接口已启用
+- 核实是 HTTPS 还是 HTTP
+
+#### 身份认证失败
+
+**问题**："Authentication failed" 或 "Invalid credentials"
+
+**解决方案**：
+- 仔细核对用户名和密码
+- 确认该用户存在于 ClickHouse 中
+- 检查用户是否具有相应权限
+- 先尝试用 `default` 用户连接
+
+
+## 接下来做什么？
+
+连接成功后，可以探索以下功能：
+
+- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** —— 浏览你的数据库和表
+- **[SQL 编辑器](../03-query-experience/sql-editor.md)** —— 开始编写和执行查询
+- **[自然语言查询](../02-ai-features/natural-language-sql.md)** —— 用平实的语言提问
 
 

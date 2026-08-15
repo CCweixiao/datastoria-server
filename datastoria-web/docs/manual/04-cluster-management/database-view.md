@@ -1,196 +1,196 @@
 ---
-title: Database View
-description: Comprehensive database overview with statistics, table information, and dependency visualization. Monitor database health, size distribution, ongoing operations, and explore table relationships in ClickHouse.
+title: 数据库视图（Database View）
+description: 全面的数据库概览，包含统计信息、表信息与依赖可视化。监控数据库健康度、大小分布、进行中的操作，并探索 ClickHouse 中的表关系。
 head:
   - - meta
     - name: keywords
-      content: database view, database overview, database statistics, database dashboard, ClickHouse database, database metrics, table statistics, database size, database health, database monitoring
+      content: database view, 数据库视图, database overview, database statistics, database dashboard, ClickHouse database, database metrics, table statistics, database size, database health, database monitoring
 ---
 
-# Database View
+# 数据库视图（Database View）
 
-The Database View provides a comprehensive overview of a ClickHouse database, including statistics, table information, and dependency visualization. It serves as a central hub for understanding database structure, performance, and health, enabling efficient database monitoring and management.
+数据库视图提供 ClickHouse 数据库的全面概览，包括统计信息、表信息和依赖可视化。它是理解数据库结构、性能与健康度的中心枢纽，助力高效的数据库监控与管理。
 
-## Overview
+## 概览
 
-The Database View combines multiple perspectives into a unified interface:
+数据库视图将多个视角整合到统一界面中：
 
-- **Database Overview Tab**: Statistics, metrics, and table information
-- **Database Dependency Tab**: Visual graph of table dependencies within the database
+- **数据库概览标签页（Database Overview）**：统计信息、指标和表信息
+- **数据库依赖标签页（Database Dependency）**：数据库内表依赖关系的可视化图
 
-![Database View showing comprehensive database overview with statistics, table information, and dependency visualization](./img/database-tab.jpg)
+![数据库视图，展示包含统计信息、表信息和依赖可视化的全面数据库概览](../../en/manual/04-cluster-management/img/database-tab.jpg)
 
-## Accessing the Database View
+## 访问数据库视图
 
-To access the Database View in ClickHouse Console:
+在 ClickHouse Console 中访问数据库视图：
 
-1. **Navigate to Database**: Click on a database name in the Schema Explorer sidebar
-2. **Database Tab Opens**: The Database View opens automatically in a new tab
-3. **View Overview**: The Database Overview tab is displayed by default, showing comprehensive database statistics and metrics
+1. **导航到数据库**：点击 Schema Explorer 侧边栏中的数据库名
+2. **打开数据库标签页**：数据库视图自动在新标签页中打开
+3. **查看概览**：默认显示数据库概览标签页，展示全面的数据库统计信息和指标
 
-## Database Overview Tab
+## 数据库概览标签页
 
-The Database Overview tab provides comprehensive statistics and information about your ClickHouse database, enabling you to monitor database health, track performance metrics, and understand database structure at a glance.
+数据库概览标签页提供关于 ClickHouse 数据库的全面统计信息和详情，帮助你监控数据库健康度、跟踪性能指标，并一目了然地了解数据库结构。
 
-### Database Metadata
+### 数据库元数据
 
-View essential database information:
+查看关键数据库信息：
 
-- **Database Name**: The name of the database
-- **Engine Type**: Database engine (if applicable)
-- **Metadata**: All metadata fields from `system.databases`
+- **数据库名**：数据库的名称
+- **引擎类型**：数据库引擎（如果适用）
+- **元数据**：来自 `system.databases` 的所有元数据字段
 
-### Key Statistics
+### 关键统计信息
 
-The overview displays important metrics:
+概览展示重要指标：
 
-#### Database Size
+#### 数据库大小
 
-- **Total Size**: Combined size of all tables in the database
-- **Size on Disk**: Actual disk space used
-- **Uncompressed Size**: Size before compression
-- **Size Percentage**: Percentage of total disk space used
+- **总大小**：数据库中所有表的总大小
+- **磁盘大小**：实际占用的磁盘空间
+- **未压缩大小**：压缩前的大小
+- **大小占比**：占用总磁盘空间的百分比
 
-#### Table Information
+#### 表信息
 
-- **Number of Tables**: Total count of tables in the database
-- **Table List**: Detailed table information with:
-  - Table name
-  - Engine type
-  - Row count
-  - Size on disk
-  - Uncompressed size
-  - Size distribution percentage
-  - Part count
-  - Metadata modification time
-  - Data modification time
+- **表数量**：数据库中表的总数
+- **表列表**：详细的表信息，包括：
+  - 表名
+  - 引擎类型
+  - 行数
+  - 磁盘大小
+  - 未压缩大小
+  - 大小分布占比
+  - Part 数量
+  - 元数据修改时间
+  - 数据修改时间
 
-#### Size Distribution
+#### 大小分布
 
-- **Size Percentage of All Disks**: How much of total disk space this database uses
-- **Size Percentage of All Databases**: How this database compares to others
-- **Table Size Distribution**: Visual breakdown of size by table
+- **占所有磁盘的大小比例**：该数据库使用了多少总磁盘空间
+- **占所有数据库的大小比例**：该数据库与其他数据库的对比
+- **表大小分布**：按表可视化拆解大小
 
-### Ongoing Operations
+### 进行中的操作
 
-Monitor active database operations:
+监控活跃的数据库操作：
 
-#### Ongoing Merges
+#### 进行中的 Merge
 
-- **Merge Count**: Number of active merge operations
-- **Merge Details**: Click to see detailed merge information:
-  - Table name
-  - Result part name
-  - Number of parts being merged
-  - Elapsed time
-  - Progress percentage
-  - Memory usage
-  - Bytes read/written
-  - Rows read/written
+- **Merge 数量**：活跃 Merge 操作的数量
+- **Merge 详情**：点击查看详细的 Merge 信息：
+  - 表名
+  - 结果 Part 名称
+  - 正在被合并的 Part 数量
+  - 已耗时间
+  - 进度百分比
+  - 内存使用
+  - 读/写字节数
+  - 读/写行数
 
-#### Ongoing Mutations
+#### 进行中的 Mutation
 
-- **Mutation Count**: Number of active mutation operations
-- **Mutation Details**: Click to see detailed mutation information:
-  - Database and table
+- **Mutation 数量**：活跃 Mutation 操作的数量
+- **Mutation 详情**：点击查看详细的 Mutation 信息：
+  - 数据库和表
   - Mutation ID
-  - Command being executed
-  - Parts remaining
-  - Failure information (if any)
+  - 正在执行的命令
+  - 剩余 Part
+  - 失败信息（如果有）
 
-### Table Size Analysis
+### 表大小分析
 
-View detailed table size information:
+查看详细的表大小信息：
 
-- **Sortable Table**: Sort by size, row count, or modification time
-- **Quick Access**: Click table names to open table details
-- **Size Visualization**: See size distribution with percentage bars
-- **Engine Information**: View table engine types
-- **Modification Times**: Track when metadata and data were last modified
+- **可排序表格**：按大小、行数或修改时间排序
+- **快速访问**：点击表名打开表详情
+- **大小可视化**：通过百分比条查看大小分布
+- **引擎信息**：查看表引擎类型
+- **修改时间**：跟踪元数据和数据的最近修改时间
 
-### Cluster Mode Features
+### 集群模式功能
 
-When connected to a cluster, additional metrics are available:
+连接到集群时，可以使用更多指标：
 
-#### Cluster-wide Statistics
+#### 集群级统计
 
-- **Aggregate Database Size**: Total size across all nodes
-- **Node Breakdown**: Size distribution by node
-- **Compression Ratios**: Compression statistics per node
-- **Part Counts**: Part distribution across cluster
+- **聚合数据库大小**：所有节点上的总大小
+- **节点拆解**：按节点的大小分布
+- **压缩比**：各节点的压缩统计
+- **Part 数量**：Part 在集群中的分布
 
-#### Node Comparison
+#### 节点对比
 
-Compare database size and statistics across cluster nodes:
+对比各集群节点的数据库大小和统计信息：
 
-- **Hostname**: Each node in the cluster
-- **Part Count**: Number of parts per node
-- **Row Count**: Total rows per node
-- **Disk Size**: Size on disk per node
-- **Compressed/Uncompressed Size**: Storage metrics
-- **Compression Ratio**: Compression efficiency
+- **主机名**：集群中的每个节点
+- **Part 数量**：每个节点的 Part 数量
+- **行数**：每个节点的总行数
+- **磁盘大小**：每个节点的磁盘大小
+- **压缩/未压缩大小**：存储指标
+- **压缩比**：压缩效率
 
-## Database Dependency Tab
+## 数据库依赖标签页
 
-The Database Dependency tab shows a visual graph of all table dependencies within the database. This is a powerful tool for understanding the relationships between your tables, tracking data lineage, and identifying dependencies for materialized views and other database objects.
+数据库依赖标签页以可视化图的形式展示数据库内所有表的依赖关系。它是理解表之间关系、跟踪数据血缘，以及识别物化视图和其他数据库对象依赖的强大工具。
 
-### Features
+### 功能
 
-- **Complete Dependency Graph**: All tables and their relationships, including:
-    - Distributed tables and their local tables
-    - Source and targets of Materialized Views
+- **完整依赖图**：所有表及其关系，包括：
+    - Distributed 表及其本地表
+    - 物化视图（Materialized View）的源与目标
     - Dictionary
-    - MySQL table engine and MySQL server
-    - Kafka table and Kafka server
-- **Interactive Navigation**: Click nodes to view table details
-- **Upstream/Downstream View**: See dependency directions
-- **Table Details Panel**: View table DDL statements and metadata
+    - MySQL 表引擎与 MySQL 服务器
+    - Kafka 表与 Kafka 服务器
+- **交互式导航**：点击节点查看表详情
+- **上游/下游视图**：查看依赖方向
+- **表详情面板**：查看表 DDL 语句和元数据
 
-For detailed information about the dependency view, see [Dependency View](./dependency-view.md).
+关于依赖视图的详细信息，参见[依赖视图](./dependency-view.md)。
 
 
-## Limitations
+## 限制
 
-When using the Database View, be aware of the following limitations:
+使用数据库视图时，请注意以下限制：
 
-- **System Table Access**: Requires read access to ClickHouse system tables (`system.databases`, `system.tables`, `system.parts`, etc.)
-- **Data Retention**: Metrics depend on ClickHouse's system tables retention policies and may not show historical data beyond the retention period
-- **Performance Impact**: Querying large databases with many tables may be slow, especially when loading comprehensive statistics
-- **Real-time Accuracy**: Some metrics may have slight delays as they are based on system table snapshots rather than real-time data
-- **Version Compatibility**: Some features may not be available in older ClickHouse versions, as they depend on specific system table columns and functionality
+- **系统表访问**：需要对 ClickHouse 系统表（`system.databases`、`system.tables`、`system.parts` 等）的读权限
+- **数据保留期**：指标取决于 ClickHouse 系统表的保留策略，可能不会显示超出保留期的历史数据
+- **性能影响**：查询包含大量表的大型数据库可能较慢，尤其是在加载全面统计信息时
+- **实时准确性**：部分指标基于系统表快照而非实时数据，可能有轻微延迟
+- **版本兼容性**：部分功能依赖特定的系统表列和功能，在较旧的 ClickHouse 版本中可能不可用
 
-## Best Practices
+## 最佳实践
 
-### Regular Monitoring
+### 定期监控
 
-- **Schedule Reviews**: Regularly review database statistics
-- **Track Trends**: Monitor size and operation trends over time
-- **Set Alerts**: Use metrics to identify issues early
+- **安排审查**：定期查看数据库统计信息
+- **跟踪趋势**：随时间监控大小和操作趋势
+- **设置告警**：利用指标尽早发现问题
 
-### Performance Optimization
+### 性能优化
 
-- **Identify Large Tables**: Focus optimization on large tables
-- **Monitor Operations**: Track merge and mutation performance
-- **Balance Resources**: Use cluster metrics to balance load
+- **识别大表**：将优化重点放在大表上
+- **监控操作**：跟踪 Merge 和 Mutation 性能
+- **均衡资源**：利用集群指标均衡负载
 
-### Maintenance Planning
+### 维护规划
 
-- **Plan Maintenance**: Use statistics to plan maintenance windows
-- **Track Changes**: Monitor modification times for change tracking
-- **Optimize Storage**: Use size information for storage optimization
+- **规划维护**：利用统计信息规划维护窗口
+- **跟踪变更**：通过修改时间跟踪变更
+- **优化存储**：利用大小信息优化存储
 
-## Integration with Other Features
+## 与其他功能的集成
 
-- **Schema Explorer**: Navigate to specific tables from the overview
-- **Table View**: Open detailed table views from the table list
-- **Dependency View**: Access dependency visualization from the dependency tab
-- **Cluster Dashboard**: Compare with cluster-wide metrics
-- **Query Editor**: Use database information when writing queries
+- **Schema Explorer**：从概览导航到具体表
+- **表视图（Table View）**：从表列表打开详细的表视图
+- **依赖视图（Dependency View）**：通过依赖标签页访问依赖可视化
+- **Cluster Dashboard**：与集群级指标对比
+- **Query 编辑器**：编写查询时使用数据库信息
 
-## Next Steps
+## 下一步
 
-- **[Dependency View](./dependency-view.md)** — Explore table dependencies and relationships
-- **[Table View](./table-view.md)** — View detailed table information
-- **[Cluster Dashboard](../05-monitoring-dashboards/cluster-dashboard.md)** — Monitor cluster-wide metrics
-- **[Node Dashboard](../05-monitoring-dashboards/node-dashboard.md)** — View individual node performance
-- **[Schema Explorer](./schema-explorer.md)** — Navigate database structure
+- **[依赖视图](./dependency-view.md)** —— 探索表依赖和关系
+- **[表视图](./table-view.md)** —— 查看详细的表信息
+- **[Cluster Dashboard](../05-monitoring-dashboards/cluster-dashboard.md)** —— 监控集群级指标
+- **[Node Dashboard](../05-monitoring-dashboards/node-dashboard.md)** —— 查看单节点性能
+- **[Schema Explorer](./schema-explorer.md)** —— 浏览数据库结构

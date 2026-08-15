@@ -1,39 +1,39 @@
 ---
-title: Error Diagnostics
-description: Smart SQL error diagnostics with inline error highlighting, precise location detection, and AI-powered fix suggestions. Quickly identify and resolve ClickHouse query errors.
+title: 错误诊断
+description: 智能 SQL 错误诊断，提供行内错误高亮、精确定位检测以及 AI 驱动的修复建议。快速识别并解决 ClickHouse 查询错误。
 head:
   - - meta
     - name: keywords
-      content: error diagnostics, SQL error detection, query error highlighting, error location, SQL debugging, ClickHouse errors, syntax error detection, AI error fixes
+      content: 错误诊断, SQL 错误检测, 查询错误高亮, 错误定位, SQL 调试, ClickHouse 错误, 语法错误检测, AI 错误修复
 ---
 
-# Error Diagnostics
+# 错误诊断
 
-DataStoria provides built-in error diagnostics to help you quickly identify and resolve SQL query errors. In addition to showing the original ClickHouse error message, it can highlight the exact error location in your SQL and (optionally) let you ask AI for help.
+DataStoria 提供内置的错误诊断，帮助你快速识别和解决 SQL 查询错误。除了显示 ClickHouse 原始错误信息之外，它还能高亮 SQL 中的确切错误位置，并且（可选）让你向 AI 求助。
 
-## Overview
+## 概览
 
-When a query fails, DataStoria's error diagnostics system provides:
+当查询失败时，DataStoria 的错误诊断系统提供：
 
-- **Detailed Error Messages**: The original ClickHouse error message (code, message, and context)
-- **Error Location Highlighting**: Inline pointers with line/column context to pinpoint the failing part
-- **AI-Powered Fix Suggestions**: A shortcut to “Ask AI for Fix” when the error is non-obvious
+- **详细的错误信息**：ClickHouse 原始错误信息（错误码、消息和上下文）
+- **错误位置高亮**：带行/列上下文的行内指针，精确定位出错的部分
+- **AI 驱动的修复建议**：当错误不明显时，提供“Ask AI for Fix”的快捷入口
 
-## Error Location Highlighting
+## 错误位置高亮
 
-ClickHouse error messages can be verbose and time-consuming to act on—especially for syntax and identifier errors in longer queries. To address this, DataStoria parses common ClickHouse error patterns and renders an **inline error pointer** directly inside your SQL, so you can immediately see what needs fixing.
+ClickHouse 的错误信息可能冗长且难以处理——对于较长查询中的语法错误和标识符错误尤其如此。为此，DataStoria 会解析常见的 ClickHouse 错误模式，并在你的 SQL 中直接渲染**行内错误指针**，让你立即看到需要修复的地方。
 
-Here's an example:
+下面是一个示例：
 
-![Error diagnostics interface showing AI-powered error explanation with suggestions for fixing a typo in column name 'event_tim'](./img/error-diagnostics-1.jpg)
+![错误诊断界面，显示 AI 驱动的错误解释，以及修复列名 'event_tim' 拼写错误的建议](../../en/manual/03-query-experience/img/error-diagnostics-1.jpg)
 
-Instead of only showing a long error message like:
+相比只显示一条如下所示的冗长错误信息：
 
 ```text
 Code: 47. DB::Exception: Unknown expression or function identifier `event_tim` in scope SELECT toStartOfHour(event_time), count() FROM system.query_log WHERE event_time > (now() - toIntervalHour(3)) GROUP BY toStartOfHour(event_tim) ORDER BY 1 ASC. Maybe you meant: ['event_time']. (UNKNOWN_IDENTIFIER) (version 25.6.2.5 (official build))
 ```
 
-DataStoria pinpoints the error location in the original query and shows it inline:
+DataStoria 会在原始查询中精确定位错误位置并以内联方式展示：
 
 ```sql
 select toStartOfHour(event_time), count() 
@@ -44,16 +44,16 @@ group by toStartOfHour(event_tim)
 order by 1
 ```
 
-With this inline context, you can fix the SQL immediately without scanning the full ClickHouse error text.
+借助这一内联上下文，你可以立即修复 SQL，而无需通读完整的 ClickHouse 错误文本。
 
-> NOTE
+> 注意
 >
-> Error location highlighting is **not** an AI feature. It does **not** consume tokens.
+> 错误位置高亮**不是** AI 功能，也**不会**消耗 token。
 > 
 
-### Examples
+### 示例
 
-DataStoria supports multiple ClickHouse error patterns. Here are a few additional examples:
+DataStoria 支持多种 ClickHouse 错误模式。以下是另外几个示例：
 
 ```sql
 select toStartOfHour(event_time), count() 
@@ -90,20 +90,20 @@ group by toStartOfHour(event_tim)
 order by 1
 ```
 
-## AI-Powered Fix Suggestions
+## AI 驱动的修复建议
 
-For errors that require more context (permissions, cluster setup, function usage, performance-related settings, etc.), you can use the integrated AI feature to **Ask AI for Fix**.
+对于需要更多上下文的错误（权限、集群配置、函数用法、与性能相关的设置等），你可以使用集成的 AI 功能 **Ask AI for Fix**。
 
-> **Learn more**: See [Ask AI for Help](../02-ai-features/ask-ai-for-help.md) for detailed information about AI-powered error assistance and how to get instant fixes with one click.
-
-
-## Limitations
-
-- **Heuristic-based**: Error location highlighting is based on pattern analysis. In some cases it may point to the wrong spot. If that happens, submit a [sanitized issue](https://github.com/CCweixiao/datastoria-server/issues) without credentials or production row data.
+> **了解更多**：参见 [Ask AI for Help](../02-ai-features/ask-ai-for-help.md)，详细了解 AI 驱动的错误辅助以及如何一键获得即时修复。
 
 
-## Next Steps
+## 限制
 
-- **[Query Execution](./query-execution.md)** — Learn how to execute queries and handle results
-- **[SQL Editor](./sql-editor.md)** — Master the SQL editor features
-- **[Query Optimization](../02-ai-features/query-optimization.md)** — Optimize queries for better performance
+- **基于启发式**：错误位置高亮基于模式分析。在某些情况下它可能指向错误的位置。如果发生这种情况，请提交一个[脱敏后的 issue](https://github.com/CCweixiao/datastoria-server/issues)，其中不要包含凭据或生产行数据。
+
+
+## 后续步骤
+
+- **[查询执行](./query-execution.md)** —— 学习如何执行查询并处理结果
+- **[SQL 编辑器](./sql-editor.md)** —— 精通 SQL 编辑器的各项功能
+- **[查询优化](../02-ai-features/query-optimization.md)** —— 优化查询以获得更好的性能

@@ -1,157 +1,156 @@
 ---
-title: system.query_log Introspection
-description: Analyze ClickHouse query_log with filters, charts, and AI insights. Monitor query performance, debug errors, and track execution patterns with visual query log analysis.
+title: system.query_log 内省
+description: 通过过滤、图表和 AI 洞察分析 ClickHouse query_log。监控查询性能、调试错误，并借助可视化查询日志分析跟踪执行模式。
 head:
   - - meta
     - name: keywords
       content: query_log, system.query_log, query log analysis, query monitoring, query performance, ClickHouse queries, query debugging, query metrics, execution tracking
 ---
 
-# system.query_log Introspection
+# system.query_log 内省
 
-The Query Log Introspection tool provides deep insights into all queries executed on your ClickHouse cluster in visualized way.
+Query 日志内省工具以可视化方式提供对 ClickHouse 集群上所有已执行查询的深度洞察。
 
-It provides multiple filters and distribution charts as well as a detail table for us to quick find queries from the UI without manually writing multiple SQLs on the `system.query_log` table.
+它提供多种过滤器和分布图表以及明细表，让我们无需在 `system.query_log` 表上手动编写多条 SQL，即可从 UI 中快速找到查询。
 
-## Prerequisites
+## 前置条件
 
-> **Note**: Read access to the `system.query_log` table is required to use this introspection tool. Ensure your user has the necessary system table privileges.
+> **注意**：使用该内省工具需要对 `system.query_log` 表的读权限。请确保你的用户具备必要的系统表权限。
 
 ## UI
 
-<Video src="./img/system-query-log.webm" alt="System query log interface displaying detailed query execution metrics including duration, memory usage, and rows processed" />
+<Video src="/manual/04-cluster-management/img/system-query-log.webm" alt="system.query_log 界面，展示详细的查询执行指标，包括耗时、内存使用和处理行数" />
 
-## When you can use the query log instropection tool
+## 何时使用 Query 日志内省工具
 
-### Performance Analysis
+### 性能分析
 
-1. **Filter by Duration**: Sort by duration to find slow queries
-2. **Analyze Patterns**: Use distribution chart to identify peak times
-3. **Compare Nodes**: Filter by hostname to compare performance across nodes
-4. **Track Trends**: Use time range selector to see performance over time
+1. **按耗时过滤**：按耗时排序找出慢查询
+2. **分析模式**：使用分布图识别高峰时段
+3. **对比节点**：按主机名过滤对比各节点性能
+4. **跟踪趋势**：使用时间范围选择器查看性能随时间的变化
 
-### Error Debugging
+### 错误调试
 
-1. **Filter by Exception**: Use exception_code filter to focus on errors
-2. **View Error Details**: Expand rows to see full error messages
-3. **Use AI Explain**: Click "Explain Error" to get AI-powered error analysis
-4. **Track Error Frequency**: Use distribution chart to see error spikes
+1. **按异常过滤**：使用 exception_code 过滤器聚焦错误
+2. **查看错误详情**：展开行查看完整错误信息
+3. **使用 AI Explain**：点击"Explain Error"获取 AI 驱动的错误分析
+4. **跟踪错误频率**：使用分布图查看错误激增
 
-### Query Optimization
+### 查询优化
 
-1. **Identify Expensive Queries**: Sort by read_bytes or duration
-2. **Use AI Optimization**: Click "Ask AI for Optimization" on slow queries
-3. **Compare Queries**: Filter by table to see all queries for a table
-4. **Monitor Improvements**: Track query performance over time
+1. **识别高开销查询**：按 read_bytes 或耗时排序
+2. **使用 AI 优化**：对慢查询点击"Ask AI for Optimization"
+3. **对比查询**：按表过滤查看某张表的所有查询
+4. **监控改进**：随时间跟踪查询性能
 
-### Security and Auditing
+### 安全与审计
 
-1. **Filter by User**: Monitor queries by specific users
-2. **Track Table Access**: Filter by table to see who accesses what
-3. **Review Failed Queries**: Filter by exception to see security-related errors
-4. **Export Data**: Use table features to export audit logs
+1. **按用户过滤**：监控特定用户的查询
+2. **跟踪表访问**：按表过滤查看谁在访问什么
+3. **审查失败查询**：按异常过滤查看与安全相关的错误
+4. **导出数据**：使用表格功能导出审计日志
 
-## Query Log Filtering
+## Query 日志过滤
 
-The query log supports comprehensive filtering:
+Query 日志支持全面的过滤：
 
-### Time Filter
+### 时间过滤器
 
-- **Type**: DateTime range selector
-- **Default**: Last 15 minutes
-- **Options**: Predefined ranges or custom time selection
-- **Timezone**: Respects your configured timezone
+- **类型**：DateTime 范围选择器
+- **默认**：最近 15 分钟
+- **选项**：预定义范围或自定义时间选择
+- **时区**：遵循你配置的时区
 
-### Hostname Filter
+### 主机名过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct hostnames from `system.clusters`
-- **Default**: Current node (in single-node mode, this filter is hidden)
-- **Use Case**: Filter queries by specific nodes in a cluster
+- **类型**：多选下拉框
+- **来源**：`system.clusters` 中的去重主机名
+- **默认**：当前节点（单节点模式下隐藏此过滤器）
+- **使用场景**：在集群中按特定节点过滤查询
 
-### Query Type Filter
+### 查询类型过滤器
 
-- **Type**: Multi-select dropdown
-- **Options**:
+- **类型**：多选下拉框
+- **选项**：
   - QueryStart
   - QueryFinish
   - ExceptionBeforeStart
   - ExceptionWhileProcessing
-- **Default**: Excludes QueryStart (shows completed/failed queries)
-- **Use Case**: Focus on completed queries or errors
+- **默认**：排除 QueryStart（展示已完成/失败的查询）
+- **使用场景**：聚焦已完成的查询或错误
 
-### Query Kind Filter
+### 查询 Kind 过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct query_kind values from `system.query_log`
-- **Options**: Select, Insert, Create, Drop, Alter, etc.
-- **Default**: Excludes Insert queries
-- **Use Case**: Filter by operation type
+- **类型**：多选下拉框
+- **来源**：`system.query_log` 中去重的 query_kind 值
+- **选项**：Select、Insert、Create、Drop、Alter 等
+- **默认**：排除 Insert 查询
+- **使用场景**：按操作类型过滤
 
-### Database Filter
+### 数据库过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct databases from `system.query_log`
-- **Use Case**: Focus on queries for specific databases
+- **类型**：多选下拉框
+- **来源**：`system.query_log` 中去重的数据库
+- **使用场景**：聚焦特定数据库的查询
 
-### Table Filter
+### 表过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct tables from `system.query_log`
-- **Supported Comparators**: =, !=, in, not in
-- **Use Case**: Track queries accessing specific tables
+- **类型**：多选下拉框
+- **来源**：`system.query_log` 中去重的表
+- **支持的比较运算符**：=、!=、in、not in
+- **使用场景**：跟踪访问特定表的查询
 
-### Exception Code Filter
+### 异常代码过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct exception_code values
-- **Use Case**: Filter by specific error types
+- **类型**：多选下拉框
+- **来源**：去重的 exception_code 值
+- **使用场景**：按特定错误类型过滤
 
-### User Filter
+### 用户过滤器
 
-- **Type**: Multi-select dropdown
-- **Source**: Distinct initial_user values
-- **Use Case**: Monitor queries by specific users
+- **类型**：多选下拉框
+- **来源**：去重的 initial_user 值
+- **使用场景**：监控特定用户的查询
 
-### Input Filter
+### 输入过滤器
 
-- **Type**: Free-text search using ClickHouse filter expression
-- **Scope**: Searches across all columns
-- **Use Case**: Quick search for specific queries, users, or error messages
-- **Example**:
+- **类型**：使用 ClickHouse 过滤表达式的自由文本搜索
+- **范围**：搜索所有列
+- **使用场景**：快速搜索特定查询、用户或错误信息
+- **示例**：
 
   ```sql
   query like '%metrics%'
   ```
 
-## AI-Powered Actions
+## AI 驱动的操作
 
-Each query log row includes an action menu with AI-powered features:
+每条 Query 日志行的操作菜单中包含 AI 驱动的功能：
 
-### Ask AI for Optimization
+### Ask AI for Optimization（请求 AI 优化）
 
-- **Icon**: Sparkle/Wand icon
-- **Function**: Analyzes the query and suggests optimizations
-- **Process**:
-  1. Extracts the query text from the log
-  2. Opens a new chat with optimization request
-- **Use Case**: Get AI suggestions for improving query performance
+- **图标**：Sparkle/Wand 图标
+- **功能**：分析查询并给出优化建议
+- **流程**：
+  1. 从日志中提取查询文本
+  2. 打开一个带优化请求的新聊天
+- **使用场景**：获取改进查询性能的 AI 建议
 
-### Explain Error
+### Explain Error（解释错误）
 
-- **Icon**: Alert circle icon (only shown for queries with exceptions)
-- **Function**: Explains the error and suggests fixes
-- **Process**:
-  1. Extracts the query and error message from the log
-  2. Opens a new chat with error explanation request
-- **Use Case**: Understand and fix query errors quickly
+- **图标**：Alert circle 图标（仅在带异常的查询上显示）
+- **功能**：解释错误并给出修复建议
+- **流程**：
+  1. 从日志中提取查询和错误信息
+  2. 打开一个带错误解释请求的新聊天
+- **使用场景**：快速理解并修复查询错误
 
-## Next Steps
+## 下一步
 
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze specific query execution
-- **[System Log Introspection](./system-log-introspection.md)** — Overview of all system log tools
-- **[system.ddl_distribution_queue Introspection](./system-ddl-distributed-queue.md)** — Monitor distributed DDL operations
-- **[system.part_log Introspection](./system-part-log.md)** — Monitor part-level operations
-- **[system.query_views_log Introspection](./system-query-views-log.md)** — Monitor query view executions
-- **[system.zookeeper Introspection](./system-zookeeper.md)** — Browse ZooKeeper data
-
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析具体查询的执行
+- **[系统日志内省](./system-log-introspection.md)** —— 所有系统日志工具概览
+- **[system.ddl_distribution_queue 内省](./system-ddl-distributed-queue.md)** —— 监控分布式 DDL 操作
+- **[system.part_log 内省](./system-part-log.md)** —— 监控 Part 级操作
+- **[system.query_views_log 内省](./system-query-views-log.md)** —— 监控查询视图执行
+- **[system.zookeeper 内省](./system-zookeeper.md)** —— 浏览 ZooKeeper 数据

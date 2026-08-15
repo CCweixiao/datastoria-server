@@ -35,7 +35,7 @@ const { theme, page, localeIndex } = useData()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 
-const isZh = computed(() => localeIndex.value === 'zh')
+const isZh = computed(() => localeIndex.value !== 'en')
 
 const entries = computed<Array<{ version: string; date?: string | null }>>(
   () => theme.value.versions?.entries ?? [{ version: 'latest' }]
@@ -57,10 +57,11 @@ function labelFor(entry: { version: string }) {
 }
 
 // Keeps the locale and the current page path while swapping the version segment.
+// Chinese pages live at the root; English pages carry the /en prefix.
 function hrefFor(entry: { version: string }) {
-  let rest = page.value.path.replace(/^\/zh\//, '/')
+  let rest = page.value.path.replace(/^\/en\//, '/')
   rest = rest.replace(/^\/v\d+\.\d+\.\d+\//, '/')
-  const localePart = isZh.value ? '/zh' : ''
+  const localePart = isZh.value ? '' : '/en'
   const versionPart = entry.version === 'latest' ? '' : `/${entry.version}`
   return withBase(`${localePart}${versionPart}${rest === '/' ? '/' : rest}`)
 }

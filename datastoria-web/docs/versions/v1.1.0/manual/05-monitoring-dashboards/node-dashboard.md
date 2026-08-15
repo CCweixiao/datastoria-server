@@ -1,90 +1,90 @@
 ---
-title: Node Dashboard
-description: Monitor individual ClickHouse node performance with detailed metrics, health indicators, and real-time visualization. Track server uptime, queries, merges, and replication status.
+title: Node Dashboard（节点仪表盘）
+description: 通过详细指标、健康指示器和实时可视化监控单个 ClickHouse 节点的性能。跟踪服务器运行时长、查询、Merge 和复制状态。
 head:
   - - meta
     - name: keywords
       content: node dashboard, ClickHouse monitoring, node metrics, server performance, node health, database monitoring, ClickHouse node, performance dashboard, server metrics
 ---
 
-# Node Dashboard
+# Node Dashboard（节点仪表盘）
 
-The Node Dashboard provides detailed metrics for individual ClickHouse nodes, giving you deep insights into node-specific performance and health.
+Node Dashboard 提供单个 ClickHouse 节点的详细指标，让你深入洞察节点特定的性能与健康状态。
 
-## Overview
+## 概览
 
-The Node Dashboard is a pre-configured monitoring view that requires no setup. It automatically:
+Node Dashboard 是一个无需任何配置的预置监控视图。它会自动：
 
-- **Aggregates Metrics**: Collects data from ClickHouse system tables
-- **Visualizes Performance**: Displays metrics as charts, gauges, and tables
-- **Provides Drill-downs**: Click on metrics to see detailed breakdowns
-- **Updates in Real-time**: Refreshes automatically or manually to see latest data
+- **聚合指标**：从 ClickHouse 系统表收集数据
+- **可视化性能**：以图表、仪表和表格展示指标
+- **提供下钻**：点击指标查看详细的拆解
+- **实时更新**：自动或手动刷新以查看最新数据
 
-## Opening the Node Dashboard
+## 打开 Node Dashboard
 
-1. **Select a Node**: Click the host name node in schema tree or the 'Node Dashboard' item from the dashboard icon on the sidebar
-2. **View Dashboard**: The node dashboard displays automatically
+1. **选择节点**：点击结构树中的主机名节点，或点击侧边栏 Dashboard 图标下的"Node Dashboard"项
+2. **查看 Dashboard**：节点 Dashboard 自动显示
 
-## Dashboard Overview
+## Dashboard 概览
 
-The dashboard shows key node health indicators:
+Dashboard 展示关键的节点健康指标：
 
-- Server Version
-- Server Uptime
-- Warning
-- Errors
-- Queries
+- 服务器版本
+- 服务器运行时长
+- 警告
+- 错误
+- 查询
 - Merge
-- Mutations
-- Replication Status
-- Key Metrics
+- Mutation
+- 复制状态
+- 关键指标
 
-![Node dashboard showing detailed metrics for a single ClickHouse node including CPU, memory, disk I/O, and active queries](./img/dashboard-node-status.jpg)
+![节点 Dashboard，展示单个 ClickHouse 节点的详细指标，包括 CPU、内存、磁盘 I/O 和活跃查询](../../en/manual/05-monitoring-dashboards/img/dashboard-node-status.jpg)
 
-## Dashboard Features
+## Dashboard 功能
 
-### Time Range Selection
+### 时间范围选择
 
-The dashboard supports flexible time range selection:
+Dashboard 支持灵活的时间范围选择：
 
-- **Predefined Ranges**: Last 15 minutes, Last hour, Today, Last 7 Days, etc.
-- **Custom Range**: Select specific start and end times
-- **Auto-refresh**: Automatically refresh data at intervals (where supported)
+- **预定义范围**：最近 15 分钟、最近 1 小时、今天、最近 7 天等
+- **自定义范围**：选择具体的开始和结束时间
+- **自动刷新**：按间隔自动刷新数据（在支持的情况下）
 
-### Chart Types
+### 图表类型
 
-The dashboard uses various visualization types:
+Dashboard 使用多种可视化类型：
 
-- **Stat Cards**: Single-value metrics with drill-downs
-- **Line Charts**: Time-series data with multiple series
-- **Bar Charts**: Distribution and comparison data
-- **Gauges**: Percentage and threshold indicators
-- **Tables**: Detailed data with sorting and pagination
+- **Stat 卡片**：带下钻的单值指标
+- **折线图**：含多条时间序列的数据
+- **柱状图**：分布与对比数据
+- **仪表盘**：百分比和阈值指示器
+- **表格**：支持排序和分页的详细数据
 
-### Drill-downs
+### 下钻
 
-Many dashboard support drill-down functionality.
+许多 Dashboard 支持下钻功能。
 
-For example, for the 'Total Data Size' Stat panel, when clicking this panel, it opens a dialog to show details of data size, which is per server data size so that we know the distribution of original total size metric.
+例如，对于"Total Data Size"Stat 面板，点击该面板会打开一个对话框展示数据大小详情，即每个服务器的数据大小，从而让我们了解原始总大小指标的分布。
 
-### Refresh and Auto-refresh
+### 刷新与自动刷新
 
-- **Manual Refresh**: Click the refresh button to update data
-- **Auto-refresh**: Enable automatic updates (where supported)
+- **手动刷新**：点击刷新按钮更新数据
+- **自动刷新**：启用自动更新（在支持的情况下）
 
-## Limitations
+## 限制
 
-- **System Table Access**: Requires read access to ClickHouse system tables
-- **Data Retention**: Metrics depend on ClickHouse's system tables retention settings
-- **Availability**: Requires your ClickHouse node to be available
-- **Version Compatibility**: Some metrics may not be available in older ClickHouse versions
-- **Performance Impact**: Querying large time ranges may be slow and consumes resources of your ClickHouse cluster
+- **系统表访问**：需要对 ClickHouse 系统表的读权限
+- **数据保留期**：指标取决于 ClickHouse 系统表的保留设置
+- **可用性**：要求 ClickHouse 节点可用
+- **版本兼容性**：部分指标在较旧的 ClickHouse 版本中可能不可用
+- **性能影响**：查询较大的时间范围可能较慢，并消耗 ClickHouse 集群的资源
 
-> **Deep dive**: Explore [System Log Introspection](../04-cluster-management/system-log-introspection.md) for detailed analysis of system tables.
+> **深入了解**：探索[系统日志内省](../04-cluster-management/system-log-introspection.md)，对系统表进行详细分析。
 
-## Next Steps
+## 下一步
 
-- **[Cluster Dashboard](./cluster-dashboard.md)** — View cluster-wide metrics across all nodes
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze specific query performance
-- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** — Explore your database structure
-- **[System Log Introspection](../04-cluster-management/system-log-introspection.md)** — Deep dive into query and part logs
+- **[Cluster Dashboard](./cluster-dashboard.md)** —— 查看所有节点的集群级指标
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析具体查询性能
+- **[Schema Explorer](../04-cluster-management/schema-explorer.md)** —— 探索数据库结构
+- **[系统日志内省](../04-cluster-management/system-log-introspection.md)** —— 深入了解查询和 Part 日志

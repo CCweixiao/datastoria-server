@@ -1,87 +1,87 @@
 ---
-title: system.processes Introspection
-description: Monitor and manage running queries in ClickHouse. View active processes, query details, and kill long-running or problematic queries directly from the UI.
+title: system.processes 内省
+description: 监控和管理 ClickHouse 中正在运行的查询。查看活跃进程、查询详情，并直接从 UI 终止长时间运行或有问题的查询。
 head:
   - - meta
     - name: keywords
       content: system.processes, processes, running queries, active queries, kill query, query management, process monitoring, ClickHouse processes
 ---
 
-# system.processes Introspection
+# system.processes 内省
 
-The Processes Introspection tool provides real-time visibility into all currently running queries on your ClickHouse cluster. It displays a comprehensive table of active processes with detailed information about each query, and allows you to kill problematic queries directly from the UI.
+进程内省工具提供对 ClickHouse 集群上所有正在运行查询的实时可见性。它以完整的表格展示活跃进程及每个查询的详细信息，并允许你直接从 UI 终止有问题的查询。
 
-## Prerequisites
+## 前置条件
 
-> **Note**: Read access to the `system.processes` table and permission to execute `KILL QUERY` commands are required to use this introspection tool. Ensure your user has the necessary system table privileges.
+> **注意**：使用该内省工具需要对 `system.processes` 表的读权限，以及执行 `KILL QUERY` 命令的权限。请确保你的用户具备必要的系统表权限。
 
 ## UI
 
-The Processes Introspection tool displays a single table showing all active queries from `system.processes`. Each row represents a currently running query with detailed information about its execution state.
+进程内省工具展示一个表格，其中包含来自 `system.processes` 的所有活跃查询。每一行代表一个当前正在运行的查询及其执行状态的详细信息。
 
-![system.processes](./img/system-processes.jpg)
+![system.processes 界面](../../en/manual/04-cluster-management/img/system-processes.jpg)
 
-## Features
+## 功能
 
-### Real-Time Process Monitoring
+### 实时进程监控
 
-The tool displays all columns from the `system.processes` table, including:
+该工具展示 `system.processes` 表的所有列，包括：
 
-- **Query Information**: Query ID, query text, and query start time
-- **User Information**: User who initiated the query
-- **Resource Usage**: Memory usage, read/written rows and bytes
-- **Execution Metrics**: Query duration, elapsed time
-- **Connection Details**: Client information, interface type
+- **查询信息**：Query ID、查询文本和查询开始时间
+- **用户信息**：发起查询的用户
+- **资源使用**：内存使用、读/写的行数和字节数
+- **执行指标**：查询耗时、已运行时间
+- **连接详情**：客户端信息、接口类型
 
-### Kill Query Action
+### Kill Query 操作
 
-Each row includes an action column with a "Kill" button that allows you to terminate running queries:
+每行都包含一个带"Kill"按钮的操作列，允许你终止正在运行的查询：
 
-1. **Click the Kill Button**: Click the red "Kill" button in the Action column for the query you want to terminate
-2. **Confirm Action**: A confirmation dialog will appear asking you to confirm the kill operation
-3. **Query Execution**: Once confirmed, the system will execute:
-   - `KILL QUERY WHERE query_id = 'xxx'` for single-node mode
-   - `KILL QUERY WHERE query_id = 'xxx' ON CLUSTER 'cluster_name'` for cluster mode
-4. **Result Notification**: You'll receive a success or error notification after the operation completes
+1. **点击 Kill 按钮**：在你想终止的查询所在行的 Action 列中点击红色的"Kill"按钮
+2. **确认操作**：将弹出确认对话框，要求你确认终止操作
+3. **执行查询**：确认后，系统将执行：
+   - 单节点模式：`KILL QUERY WHERE query_id = 'xxx'`
+   - 集群模式：`KILL QUERY WHERE query_id = 'xxx' ON CLUSTER 'cluster_name'`
+4. **结果通知**：操作完成后，你将收到成功或错误的通知
 
-### Table Features
+### 表格功能
 
-- **Sorting**: Click column headers to sort by any column (default: query_start_time descending)
-- **Pagination**: Navigate through pages of results (100 rows per page)
-- **Row Details**: Expand rows to see full query details in a transposed view
-- **Auto-Refresh**: Use the refresh button to update the process list manually
-- **Compact Mode**: View more information in a compact table layout
+- **排序**：点击列头按任意列排序（默认：query_start_time 降序）
+- **分页**：分页浏览结果（每页 100 行）
+- **行详情**：展开行以转置视图查看完整的查询详情
+- **自动刷新**：使用刷新按钮手动更新进程列表
+- **紧凑模式**：以紧凑的表格布局查看更多信息
 
-## When to Use
+## 何时使用
 
-### Monitoring Long-Running Queries
+### 监控长时间运行的查询
 
-1. **Identify Slow Queries**: Sort by `query_duration_ms` to find queries that have been running for a long time
-2. **Monitor Resource Usage**: Check `memory_usage` to identify memory-intensive queries
-3. **Track Query Progress**: Monitor `read_rows` and `read_bytes` to see query execution progress
+1. **识别慢查询**：按 `query_duration_ms` 排序，找出已运行很久的查询
+2. **监控资源使用**：检查 `memory_usage`，识别内存消耗大的查询
+3. **跟踪查询进度**：监控 `read_rows` 和 `read_bytes`，了解查询执行进度
 
-### Managing Problematic Queries
+### 管理有问题的查询
 
-1. **Kill Hung Queries**: Terminate queries that appear to be stuck or not responding
-2. **Free Up Resources**: Kill queries consuming excessive memory or CPU
-3. **Emergency Termination**: Quickly stop queries that are causing performance issues
+1. **终止挂起的查询**：终止看起来卡住或无响应的查询
+2. **释放资源**：终止消耗过多内存或 CPU 的查询
+3. **紧急终止**：快速停止引发性能问题的查询
 
-### Cluster Management
+### 集群管理
 
-1. **View All Nodes**: In cluster mode, see processes from all nodes in the cluster
-2. **Kill Cluster-Wide**: Terminate queries across the entire cluster when needed
-3. **Monitor Cluster Load**: Get an overview of all active queries across your cluster
+1. **查看所有节点**：在集群模式下，查看集群中所有节点的进程
+2. **集群级终止**：必要时在整个集群范围内终止查询
+3. **监控集群负载**：总览集群上所有活跃的查询
 
-## Security Considerations
+## 安全注意事项
 
-- Only users with `KILL QUERY` privileges can terminate queries
-- You can only kill queries that your user has permission to kill
-- The kill operation is immediate and cannot be undone
-- Always confirm before killing queries, especially in production environments
+- 只有具备 `KILL QUERY` 权限的用户才能终止查询
+- 你只能终止你的用户有权终止的查询
+- 终止操作是立即生效且无法撤销的
+- 终止查询前务必确认，尤其是在生产环境中
 
-## Next Steps
+## 下一步
 
-- **[system.query_log Introspection](./system-query-log.md)** — Analyze completed queries and query history
-- **[System Log Introspection](./system-log-introspection.md)** — Overview of all system log tools
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze specific query execution details
-- **[system.zookeeper Introspection](./system-zookeeper.md)** — Browse ZooKeeper data
+- **[system.query_log 内省](./system-query-log.md)** —— 分析已完成的查询和查询历史
+- **[系统日志内省](./system-log-introspection.md)** —— 所有系统日志工具概览
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析具体查询的执行详情
+- **[system.zookeeper 内省](./system-zookeeper.md)** —— 浏览 ZooKeeper 数据

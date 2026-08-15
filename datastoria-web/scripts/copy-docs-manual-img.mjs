@@ -49,7 +49,7 @@ for (const srcImg of imgDirs) {
   // public/ itself and any zh tree.
   const chapterDir = path.dirname(path.dirname(srcImg));
   const relFromDocs = path.relative(docsDir, chapterDir);
-  if (relFromDocs.startsWith("public") || relFromDocs.startsWith(".vitepress") || relFromDocs.startsWith("zh")) {
+  if (relFromDocs.startsWith("public") || relFromDocs.startsWith(".vitepress") || relFromDocs.startsWith("en")) {
     continue;
   }
   // Snapshot trees live under versions/<v>/manual/** but their video sources point at

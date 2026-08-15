@@ -1,173 +1,173 @@
 ---
-title: Query Execution
-description: Execute ClickHouse queries with DataStoria - run full queries or selections, view results, export data. Complete guide to query execution, result viewing, and data management.
+title: 查询执行
+description: 使用 DataStoria 执行 ClickHouse 查询 —— 运行完整查询或选中部分、查看结果、导出数据。查询执行、结果查看与数据管理的完整指南。
 head:
   - - meta
     - name: keywords
-      content: query execution, run SQL query, execute ClickHouse query, SQL results, query output, data export, query management, ClickHouse execution
+      content: 查询执行, 运行 SQL 查询, 执行 ClickHouse 查询, SQL 结果, 查询输出, 数据导出, 查询管理, ClickHouse 执行
 ---
 
-# Query Execution
+# 查询执行
 
-DataStoria provides a powerful query execution system that allows you to run ClickHouse queries, view results in various formats. This guide covers everything you need to know about executing queries and managing results.
+DataStoria 提供强大的查询执行系统，允许你运行 ClickHouse 查询并以多种格式查看结果。本指南涵盖执行查询和管理结果所需的全部内容。
 
-## Overview
+## 概览
 
-The query execution system provides:
+查询执行系统提供：
 
-- **Multiple Execution Methods**: Execute full queries or selected portions
-- **Query Log Inspector**: Provides an inspector for query log
+- **多种执行方式**：执行完整查询或选中的部分
+- **Query Log Inspector**：提供查询日志检查器
 
-## Running Queries
+## 运行查询
 
-> **Tip**: Use the [SQL Editor](./sql-editor.md) to write queries, and check [Query Log Inspector](./query-log-inspector.md) to analyze performance.
+> **提示**：使用 [SQL 编辑器](./sql-editor.md)编写查询，并查看 [Query Log Inspector](./query-log-inspector.md)来分析性能。
 
-### Basic Execution
+### 基本执行
 
-1. **Type Your Query**: Enter your SQL query in the editor
-2. **Execute**: Press `Ctrl + Enter` (Windows/Linux) or `Command + Enter` (Mac)
-3. **View Results**: Results appear in the query results panel below the editor
+1. **输入查询**：在编辑器中输入你的 SQL 查询
+2. **执行**：按 `Ctrl + Enter`（Windows/Linux）或 `Command + Enter`（Mac）
+3. **查看结果**：结果显示在编辑器下方的查询结果面板中
 
-### Executing Selected Text
+### 执行选中的文本
 
-You can execute only a portion of your query:
+你可以只执行查询的一部分：
 
-1. **Select Text**: Highlight the portion of the query you want to execute
-2. **Execute Selection**: Press `Ctrl + Enter` / `Command + Enter`
-3. **Results**: Only the selected portion is executed
+1. **选择文本**：高亮你想要执行的那部分查询
+2. **执行选中内容**：按 `Ctrl + Enter` / `Command + Enter`
+3. **结果**：仅执行选中的部分
 
-This is useful for:
+这在以下场景很有用：
 
-- Testing individual parts of complex queries
-- Debugging specific query sections
-- Running queries incrementally
+- 测试复杂查询的各个部分
+- 调试查询的特定片段
+- 增量式地运行查询
 
-### Executing multiple SQL statements
+### 执行多条 SQL 语句
 
-DataStoria supports running SQL in batch mode with explicit confirmation.
+DataStoria 支持以批量模式运行 SQL，并带有显式确认。
 
-#### Batch entry points
+#### 批量入口
 
-- **Run Batch SQLs** (from the run dropdown): Opens the batch confirmation dialog.
-- Batch source uses:
-  - **Selected text** if text is selected in the editor
-  - otherwise **full editor text**
+- **Run Batch SQLs**（通过运行下拉菜单）：打开批量确认对话框。
+- 批量来源为：
+  - 编辑器中**选中的文本**（若有文本被选中）
+  - 否则为**编辑器中的全部文本**
 
-#### Splitter options
+#### 拆分器选项
 
-In the confirmation dialog, SQL is split into statements using one of these splitter modes:
+在确认对话框中，SQL 会使用以下某种拆分模式切分为多条语句：
 
-- **Semicolon (`;`)**: SQL-aware splitting (ignores semicolons inside strings/comments)
-- **Newline**: Splits by non-empty lines
-- **Custom**: User-defined delimiter with optional **RE** (regular expression) mode
+- **分号（`;`）**：SQL 感知的拆分（忽略字符串/注释中的分号）
+- **换行**：按非空行拆分
+- **自定义**：用户自定义分隔符，可选开启 **RE**（正则表达式）模式
 
-You can review the split results in a table before execution and choose which statements to run.
+执行前，你可以在表格中查看拆分结果，并选择要运行哪些语句。
 
-#### Failure mode
+#### 失败模式
 
-Before execution, choose how batch failures are handled:
+执行前，可选择批量失败的处理方式：
 
-- **Abort on first failure**: stop the batch immediately when a statement fails
-- **Continue on failure**: continue running remaining statements
+- **Abort on first failure**：某条语句失败时立即停止批量执行
+- **Continue on failure**：继续运行剩余语句
 
-#### Single-SQL vs batch behavior
+#### 单条 SQL 与批量行为
 
-- **Run Selected Text / Run Current Line** (`Ctrl+Enter` / `Command+Enter`) executes as a single SQL.
-- **Run Batch SQLs** always opens confirmation and runs as a batch after split + selection confirmation.
+- **Run Selected Text / Run Current Line**（`Ctrl+Enter` / `Command+Enter`）以单条 SQL 执行。
+- **Run Batch SQLs** 始终打开确认对话框，并在拆分 + 选择确认之后以批量方式运行。
 
-## Viewing Results
+## 查看结果
 
-### Result Formats
+### 结果格式
 
-DataStoria by default uses ClickHouse's PrettyCompactMonoBlock format, but you can use the FORMAT clause in SQL to change the output format as you want.
+DataStoria 默认使用 ClickHouse 的 PrettyCompactMonoBlock 格式，但你可以在 SQL 中使用 FORMAT 子句按需更改输出格式。
 
-#### Table View (Default)
+#### 表格视图（默认）
 
-- **PrettyCompactMonoBlock**: Formatted text table with row numbers
-- **Best for**: Human-readable results, small to medium datasets
-- **Features**:
-  - Row numbers
-  - Formatted numbers and dates
-  - Scrollable table
+- **PrettyCompactMonoBlock**：带行号的格式化文本表格
+- **最适合**：人类可读的结果、中小规模数据集
+- **特性**：
+  - 行号
+  - 格式化的数字和日期
+  - 可滚动的表格
 
-#### Vertical Format
+#### 纵向格式（Vertical）
 
-Execute queries ending with `\G` to get vertical format:
+执行以 `\G` 结尾的查询可获得纵向格式：
 
 ```sql
 SELECT * FROM users WHERE id = 1 \G
 ```
 
-- **Best for**: Wide tables with many columns
-- **Features**: Each row displayed as key-value pairs
+- **最适合**：包含大量列的宽表
+- **特性**：每行以键值对形式展示
 
-#### JSON Format
+#### JSON 格式
 
-- **Best for**: Programmatic access, API integration
-- **Features**: Structured JSON output
+- **最适合**：程序化访问、API 集成
+- **特性**：结构化的 JSON 输出
 
-#### CSV Format
+#### CSV 格式
 
-- **Best for**: Data export, spreadsheet import
-- **Features**: Comma-separated values
+- **最适合**：数据导出、导入电子表格
+- **特性**：逗号分隔值
 
-### Result Display Features
+### 结果展示特性
 
-#### Scrolling and Navigation
+#### 滚动与导航
 
-- **Auto-scroll**: Results automatically scroll as new data arrives
-- **Manual Scroll**: Scroll through results manually
-- **Jump to Top/Bottom**: Quick navigation buttons
+- **自动滚动**：新数据到达时结果自动滚动
+- **手动滚动**：手动滚动浏览结果
+- **跳转到顶部/底部**：快速导航按钮
 
-## Query History
+## 查询历史
 
-Coming soon
+即将推出
 
-## Query Management
+## 查询管理
 
-### Cancelling Queries
+### 取消查询
 
-To cancel a running query:
+要取消一个正在运行的查询：
 
-1. **Identify Running Query**: Look for queries marked as "Executing"
-2. **Click Cancel**: Use the cancel button on the query
-3. **Confirmation**: Query execution stops immediately
+1. **找到运行中的查询**：查找标记为 "Executing" 的查询
+2. **点击取消**：使用该查询上的取消按钮
+3. **确认**：查询执行立即停止
 
-**Note:** Cancelled queries may still show partial results if data was already received.
+**注意**：如果数据已经部分接收，被取消的查询可能仍会显示部分结果。
 
-### Query Timeout
+### 查询超时
 
-- **Default Timeout**: Queries have a default timeout period
-- **Long-running Queries**: Very long queries may timeout
-- **Adjusting Timeout**: Configure timeout in connection settings or in the 'App Setting'
+- **默认超时**：查询有默认的超时时长
+- **长时间运行的查询**：非常长的查询可能超时
+- **调整超时**：在连接设置或 'App Setting' 中配置超时
 
-### Concurrent Queries
+### 并发查询
 
-- **Multiple Queries**: You can run multiple queries simultaneously
-- **Query Queue**: Queries are queued and executed in order
-- **Resource Management**: System manages resources efficiently
+- **多个查询**：你可以同时运行多个查询
+- **查询队列**：查询会排队并按顺序执行
+- **资源管理**：系统高效管理资源
 
-## Performance Metrics
+## 性能指标
 
-### Execution Information
+### 执行信息
 
-For each query, you can view:
+对于每个查询，你可以查看：
 
-- **Execution Time**: Total time taken to execute
-- **Rows Returned**: Number of result rows
-- **Bytes Read**: Amount of data read from disk
-- **Memory Used**: Memory consumption during execution
-- **Query ID**: ClickHouse query ID for server-side tracking
+- **执行时间**：执行所花费的总时间
+- **返回行数**：结果行的数量
+- **读取字节数**：从磁盘读取的数据量
+- **内存使用**：执行期间的内存消耗
+- **Query ID**：用于服务端跟踪的 ClickHouse 查询 ID
 
-## Limitations
+## 限制
 
-- **Result Size**: Very large result sets may impact browser performance
-- **History Limit**: Query history has a maximum size limit
-- **Concurrent Queries**: Too many concurrent queries may slow down the interface
-- **Export Limits**: Very large exports may take significant time
+- **结果大小**：非常大的结果集可能影响浏览器性能
+- **历史记录上限**：查询历史有最大容量限制
+- **并发查询**：过多的并发查询可能拖慢界面
+- **导出限制**：超大规模导出可能耗时较长
 
-## Next Steps
+## 后续步骤
 
-- **[Query Explain](./query-explain.md)** — Understand query execution plans
-- **[Error Diagnostics](./error-diagnostics.md)** — Learn how to diagnose and fix errors
-- **[Query Log Inspector](./query-log-inspector.md)** — Analyze query performance and history
+- **[Query Explain](./query-explain.md)** —— 理解查询执行计划
+- **[错误诊断](./error-diagnostics.md)** —— 学习如何诊断和修复错误
+- **[Query Log Inspector](./query-log-inspector.md)** —— 分析查询性能与历史

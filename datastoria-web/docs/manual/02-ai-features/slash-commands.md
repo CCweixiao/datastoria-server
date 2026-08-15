@@ -1,35 +1,35 @@
 ---
-title: Slash Commands
-description: Use slash commands in the DataStoria chat input to instantly trigger specialized AI workflows — type / to browse available commands and invoke expert ClickHouse diagnostics without writing a prompt.
+title: Slash Commands（斜杠命令）
+description: 在 DataStoria 聊天输入框中使用 Slash Commands 即时触发专门的 AI 工作流——输入 / 浏览可用命令，无需编写 Prompt 即可调用专业的 ClickHouse 诊断能力。
 head:
   - - meta
     - name: keywords
-      content: slash commands, chat commands, AI commands, explain error code, ClickHouse error diagnosis, DataStoria chat, AI workflow, error code lookup, custom commands, chat shortcuts
+      content: 斜杠命令, 聊天命令, AI 命令, 解释错误码, ClickHouse 错误诊断, DataStoria 聊天, AI 工作流, 错误码查询, 自定义命令, 聊天快捷方式
 ---
 
-# Slash Commands
+# Slash Commands（斜杠命令）
 
-Slash commands let you invoke specialized AI workflows directly from the chat input. Instead of writing a full prompt, type `/` to browse available commands, select one, and let the AI follow a precise workflow tailored for that task.
+Slash Commands（斜杠命令）让你可以直接在聊天输入框中调用专门的 AI 工作流。无需编写完整的 Prompt，只需输入 `/` 浏览可用命令，选择一条，AI 便会按照为该任务定制的精确工作流执行。
 
-![example-of-explain-error-code-command](./img/command-explain-error-code.png)
+![explain-error-code 命令示例](../../en/manual/02-ai-features/img/command-explain-error-code.png)
 
-## How It Works
+## 工作原理
 
-1. Click the chat input and type `/`.
-2. A command palette opens, showing all available commands with descriptions.
-3. Use the arrow keys or mouse to select a command, then press **Enter**.
-4. Add any relevant details after the command name (error message, SQL, etc.).
-5. Press **Cmd+Enter** (or **Ctrl+Enter**) to send.
+1. 点击聊天输入框并输入 `/`。
+2. 命令面板随即打开，展示所有可用命令及其描述。
+3. 使用方向键或鼠标选择一条命令，然后按 **Enter**。
+4. 在命令名之后添加任何相关细节（错误消息、SQL 等）。
+5. 按 **Cmd+Enter**（或 **Ctrl+Enter**）发送。
 
-The command is expanded on the server before reaching the AI — you see the original `/command` in the chat history, while the AI receives the full structured prompt.
+命令会在到达 AI 之前在服务端展开——你在聊天历史中看到的是原始的 `/command`，而 AI 收到的是完整的结构化 Prompt。
 
-## Available Commands
+## 可用命令
 
 ### `/explain_error_code`
 
-Diagnoses a ClickHouse error code or `DB::Exception` message using a dedicated error handbook. The AI looks up the exact function signature, setting name, or memory configuration relevant to the error code and provides a targeted fix.
+使用专用的错误手册诊断 ClickHouse 错误码或 `DB::Exception` 消息。AI 会查找与该错误码相关的确切函数签名、设置名或内存配置，并给出针对性的修复方案。
 
-**Usage:**
+**用法：**
 
 ```
 /explain_error_code error code: 42
@@ -38,29 +38,29 @@ sql:
 SELECT toDate(event_time, 'UTC') FROM events
 ```
 
-**Supported error codes include:**
+**支持的错误码包括：**
 
-| Code | Symbolic Name | Description |
+| 错误码 | 符号名 | 描述 |
 |------|--------------|-------------|
-| `42` | `NUMBER_OF_ARGUMENTS_DOESNT_MATCH` | Wrong number of arguments passed to a function |
-| `115` | `UNKNOWN_SETTING` | Unrecognized ClickHouse setting name |
-| `241` | `MEMORY_LIMIT_EXCEEDED` | Query exceeded a configured memory limit |
+| `42` | `NUMBER_OF_ARGUMENTS_DOESNT_MATCH` | 传给函数的参数数量错误 |
+| `115` | `UNKNOWN_SETTING` | 无法识别的 ClickHouse 设置名 |
+| `241` | `MEMORY_LIMIT_EXCEEDED` | 查询超出配置的内存限制 |
 
-For unsupported codes the AI falls back to its general ClickHouse knowledge and provides a best-effort diagnosis.
+对于不支持的错误码，AI 会退回到其通用 ClickHouse 知识，尽力提供诊断。
 
 
-## Keyboard Reference
+## 键盘快捷键参考
 
-| Key | Action |
+| 按键 | 操作 |
 |-----|--------|
-| `/` at the start of input | Open the command palette |
-| `↑` / `↓` | Navigate commands |
-| `Enter` | Select the highlighted command |
-| `Escape` | Close the palette without selecting |
-| `Cmd+Enter` / `Ctrl+Enter` | Send the message |
+| 输入起始处的 `/` | 打开命令面板 |
+| `↑` / `↓` | 在命令间导航 |
+| `Enter` | 选中高亮的命令 |
+| `Escape` | 关闭面板且不选择 |
+| `Cmd+Enter` / `Ctrl+Enter` | 发送消息 |
 
-## Next Steps
+## 后续步骤
 
-- **[Ask AI for Help](./ask-ai-for-help.md)** — One-click error assistance from the Query Editor
-- **[Agent Skills](./skills.md)** — Understand the skills that slash commands invoke
-- **[Error Diagnostics](../03-query-experience/error-diagnostics.md)** — Learn how ClickHouse errors are parsed and displayed
+- **[Ask AI for Help](./ask-ai-for-help.md)** — 从查询编辑器一键获取错误帮助
+- **[Agent Skills](./skills.md)** — 了解 Slash Commands 所调用的 Skills
+- **[错误诊断](../03-query-experience/error-diagnostics.md)** — 了解 ClickHouse 错误如何被解析和展示

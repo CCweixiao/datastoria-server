@@ -1,257 +1,257 @@
 ---
 title: Query Log Inspector
-description: Analyze ClickHouse query performance with timeline views, topology graphs, and detailed metrics. Powerful tool for query analysis, performance debugging, and execution pattern visualization.
+description: 通过时间线视图、拓扑图和详细指标分析 ClickHouse 查询性能。用于查询分析、性能调试和执行模式可视化的强大工具。
 head:
   - - meta
     - name: keywords
-      content: query log inspector, query performance analysis, ClickHouse query log, query timeline, query topology, performance monitoring, query metrics, execution analysis
+      content: 查询日志检查器, 查询性能分析, ClickHouse 查询日志, 查询时间线, 查询拓扑, 性能监控, 查询指标, 执行分析
 ---
 
 # Query Log Inspector
 
-The Query Log Inspector is one of the most powerful tools for analyzing query performance, understanding query execution patterns, and debugging issues in your ClickHouse cluster. 
+Query Log Inspector 是分析查询性能、理解查询执行模式以及调试 ClickHouse 集群问题的最强大工具之一。
 
-It provides multiple visualization modes including timeline views, topology graphs, and detailed table views to help you gain deep insights into your query workload.
+它提供多种可视化模式，包括时间线视图、拓扑图和详细的表格视图，帮助你深入洞察查询工作负载。
 
-## Overview
+## 概览
 
-The Query Log Inspector allows you to:
+Query Log Inspector 允许你：
 
-- **Search Queries**: Find specific queries by Query ID
-- **Timeline Visualization**: View query execution over time
-- **Topology Graphs**: Visualize query relationships and dependencies
-- **Performance Analysis**: Analyze query performance metrics
-- **Execution Metrics**: Understand resource usage and execution details
-- **Time Range Filtering**: Filter queries by time periods
+- **搜索查询**：按 Query ID 查找特定查询
+- **时间线可视化**：随时间查看查询执行情况
+- **拓扑图**：将查询关系与依赖可视化
+- **性能分析**：分析查询性能指标
+- **执行指标**：理解资源使用与执行细节
+- **时间范围过滤**：按时间段过滤查询
 
-## Prerequisites
+## 前置条件
 
-To use the Query Log Inspector, you need:
+使用 Query Log Inspector 需要：
 
-- **System Table Access**: Read access to `system.query_log` table
-- **Query Log Enabled**: `log_queries` setting should be enabled on your ClickHouse server
-- **Appropriate Permissions**: Your user must have privileges to query system tables
+- **系统表访问权限**：对 `system.query_log` 表的读取权限
+- **已启用查询日志**：你的 ClickHouse 服务器上应启用 `log_queries` 设置
+- **相应权限**：你的用户必须拥有查询系统表的权限
 
-> **Note:** Contact your administrator if you don't have access to system tables.
+> **注意**：如果你没有系统表访问权限，请联系管理员。
 
-The inspector is mainly designed for ClickHouse cluster mode. For a single-replica ClickHouse instance, you can still use it as a tool for better visualization of query metrics from the query log, but you won't gain much benefit from the Timeline or Topology views.
+该检查器主要面向 ClickHouse 集群模式设计。对于单副本的 ClickHouse 实例，你仍可以将其作为一个更好的查询日志指标可视化工具来使用，但从 Timeline 或 Topology 视图中获得的收益有限。
 
-## Accessing Query Log Inspector from Query Tab
+## 从查询页签访问 Query Log Inspector
 
-After your query completes execution in the query tab, it shows the Query ID as a clickable link under the response.
+查询在查询页签中执行完成后，会在响应下方把 Query ID 显示为可点击的链接。
 
-Simply click the Query ID link to open the inspector for that query.
+只需点击 Query ID 链接，即可为该查询打开检查器。
 
-![Clickable query ID link displayed under query response in the query tab for accessing detailed query logs](./img/query-log-inspector.jpg)
+![查询页签中查询响应下方显示的可点击 Query ID 链接，用于访问详细的查询日志](../../en/manual/03-query-experience/img/query-log-inspector.jpg)
 
-## Timeline View
+## 时间线视图
 
-When the inspector opens, it loads query logs for the given Query ID from all nodes in the cluster and displays the timeline view by default.
+检查器打开后，会从集群中的所有节点加载给定 Query ID 的查询日志，并默认显示时间线视图。
 
-![Query log inspector timeline view showing query execution across 20 ClickHouse cluster nodes with timing visualization](./img/query-log-inspector-timeline.jpg)
+![Query Log Inspector 时间线视图，展示跨 20 个 ClickHouse 集群节点的查询执行及时间可视化](../../en/manual/03-query-experience/img/query-log-inspector-timeline.jpg)
 
-The above picture shows the result of a query executed on a 20-node ClickHouse cluster.
+上图展示了一条在 20 节点 ClickHouse 集群上执行的查询的结果。
 
-### Understanding the Timeline
+### 理解时间线
 
-The timeline view displays query execution as a horizontal timeline, showing:
+时间线视图将查询执行展示为一条水平时间线，内容包括：
 
-- **Query Duration**: Length of bars represents execution time
-- **Time Axis**: Horizontal axis shows chronological order
-- **Query Relationships**: Parent-child query relationships
-- **Concurrent Queries**: Queries running at the same time and are ordered based on query log event time from earliest to latest
+- **查询时长**：条形长度代表执行时间
+- **时间轴**：水平轴表示时间顺序
+- **查询关系**：父子查询关系
+- **并发查询**：同时运行的查询，按查询日志事件时间从早到晚排序
 
-### Timeline Features
+### 时间线功能
 
-#### Zoom and Navigation
+#### 缩放与导航
 
-- **Zoom In**: Click zoom in button or use mouse wheel
-- **Zoom Out**: Click zoom out button
-- **Pan**: Drag to move the timeline view
-- **Reset View**: Return to default zoom level
+- **放大**：点击放大按钮或使用鼠标滚轮
+- **缩小**：点击缩小按钮
+- **平移**：拖动以移动时间线视图
+- **重置视图**：恢复默认缩放级别
 
-#### Query Details
+#### 查询详情
 
-- **Hover**: Hover over query bars to see quick details
-    
-    For example, in the view, there's a query executed on the clickhouse001 node that took only 1ms. You can move the mouse over it to quickly check what query was executed.
+- **悬停**：将鼠标悬停在查询条上可查看快速概要
 
-    ![Timeline hover tooltip showing detailed query execution metrics for a specific node including duration and memory usage](./img/query-log-inspector-timeline-hover.jpg)
+    例如，视图中有一条在 clickhouse001 节点上执行的查询，仅耗时 1ms。你可以把鼠标移到上面，快速查看执行的是什么查询。
 
-- **Click**: Click on queries to see full details in the detail pane
-    
-    The detail pane is displayed on the right side of the timeline view. It shows the full query log of the selected item, including the flattened ProfileEvents which contain all metrics for that query.
+    ![时间线悬停提示框，显示特定节点的详细查询执行指标，包括时长和内存使用](../../en/manual/03-query-experience/img/query-log-inspector-timeline-hover.jpg)
 
-    ![Timeline detail panel displaying comprehensive query execution information including SQL text, timing breakdown, and resource consumption](./img/query-log-inspector-timeline-detail.jpg)
+- **点击**：点击查询可在详情面板中查看完整详情
 
-### Reading the Timeline
+    详情面板显示在时间线视图的右侧。它展示所选条目的完整查询日志，包括扁平化的 ProfileEvents，其中包含该查询的全部指标。
 
-#### Query Bars
+    ![时间线详情面板，展示全面的查询执行信息，包括 SQL 文本、耗时分解和资源消耗](../../en/manual/03-query-experience/img/query-log-inspector-timeline-detail.jpg)
 
-- **Length**: Represents execution duration
-- **Color**: Indicates different nodes
-- **Position**: Shows when the query started
+### 读懂时间线
 
-#### Parent-Child Relationships
+#### 查询条
 
-- **Nested Bars**: Child queries appear nested under parent queries
-- **Indentation**: Visual hierarchy shows query relationships
-- **Distributed Queries**: Shows queries across cluster nodes
+- **长度**：代表执行时长
+- **颜色**：指示不同的节点
+- **位置**：显示查询开始的时间
 
-Generally, for a distributed query, the root node in the tree represents the initial query sent from the client side. Sub-nodes in the tree are sub-queries sent from the initial nodes to other nodes in the cluster.
+#### 父子关系
 
-#### Concurrent Execution
+- **嵌套条**：子查询嵌套显示在父查询之下
+- **缩进**：视觉层级展示查询关系
+- **分布式查询**：展示跨集群节点的查询
 
-- **Overlapping Bars**: Queries running at the same time
-- **Resource Usage**: Identify periods of high query load
-- **Bottlenecks**: Spot times when many queries are queued
+一般而言，对于分布式查询，树中的根节点代表从客户端发出的初始查询。树中的子节点是从初始节点发往集群中其他节点的子查询。
 
-## Table View
+#### 并发执行
 
-The timeline view provides a comprehensive overview of how the query is executed in a cluster, showing which nodes are involved in the execution and which nodes take the longest time.
+- **重叠的条**：同时运行的查询
+- **资源使用**：识别查询负载较高的时段
+- **瓶颈**：发现大量查询排队的时间点
 
-However, it doesn't offer a simple way to compare query metrics across different nodes. The table view solves this problem by presenting metrics in a sortable, tabular format.
+## 表格视图
 
-### Detailed Query List
+时间线视图全面展示了查询在集群中的执行方式：哪些节点参与了执行、哪些节点耗时最长。
 
-The table view provides a comprehensive list of queries with:
+然而，它并未提供一种简单的方式来跨节点比较查询指标。表格视图通过以可排序的表格形式呈现指标，解决了这一问题。
 
-- **Query ID**: Unique identifier for each query
-- **Timestamp**: When the query was executed
-- **Duration**: Execution time in milliseconds
-- **Status**: Success, error, or cancelled
-- **User**: User who executed the query
-- **Query Text**: The SQL query text
-- **Metrics**: Performance metrics (rows read, bytes read, etc.)
+### 详细查询列表
 
-![Query log inspector table view listing all query executions across cluster nodes with sortable columns for metrics analysis](./img/query-log-inspector-table-view.jpg)
+表格视图提供包含以下内容的完整查询列表：
 
-The **Detailed Metrics & Profile Events** table is the most insightful view for comparing metrics across nodes. You can click the table headers to sort metrics in descending or ascending order.
+- **Query ID**：每个查询的唯一标识
+- **时间戳**：查询执行的时间
+- **时长**：以毫秒计的执行时间
+- **状态**：成功、错误或已取消
+- **用户**：执行该查询的用户
+- **查询文本**：SQL 查询文本
+- **指标**：性能指标（读取行数、读取字节数等）
 
-For example, by clicking the 'read_rows' column, you can see that the clickhouse002 node reads the least rows (note: the first row executes a DESC sub-query which has a different query pattern and should be excluded from analysis).
+![Query Log Inspector 表格视图，列出集群所有节点上的查询执行，列可排序以便分析指标](../../en/manual/03-query-experience/img/query-log-inspector-table-view.jpg)
 
-In a multi-replica ClickHouse cluster, this may suggest that the data is not evenly distributed. Based on this observation, you can investigate further to confirm.
+**Detailed Metrics & Profile Events** 表是跨节点比较指标时最具洞察力的视图。你可以点击表头，将指标按降序或升序排序。
 
-![Detailed table view showing expanded query information with additional metrics and execution statistics](./img/query-log-inspector-table-view-2.jpg)
+例如，点击 'read_rows' 列，可以看到 clickhouse002 节点读取的行数最少（注意：第一行执行的是一个 DESC 子查询，其查询模式不同，分析时应排除在外）。
 
-## Topology View
+在多副本的 ClickHouse 集群中，这可能表明数据分布不均匀。基于这一观察，你可以进一步排查确认。
 
-### Understanding Topology
+![详细表格视图，展开显示查询信息及额外的指标与执行统计](../../en/manual/03-query-experience/img/query-log-inspector-table-view-2.jpg)
 
-The topology view shows query execution as a graph, displaying:
+## 拓扑视图
 
-- **Query Nodes**: Each query as a node in the graph
-- **Relationships**: Edges connecting related queries
-- **Execution Flow**: Direction of query execution
-- **Cluster Topology**: Distributed query execution across nodes
+### 理解拓扑
 
-![Query log inspector topology view visualizing query execution flow across cluster nodes with network connections and data transfer paths](./img/query-log-inspector-topo.jpg)
+拓扑视图以图的形式展示查询执行，内容包括：
 
-### Topology Features
+- **查询节点**：每个查询作为图中的一个节点
+- **关系**：连接相关查询的边
+- **执行流向**：查询执行的方向
+- **集群拓扑**：跨节点的分布式查询执行
 
-#### Graph Navigation
+![Query Log Inspector 拓扑视图，将跨集群节点的查询执行流可视化，包含网络连接与数据传输路径](../../en/manual/03-query-experience/img/query-log-inspector-topo.jpg)
 
-- **Zoom**: Zoom in/out on the graph
-- **Pan**: Drag to move around the graph
-- **Node Selection**: Click nodes to see details
-- **Layout**: Automatic layout with manual adjustment options
+### 拓扑功能
 
-#### Node Information
+#### 图导航
 
-- **Query Details**: Click nodes to see full query information
-- **Node Colors**: Color coding indicates different nodes in the cluster
-- **Node Size**: May represent query duration or importance
-- **Labels**: Query IDs or other identifiers
+- **缩放**：在图上放大/缩小
+- **平移**：拖动以在图中移动
+- **节点选择**：点击节点查看详情
+- **布局**：自动布局并支持手动调整
 
-#### Relationship Visualization
+#### 节点信息
 
-- **Edges**: Lines connecting related queries
-- **Edge Direction**: Arrows show execution flow
-- **Edge Labels**: May show relationship type
-- **Highlighting**: Highlight related queries on selection
+- **查询详情**：点击节点查看完整查询信息
+- **节点颜色**：颜色编码指示集群中的不同节点
+- **节点大小**：可能代表查询时长或重要程度
+- **标签**：Query ID 或其他标识符
 
-### Use Cases for Topology View
+#### 关系可视化
 
-- **Understanding Query Dependencies**: See how queries relate to each other
-- **Distributed Query Analysis**: Visualize queries across cluster nodes
-- **Query Chain Analysis**: Follow query execution chains
-- **Bottleneck Identification**: Find queries that block others
+- **边**：连接相关查询的线
+- **边方向**：箭头指示执行流向
+- **边标签**：可能显示关系类型
+- **高亮**：选中时高亮相关查询
 
-## Performance Analysis
+### 拓扑视图的使用场景
 
-### Key Metrics
+- **理解查询依赖**：查看查询之间如何关联
+- **分布式查询分析**：将跨集群节点的查询可视化
+- **查询链分析**：追踪查询执行链
+- **瓶颈识别**：找出阻塞其他查询的查询
 
-The Query Log Inspector tracks important performance metrics:
+## 性能分析
 
-#### Execution Metrics
+### 关键指标
 
-- **Duration**: Total execution time
-- **Read Rows**: Number of rows read from tables
-- **Read Bytes**: Amount of data read
-- **Written Rows**: Rows written (for INSERT queries)
-- **Written Bytes**: Data written
-- **Result Rows**: Number of rows returned by (sub)queries
-- **Result Bytes**: Amount of data returned by (sub)queries
-- **Memory Usage**: Peak memory consumption
-- **CPU Time**: CPU time used
+Query Log Inspector 跟踪重要的性能指标：
 
-#### Resource Usage
+#### 执行指标
 
-- **Peak Memory**: Maximum memory used during execution
-- **Threads**: Number of threads used
-- **Read Operations**: I/O operations performed
-- **Network Traffic**: Data transferred over network (for distributed queries)
+- **时长**：总执行时间
+- **读取行数**：从表中读取的行数
+- **读取字节数**：读取的数据量
+- **写入行数**：写入的行数（针对 INSERT 查询）
+- **写入字节数**：写入的数据量
+- **结果行数**：（子）查询返回的行数
+- **结果字节数**：（子）查询返回的数据量
+- **内存使用**：峰值内存消耗
+- **CPU 时间**：使用的 CPU 时间
 
-### Performance Insights
+#### 资源使用
 
-#### Identifying Slow Queries
+- **峰值内存**：执行期间使用的最大内存
+- **线程数**：使用的线程数量
+- **读操作**：执行的 I/O 操作
+- **网络流量**：通过网络传输的数据（针对分布式查询）
 
-- **Duration Sorting**: Sort by duration to find slowest queries
-- **Threshold Alerts**: Identify queries exceeding time thresholds
-- **Pattern Analysis**: Find queries that consistently run slowly
+### 性能洞察
 
-#### Resource Analysis
+#### 识别慢查询
 
-- **Memory Intensive**: Find queries using excessive memory
-- **I/O Intensive**: Identify queries with high read/write operations
-- **CPU Intensive**: Spot CPU-heavy queries
+- **按时长排序**：按 duration 排序找出最慢的查询
+- **阈值告警**：识别超出时间阈值的查询
+- **模式分析**：找出一直运行缓慢的查询
 
-#### Optimization Opportunities
+#### 资源分析
 
-- **Frequent Queries**: Identify queries run frequently
-- **Expensive Queries**: Find resource-intensive queries
-- **Candidates for Optimization**: Queries that would benefit from optimization
+- **内存密集型**：找出使用过多内存的查询
+- **I/O 密集型**：识别读写操作频繁的查询
+- **CPU 密集型**：发现 CPU 消耗大的查询
 
-## Best Practices
+#### 优化机会
 
-### Regular Monitoring
+- **高频查询**：识别运行频繁的查询
+- **高开销查询**：找出资源消耗大的查询
+- **优化候选**：能够从优化中受益的查询
 
-1. **Daily Review**: Check query log regularly for issues
-2. **Performance Trends**: Monitor performance over time
-3. **Anomaly Detection**: Look for unusual patterns
-4. **Capacity Planning**: Use metrics for capacity planning
+## 最佳实践
 
-### Query Optimization
+### 定期监控
 
-1. **Identify Slow Queries**: Use duration sorting
-2. **Analyze Patterns**: Look for frequently slow queries
-3. **Compare Metrics**: Compare before/after optimization
-4. **Track Improvements**: Monitor optimization results
+1. **每日检查**：定期查看查询日志以发现问题
+2. **性能趋势**：持续关注性能随时间的变化
+3. **异常检测**：寻找不寻常的模式
+4. **容量规划**：利用指标进行容量规划
 
-### Troubleshooting
+### 查询优化
 
-1. **Error Analysis**: Review failed queries regularly
-2. **Performance Issues**: Investigate slow queries
-3. **Resource Problems**: Identify resource-intensive queries
-4. **User Activity**: Monitor user query patterns
+1. **识别慢查询**：使用时长排序
+2. **分析模式**：寻找经常变慢的查询
+3. **对比指标**：比较优化前后的指标
+4. **跟踪改进**：监控优化结果
 
-## Limitations
+### 故障排查
 
-- **Query Log Retention**: Depends on ClickHouse server configuration
-- **Performance Impact**: Querying large query logs may be slow
+1. **错误分析**：定期审查失败的查询
+2. **性能问题**：排查慢查询
+3. **资源问题**：识别资源消耗大的查询
+4. **用户活动**：监控用户的查询模式
 
-## Next Steps
+## 限制
 
-- **[Query Explain](./query-explain.md)** — Understand query execution plans
-- **[Query Optimization](../02-ai-features/query-optimization.md)** — Optimize your queries with AI
+- **查询日志保留期**：取决于 ClickHouse 服务器配置
+- **性能影响**：查询大规模查询日志可能较慢
+
+## 后续步骤
+
+- **[Query Explain](./query-explain.md)** —— 理解查询执行计划
+- **[查询优化](../02-ai-features/query-optimization.md)** —— 使用 AI 优化你的查询
 

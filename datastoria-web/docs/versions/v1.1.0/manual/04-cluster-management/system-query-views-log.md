@@ -1,63 +1,62 @@
 ---
-title: system.query_views_log Introspection
-description: Monitor ClickHouse materialized views and live views execution. Track view performance, analyze read/write patterns, and debug view errors with detailed metrics.
+title: system.query_views_log 内省
+description: 监控 ClickHouse 物化视图和 Live 视图的执行。跟踪视图性能，分析读/写模式，并借助详细指标调试视图错误。
 head:
   - - meta
     - name: keywords
       content: query_views_log, system.query_views_log, materialized views, live views, view monitoring, view performance, view execution, ClickHouse views, view metrics
 ---
 
-# system.query_views_log Introspection
+# system.query_views_log 内省
 
-The Query Views Log Introspection tool provides insights into all query view executions on your ClickHouse cluster. It tracks how materialized views, live views, and other view types are being executed and their performance metrics.
+Query 视图日志内省工具提供对 ClickHouse 集群上所有查询视图执行的洞察。它跟踪物化视图、Live 视图及其他视图类型的执行情况及其性能指标。
 
-It provides multiple filters and more dashboards on the metrics of views for better intropsection.
+它提供多种过滤器和更多基于视图指标的 Dashboard，以实现更好的内省。
 
-## Prerequisites
+## 前置条件
 
-> **Note**: Read access to the `system.query_views_log` table is required to use this introspection tool. Ensure your user has the necessary system table privileges.
+> **注意**：使用该内省工具需要对 `system.query_views_log` 表的读权限。请确保你的用户具备必要的系统表权限。
 
 ## UI
 
-<Video src="/v1.1.0/manual/04-cluster-management/img/system-query-views-log.webm" alt="System query views log interface displaying query execution history with filtering and sorting capabilities" />
+<Video src="/v1.1.0/manual/04-cluster-management/img/system-query-views-log.webm" alt="system.query_views_log 界面，展示带过滤和排序功能的查询执行历史" />
 
 
-## Query Views Log Use Cases
+## Query 视图日志使用场景
 
-### View Performance Analysis
+### 视图性能分析
 
-1. **Monitor View Duration**: Track average view execution times to identify slow views
-2. **Analyze Read Patterns**: Use read rows/bytes charts to understand data consumption
-3. **Track Write Patterns**: Monitor written rows/bytes to see view output volume
-4. **Compare Views**: Filter by view_name to compare performance across different views
+1. **监控视图耗时**：跟踪视图的平均执行时间，识别慢速视图
+2. **分析读取模式**：使用读行数/字节数图表理解数据消费情况
+3. **跟踪写入模式**：监控写入的行数/字节数，了解视图输出量
+4. **对比视图**：按 view_name 过滤，对比不同视图的性能
 
-### Error Debugging
+### 错误调试
 
-1. **Filter by Exception**: Use exception_code filter to focus on failed view executions
-2. **View Error Details**: Expand rows to see full error messages
-3. **Track Error Frequency**: Use distribution chart to see error spikes
-4. **Identify Problematic Views**: Filter by view_name and exception to find views with issues
+1. **按异常过滤**：使用 exception_code 过滤器聚焦失败的视图执行
+2. **查看错误详情**：展开行查看完整错误信息
+3. **跟踪错误频率**：使用分布图查看错误激增
+4. **识别问题视图**：按 view_name 和异常过滤，找出有问题的视图
 
-### View Optimization
+### 视图优化
 
-1. **Identify Slow Views**: Sort by view_duration_ms to find views that need optimization
-2. **Monitor Resource Usage**: Track peak_memory_usage and read/write patterns
-3. **Compare Time Periods**: Use time range selector to compare performance over time
-4. **Node Comparison**: Filter by hostname to compare view performance across nodes
+1. **识别慢速视图**：按 view_duration_ms 排序，找出需要优化的视图
+2. **监控资源使用**：跟踪 peak_memory_usage 和读/写模式
+3. **对比时间段**：使用时间范围选择器对比不同时期的性能
+4. **节点对比**：按主机名过滤，对比各节点的视图性能
 
-### Materialized View Monitoring
+### 物化视图监控
 
-1. **Track Materialization**: Monitor written_rows and written_bytes to see materialization activity
-2. **Monitor Lag**: Check event times to identify delays in materialized view updates
-3. **Resource Planning**: Use read/write metrics for capacity planning
-4. **View Health**: Track exception rates to ensure views are functioning correctly
+1. **跟踪物化活动**：监控 written_rows 和 written_bytes，了解物化活动
+2. **监控滞后**：检查事件时间，识别物化视图更新的延迟
+3. **资源规划**：使用读/写指标进行容量规划
+4. **视图健康**：跟踪异常率，确保视图正常运行
 
-## Next Steps
+## 下一步
 
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze specific query execution
-- **[System Log Introspection](./system-log-introspection.md)** — Overview of all system log tools
-- **[system.ddl_distribution_queue Introspection](./system-ddl-distributed-queue.md)** — Monitor distributed DDL operations
-- **[system.part_log Introspection](./system-part-log.md)** — Monitor part-level operations
-- **[system.query_log Introspection](./system-query-log.md)** — Analyze query execution logs
-- **[system.zookeeper Introspection](./system-zookeeper.md)** — Browse ZooKeeper data
-
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析具体查询的执行
+- **[系统日志内省](./system-log-introspection.md)** —— 所有系统日志工具概览
+- **[system.ddl_distribution_queue 内省](./system-ddl-distributed-queue.md)** —— 监控分布式 DDL 操作
+- **[system.part_log 内省](./system-part-log.md)** —— 监控 Part 级操作
+- **[system.query_log 内省](./system-query-log.md)** —— 分析查询执行日志
+- **[system.zookeeper 内省](./system-zookeeper.md)** —— 浏览 ZooKeeper 数据

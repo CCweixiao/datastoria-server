@@ -1,44 +1,43 @@
 ---
 layout: home
-title: DataStoria - AI-native ClickHouse Console
+title: DataStoria - AI 原生的 ClickHouse 控制台
 titleTemplate: false
-description: ClickHouse query, cluster diagnostics and service-managed AI workflows.
+description: ClickHouse 查询、集群诊断与服务端管理的 AI 工作流。
 
 hero:
   name: DataStoria
-  text: AI-native ClickHouse Console
-  tagline: Query, inspect and diagnose ClickHouse with server-managed connections, models and Agent runs.
+  text: AI 原生的 ClickHouse 控制台
+  tagline: 通过服务端管理的连接、模型和 Agent 运行，对 ClickHouse 进行查询、检视与诊断。
   actions:
     - theme: brand
-      text: Read the Manual
+      text: 阅读使用手册
       link: /v1.1.0/manual/
     - theme: alt
-      text: Download a Release
+      text: 下载发布包
       link: https://github.com/CCweixiao/datastoria-server/releases
     - theme: alt
-      text: View on GitHub
+      text: 在 GitHub 查看
       link: https://github.com/CCweixiao/datastoria-server
 
 features:
   - icon: ⚡
-    title: SQL Workbench
-    details: Explore schemas, execute SQL, inspect errors and visualize Explain plans.
+    title: SQL 工作台
+    details: 浏览模式、执行 SQL、检查错误并可视化 Explain 执行计划。
   - icon: 🔍
-    title: Cluster Diagnostics
-    details: Discover shards and replicas, inspect system logs and switch dashboard monitoring scope.
+    title: 集群诊断
+    details: 发现分片与副本、内省系统日志，并切换仪表盘监控范围。
   - icon: 🤖
-    title: Evidence-based AI
-    details: Generate and optimize SQL with read-only tools, approval actions and resumable Agent runs.
+    title: 基于证据的 AI
+    details: 以只读工具、审批动作和可恢复的 Agent 运行来生成和优化 SQL。
   - icon: 🔐
-    title: Server-managed Secrets
-    details: Java encrypts ClickHouse and model credentials; saved secrets are never returned to the browser.
+    title: 服务端管理的密钥
+    details: 由 Java 加密 ClickHouse 与模型凭据；已保存的密钥永不返回浏览器。
   - icon: 🧩
-    title: Models, Agents and Skills
-    details: Manage providers and multiple models, publish Agent revisions and extend workflows with Skills.
+    title: 模型、Agent 与技能
+    details: 管理供应商与多个模型、发布 Agent 版本，并用技能扩展工作流。
   - icon: 🚀
-    title: Unified Deployment
-    details: Run the Next.js frontend and Spring Boot backend from one release package without requiring Nginx.
+    title: 统一部署
+    details: 使用一个发布包同时运行 Next.js 前端与 Spring Boot 后端，无需 Nginx。
 ---
 
-Use the [installation guide](/v1.1.0/manual/01-getting-started/installation) to start a release package or a
-development checkout.
+参考[安装指南](/v1.1.0/manual/01-getting-started/installation)启动发布包或开发环境。

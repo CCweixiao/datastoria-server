@@ -76,39 +76,22 @@ function sitePath(relativePath: string): string {
 }
 
 export default defineConfig({
-  title: 'DataStoria Documentation',
-  description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management. Modern web interface for ClickHouse database administration.',
+  title: 'DataStoria 文档',
+  description: 'AI 驱动的 ClickHouse 管理控制台：自然语言查询、智能优化与集群管理，现代化的 ClickHouse 数据库管理 Web 界面。',
   base: docsBase,
   ignoreDeadLinks: false,
 
   // SEO: Clean URLs without .html extension
   cleanUrls: true,
 
-  // Rewrites: docs/versions/<v>/** → /<v>/**, docs/versions/<v>/zh/** → /zh/<v>/**
+  // Rewrites: docs/versions/<v>/** → /<v>/**, docs/versions/<v>/en/** → /en/<v>/**
   rewrites: (id) => rewriteDest(id) as any,
 
   locales: {
+    // Chinese is the default locale and serves from the site root.
     root: {
-      label: 'English',
-      lang: 'en-US',
-      themeConfig: {
-        nav: buildNav('en'),
-        sidebar: buildSidebar('en'),
-        outline: {
-          level: [2, 3],
-          label: 'On this page',
-        },
-        footer: {
-          message: 'Released under the Apache License 2.0',
-          copyright: 'Copyright © 2025 DataStoria',
-        },
-      },
-    },
-    zh: {
       label: '简体中文',
       lang: 'zh-CN',
-      title: 'DataStoria 文档',
-      description: 'AI 驱动的 ClickHouse 管理控制台：自然语言查询、智能优化与集群管理，现代化的 ClickHouse 数据库管理 Web 界面。',
       themeConfig: {
         nav: buildNav('zh'),
         sidebar: buildSidebar('zh'),
@@ -118,6 +101,25 @@ export default defineConfig({
         },
         footer: {
           message: '基于 Apache License 2.0 发布',
+          copyright: 'Copyright © 2025 DataStoria',
+        },
+      },
+    },
+    en: {
+      label: 'English',
+      lang: 'en-US',
+      title: 'DataStoria Documentation',
+      description: 'AI-powered ClickHouse management console with natural language queries, intelligent optimization, and advanced cluster management. Modern web interface for ClickHouse database administration.',
+      link: '/en/',
+      themeConfig: {
+        nav: buildNav('en'),
+        sidebar: buildSidebar('en'),
+        outline: {
+          level: [2, 3],
+          label: 'On this page',
+        },
+        footer: {
+          message: 'Released under the Apache License 2.0',
           copyright: 'Copyright © 2025 DataStoria',
         },
       },
@@ -151,7 +153,7 @@ export default defineConfig({
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
     ['meta', { property: 'og:image:alt', content: 'DataStoria - AI-Powered ClickHouse Management Console' }],
-    ['meta', { property: 'og:locale', content: 'en_US' }],
+    ['meta', { property: 'og:locale', content: 'zh_CN' }],
 
     // Twitter Card tags
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
@@ -404,20 +406,20 @@ export default defineConfig({
       const versionPrefixes: string[] = []
       for (const v of versions) {
         versionRoots.add(`/${v}/`)
-        versionRoots.add(`/zh/${v}/`)
+        versionRoots.add(`/en/${v}/`)
         versionPrefixes.push(`/${v}/`)
       }
       return items.map((item) => {
         // Homepages get the highest priority
-        if (item.url === '/' || item.url === '/zh/' || versionRoots.has(item.url)) {
+        if (item.url === '/' || item.url === '/en/' || versionRoots.has(item.url)) {
           return { ...item, priority: 1.0, changefreq: 'weekly' }
         }
         // Versioned snapshots are frozen content
-        if (versionPrefixes.some((p) => item.url.startsWith(p) || item.url.startsWith(`/zh${p}`))) {
+        if (versionPrefixes.some((p) => item.url.startsWith(p) || item.url.startsWith(`/en${p}`))) {
           return { ...item, priority: 0.4, changefreq: 'yearly' }
         }
         // Manual pages get high priority
-        if (item.url.startsWith('/manual/') || item.url.startsWith('/zh/manual/')) {
+        if (item.url.startsWith('/manual/') || item.url.startsWith('/en/manual/')) {
           return { ...item, priority: 0.8, changefreq: 'weekly' }
         }
         // Other pages get standard priority
@@ -433,8 +435,8 @@ export default defineConfig({
   transformPageData(pageData) {
     const path = sitePath(pageData.relativePath)
     const canonicalUrl = docsUrl(path)
-    const isZh = path === '/zh/' || path.startsWith('/zh/')
-    const titleSuffix = isZh ? 'DataStoria 文档' : 'DataStoria Documentation'
+    const isEn = path === '/en/' || path.startsWith('/en/')
+    const titleSuffix = isEn ? 'DataStoria Documentation' : 'DataStoria 文档'
 
     pageData.frontmatter.head ??= []
     // Ensure only one canonical URL exists per page.
@@ -457,22 +459,23 @@ export default defineConfig({
       { property: 'og:url', content: canonicalUrl }
     ])
 
-    // Per-locale Open Graph locale, with the other language as alternate.
-    if (isZh) {
-      pageData.frontmatter.head.push(['meta', { property: 'og:locale', content: 'zh_CN' }])
-      pageData.frontmatter.head.push(['meta', { property: 'og:locale:alternate', content: 'en_US' }])
+    // Per-locale Open Graph locale (zh_CN is the global default), with the other
+    // language as alternate.
+    if (isEn) {
+      pageData.frontmatter.head.push(['meta', { property: 'og:locale', content: 'en_US' }])
+      pageData.frontmatter.head.push(['meta', { property: 'og:locale:alternate', content: 'zh_CN' }])
     }
 
     // hreflang alternates for pages that exist in both languages (dev/ notes are
-    // English-only). Path shape: /{zh/}?{vX/}?rest → sibling in the other locale.
-    const localeless = path.replace(/^\/zh(?=\/)/, '')
+    // English-only). Path shape: /{en/}?{vX/}?rest → sibling in the other locale.
+    const localeless = path.replace(/^\/en(?=\/)/, '')
     const isTranslated = localeless === '/' || /^\/(v[\d.]+\/)?(manual|reference)\//.test(localeless)
     if (isTranslated) {
-      const enUrl = docsUrl(localeless)
-      const zhUrl = docsUrl(`/zh${localeless === '/' ? '/' : localeless}`)
-      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'en', href: enUrl }])
+      const zhUrl = docsUrl(localeless)
+      const enUrl = docsUrl(`/en${localeless === '/' ? '/' : localeless}`)
       pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'zh', href: zhUrl }])
-      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'x-default', href: enUrl }])
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'en', href: enUrl }])
+      pageData.frontmatter.head.push(['link', { rel: 'alternate', hreflang: 'x-default', href: zhUrl }])
     }
 
     // Add page-specific title and description to Open Graph
@@ -500,7 +503,7 @@ export default defineConfig({
   },
 
   // SEO: Generate title template for better page titles
-  titleTemplate: ':title | DataStoria Documentation',
+  titleTemplate: ':title | DataStoria 文档',
 
   // Markdown configuration for Mermaid
   markdown: {
@@ -569,7 +572,7 @@ export default defineConfig({
         },
       },
       locales: {
-        zh: {
+        root: {
           translations: {
             button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
             modal: {

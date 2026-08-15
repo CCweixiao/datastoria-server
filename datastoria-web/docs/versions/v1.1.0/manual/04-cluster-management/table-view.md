@@ -1,245 +1,245 @@
 ---
-title: Table View
-description: Comprehensive table information including metadata, data samples, partitions, query history, and dependencies. Explore ClickHouse table details, monitor performance, and understand table relationships.
+title: 表视图（Table View）
+description: 全面的表信息，包括元数据、数据抽样、分区、查询历史和依赖关系。探索 ClickHouse 表详情、监控性能并理解表间关系。
 head:
   - - meta
     - name: keywords
-      content: table view, table details, table metadata, table information, ClickHouse table, table statistics, table partitions, table data sample, table query history, table dependencies
+      content: table view, 表视图, table details, table metadata, table information, ClickHouse table, table statistics, table partitions, table data sample, table query history, table dependencies
 ---
 
-# Table View
+# 表视图（Table View）
 
-The Table View provides comprehensive information about a ClickHouse table, including metadata, data samples, partition information, query history, and dependencies. It serves as a central hub for understanding table structure, performance, and relationships.
+表视图提供 ClickHouse 表的全面信息，包括元数据、数据抽样、分区信息、查询历史和依赖关系。它是理解表结构、性能和关系的中心枢纽。
 
-## Overview
+## 概览
 
-The Table View organizes table information into multiple tabs:
+表视图将表信息组织到多个标签页中：
 
-- **Overview Tab**: High-level statistics and performance metrics
-- **Metadata Tab**: Table structure, columns, and CREATE TABLE statement
-- **Dependencies Tab**: Visual graph of table dependencies
-- **Data Sample Tab**: Sample rows from the table
-- **Partitions Tab**: Partition information and size distribution
-- **Query Dashboard Tab**: Query history and performance metrics
-- **Part History Tab**: Historical part information and changes
+- **概览标签页（Overview）**：高层统计信息和性能指标
+- **元数据标签页（Metadata）**：表结构、列和 CREATE TABLE 语句
+- **依赖标签页（Dependencies）**：表依赖关系的可视化图
+- **数据抽样标签页（Data Sample）**：表中的示例行
+- **分区标签页（Partitions）**：分区信息和大小分布
+- **查询 Dashboard 标签页（Query Dashboard）**：查询历史和性能指标
+- **Part 历史标签页（Part History）**：历史 Part 信息与变更
 
-![Table View showing comprehensive table information including overview, metadata, dependencies, data sample, partitions, and query history](./img/table-tab-overview.jpg)
+![表视图，展示包括概览、元数据、依赖、数据抽样、分区和查询历史在内的全面表信息](../../en/manual/04-cluster-management/img/table-tab-overview.jpg)
 
-## Accessing the Table View
+## 访问表视图
 
-The Table View can be accessed from multiple locations in ClickHouse Console:
+在 ClickHouse Console 中可以从多个位置访问表视图：
 
-### From Schema Explorer
+### 从 Schema Explorer
 
-1. **Navigate to Table**: Click on a table name in the Schema Explorer sidebar
-2. **Table Tab Opens**: The Table View opens automatically in a new tab
-3. **View Overview**: The Overview tab is displayed by default (if available for the table engine type)
+1. **导航到表**：点击 Schema Explorer 侧边栏中的表名
+2. **打开表标签页**：表视图自动在新标签页中打开
+3. **查看概览**：默认显示概览标签页（如果该表引擎类型支持）
 
-### From Database View
+### 从数据库视图
 
-1. **Open Database View**: Click on a database name in the Schema Explorer
-2. **Click Table Name**: Click on any table name in the database table list
-3. **Table Tab Opens**: The Table View opens in a new tab with the selected table's information
+1. **打开数据库视图**：点击 Schema Explorer 中的数据库名
+2. **点击表名**：点击数据库表列表中的任意表名
+3. **打开表标签页**：表视图在新标签页中打开，展示所选表的信息
 
-## Available Tabs
+## 可用标签页
 
-The tabs available depend on the table engine type. Some engines have limited functionality:
+可用的标签页取决于表引擎类型。部分引擎的功能有限：
 
-| Table Engine | Overview | Metadata | Dependencies | Data Sample | Partitions | Query Dashboard | Part History |
+| 表引擎 | 概览 | 元数据 | 依赖 | 数据抽样 | 分区 | 查询 Dashboard | Part 历史 |
 |--------------|----------|----------|--------------|-------------|------------|------------------|--------------|
-| **MergeTree family** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Materialized Views** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
-| **Distributed Tables** | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| **Kafka Tables** | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **URL Tables** | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **System Tables** | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| **MergeTree 家族** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **物化视图（Materialized Views）** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
+| **Distributed 表** | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Kafka 表** | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **URL 表** | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **系统表（System Tables）** | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 
-### Engine-Specific Notes
+### 引擎相关说明
 
-- **MergeTree family**: Includes MergeTree, ReplicatedMergeTree, ReplacingMergeTree, SummingMergeTree, AggregatingMergeTree, CollapsingMergeTree, VersionedCollapsingMergeTree, and other MergeTree variants. All tabs are fully supported.
-- **Materialized Views**: Support overview, metadata, dependencies, and partitions. Data sample and query history are not available as these are view definitions, not data tables.
-- **Distributed Tables**: Support data sampling, metadata, dependencies, and query dashboard. Partitions and part history are not applicable as these tables distribute data across cluster nodes.
-- **Kafka Tables**: Only metadata and dependencies are available. These tables read from Kafka streams and don't store data locally.
-- **URL Tables**: Only metadata and dependencies are available. These tables read from external URLs and don't store data locally.
-- **System Tables**: Support data sample and metadata. Dependencies and other advanced features are not available for system tables.
+- **MergeTree 家族**：包括 MergeTree、ReplicatedMergeTree、ReplacingMergeTree、SummingMergeTree、AggregatingMergeTree、CollapsingMergeTree、VersionedCollapsingMergeTree 及其他 MergeTree 变体。所有标签页均完整支持。
+- **物化视图**：支持概览、元数据、依赖和分区。数据抽样和查询历史不可用，因为它们是视图定义而非数据表。
+- **Distributed 表**：支持数据抽样、元数据、依赖和查询 Dashboard。分区和 Part 历史不适用，因为这些表将数据分布到集群节点上。
+- **Kafka 表**：仅元数据和依赖可用。这些表从 Kafka 流读取数据，不在本地存储数据。
+- **URL 表**：仅元数据和依赖可用。这些表从外部 URL 读取数据，不在本地存储数据。
+- **系统表**：支持数据抽样和元数据。系统表不提供依赖和其他高级功能。
 
-## Overview Tab
+## 概览标签页
 
-The Overview tab provides high-level statistics and performance metrics for the ClickHouse table, giving you a quick understanding of table size, row counts, part information, and performance characteristics.
+概览标签页提供 ClickHouse 表的高层统计信息和性能指标，让你快速了解表大小、行数、Part 信息和性能特征。
 
-### Key Metrics
+### 关键指标
 
-- **Table Size**: Total size on disk
-- **Row Count**: Total number of rows
-- **Part Count**: Number of data parts
-- **Compression Ratio**: Data compression efficiency
-- **Last Modified**: Last modification time
+- **表大小**：磁盘总大小
+- **行数**：总行数
+- **Part 数量**：数据 Part 的数量
+- **压缩比**：数据压缩效率
+- **最近修改**：最近修改时间
 
-### Performance Charts
+### 性能图表
 
-- **Size Over Time**: Table size trends
-- **Row Count Trends**: Row count changes over time
-- **Query Performance**: Query execution metrics
-- **Part Operations**: Merge and mutation activity
+- **大小随时间变化**：表大小趋势
+- **行数趋势**：行数随时间的变化
+- **查询性能**：查询执行指标
+- **Part 操作**：Merge 和 Mutation 活动
 
 
-### Column Size Analysis
+### 列大小分析
 
-The Column Size section provides detailed insights into the storage size of each column in the table, helping you identify which columns consume the most disk space and optimize storage efficiency.
+列大小（Column Size）部分提供表中每列存储大小的详细洞察，帮助你识别哪些列占用最多的磁盘空间并优化存储效率。
 
-### Secondary Index Information
+### 二级索引信息
 
-This section displays the size of each secondary index (data skipping index) used by the table, enabling you to monitor index overhead and optimize query performance.
+本部分展示表使用的每个二级索引（data skipping index）的大小，帮助你监控索引开销并优化查询性能。
 
-### Projection Analysis
+### Projection 分析
 
-The Projection section shows the size of every PROJECTION used by this table, allowing you to understand the storage impact of projections and their contribution to query optimization.
+Projection 部分展示该表使用的每个 PROJECTION 的大小，帮助你理解 Projection 的存储影响及其对查询优化的贡献。
 
-## Metadata Tab
+## 元数据标签页
 
-The Metadata tab displays detailed information about the table structure.
+元数据标签页展示表结构的详细信息。
 
-### Table Information
+### 表信息
 
-- **Database Name**: The database containing the table
-- **Table Name**: The name of the table
-- **Engine Type**: ClickHouse engine (MergeTree, ReplicatedMergeTree, etc.)
-- **CREATE TABLE Statement**: Complete table definition
-- **Metadata Modification Time**: When table metadata was last changed
+- **数据库名**：表所在数据库
+- **表名**：表的名称
+- **引擎类型**：ClickHouse 引擎（MergeTree、ReplicatedMergeTree 等）
+- **CREATE TABLE 语句**：完整的表定义
+- **元数据修改时间**：表元数据最近一次变更的时间
 
-### Column Information
+### 列信息
 
-For each column, view:
+对于每一列，可以查看：
 
-- **Column Name**: The name of the column
-- **Data Type**: ClickHouse data type
-- **Default Expression**: Default value or expression
-- **Comment**: Column description (if available)
-- **Codec**: Compression codec (if specified)
-- **TTL**: Time-to-live expression (if specified)
+- **列名**：列的名称
+- **数据类型**：ClickHouse 数据类型
+- **默认表达式**：默认值或表达式
+- **注释**：列描述（如果有）
+- **Codec**：压缩编解码器（如果指定）
+- **TTL**：存活时间表达式（如果指定）
 
-### Table Properties
+### 表属性
 
-- **Partition Key**: Partitioning expression
-- **Order By**: Sorting key
-- **Primary Key**: Primary key definition
-- **Sample By**: Sampling expression (if specified)
-- **Settings**: Table-level settings and parameters
+- **Partition Key**：分区表达式
+- **Order By**：排序键
+- **Primary Key**：主键定义
+- **Sample By**：采样表达式（如果指定）
+- **Settings**：表级设置和参数
 
-### Engine-Specific Information
+### 引擎相关信息
 
-- **Replication Settings**: For ReplicatedMergeTree tables
-- **Distributed Settings**: For Distributed tables
-- **Kafka Settings**: For Kafka tables
-- **Other Engine Settings**: Engine-specific configuration
+- **复制设置**：适用于 ReplicatedMergeTree 表
+- **Distributed 设置**：适用于 Distributed 表
+- **Kafka 设置**：适用于 Kafka 表
+- **其他引擎设置**：特定引擎的配置
 
-## Dependencies Tab
+## 依赖标签页
 
-The Dependencies tab shows a visual graph of table dependencies of current table.
+依赖标签页以可视化图展示当前表的表依赖关系。
 
-### Features
+### 功能
 
-- **Upstream Dependencies**: Tables this table depends on
-- **Downstream Dependencies**: Tables that depend on this table
-- **Interactive Graph**: Navigate dependencies visually
-- **Table Details**: Click nodes to view table information
+- **上游依赖**：当前表依赖的表
+- **下游依赖**：依赖当前表的表
+- **交互式图**：以可视化方式浏览依赖
+- **表详情**：点击节点查看表信息
 
-For example, the following picture demonstrates the relationship among a Materialized View and its source table as well as its target table, showing how data flows through the materialized view pipeline.
+例如，下图展示了一个物化视图与其源表及目标表之间的关系，说明数据如何流经物化视图管道。
 
-![Table Dependencies tab showing visual graph of upstream and downstream dependencies for a Materialized View and its source and target tables](./img/table-tab-dependency.jpg)
+![表依赖标签页，展示物化视图及其源表和目标表的上游与下游依赖可视化图](../../en/manual/04-cluster-management/img/table-tab-dependency.jpg)
 
-For detailed information about the dependency view, see [Dependency View](./dependency-view.md).
+关于依赖视图的详细信息，参见[依赖视图](./dependency-view.md)。
 
-## Data Sample Tab
+## 数据抽样标签页
 
-The Data Sample tab displays sample rows from the table.
+数据抽样标签页展示表中的示例行。
 
-### Features
+### 功能
 
-- **Sample Rows**: View actual data from the table
-- **Configurable Sample Size**: Adjust number of rows displayed
-- **Column Display**: All columns with proper formatting
-- **Sorting**: Sort by any column
-- **Filtering**: Filter rows by column values
-- **Export**: Export sample data
+- **示例行**：查看表中的真实数据
+- **可配置抽样数量**：调整显示的行数
+- **列展示**：所有列均正确格式化显示
+- **排序**：按任意列排序
+- **过滤**：按列值过滤行
+- **导出**：导出抽样数据
 
-### Use Cases
+### 使用场景
 
-- **Data Exploration**: Understand table contents
-- **Data Quality**: Verify data correctness
-- **Schema Validation**: Confirm column types and values
-- **Query Planning**: Understand data structure for queries
+- **数据探索**：了解表内容
+- **数据质量**：验证数据正确性
+- **结构校验**：确认列类型和取值
+- **查询规划**：为查询理解数据结构
 
-## Partitions Tab
+## 分区标签页
 
-The Partitions tab provides detailed partition information of current table.
+分区标签页提供当前表的详细分区信息。
 
-### Partition Overview
+### 分区概览
 
-- **Partition List**: All partitions in the table
-- **Partition Key Values**: Values used for partitioning
-- **Size Information**: Size per partition
-- **Row Count**: Rows per partition
-- **Part Count**: Number of parts per partition
+- **分区列表**：表中的所有分区
+- **分区键值**：用于分区的值
+- **大小信息**：每个分区的大小
+- **行数**：每个分区的行数
+- **Part 数量**：每个分区的 Part 数量
 
-![Table Partitions tab displaying detailed partition information including partition list, size distribution, row counts, and part counts](./img/table-tab-partition.jpg)
+![表分区标签页，展示详细分区信息，包括分区列表、大小分布、行数和 Part 数量](../../en/manual/04-cluster-management/img/table-tab-partition.jpg)
 
 
-## Query Dashboard Tab
+## 查询 Dashboard 标签页
 
-The Query Dashboard tab shows query history and performance metrics based on the `system.query_log`.
+查询 Dashboard 标签页基于 `system.query_log` 展示查询历史和性能指标。
 
-It provides several dashboard metrics to help users understand the query performance on the current table, including execution times, query frequency, and performance trends.
+它提供多个 Dashboard 指标，帮助用户理解当前表上的查询性能，包括执行时间、查询频率和性能趋势。
 
-![Query Dashboard tab showing query history and performance metrics from system.query_log with execution times, query frequency, and performance analysis](./img/table-tab-query-log.jpg)
+![查询 Dashboard 标签页，展示来自 system.query_log 的查询历史和性能指标，包括执行时间、查询频率和性能分析](../../en/manual/04-cluster-management/img/table-tab-query-log.jpg)
 
-### Use Cases
+### 使用场景
 
-- **Performance Monitoring**: Track query performance
-- **Optimization**: Identify slow queries for optimization
-- **Usage Analysis**: Understand how the table is being used
-- **Troubleshooting**: Debug query performance issues
+- **性能监控**：跟踪查询性能
+- **优化**：识别可优化的慢查询
+- **使用分析**：了解表的使用方式
+- **问题排查**：调试查询性能问题
 
 
-## Part History Tab
+## Part 历史标签页
 
-The Part History tab shows historical information about table parts based on `system.part_log` system table.
+Part 历史标签页基于 `system.part_log` 系统表展示表 Part 的历史信息。
 
-![Part History tab displaying historical part information from system.part_log showing part operations, merges, and mutations over time](./img/table-tab-part-log.jpg)
+![Part 历史标签页，展示来自 system.part_log 的历史 Part 信息，包括 Part 操作、Merge 和 Mutation 随时间的变化](../../en/manual/04-cluster-management/img/table-tab-part-log.jpg)
 
-On each panel, you can click either the number or drag on the minimap to view the detailed logs.
+在每个面板上，你可以点击数字或在缩略图上拖动来查看详细日志。
 
-## Limitations
+## 限制
 
-The Table View has both engine-specific and general limitations that you should be aware of:
+表视图存在引擎相关和通用两类限制，使用时请注意：
 
-### Engine-Specific Limitations
+### 引擎相关限制
 
-- **System Tables**: Limited functionality for system tables, as they have different structures and purposes compared to user tables
-- **Kafka Tables**: No data sample or partitions available, as Kafka tables read from streams and don't store data locally
-- **URL Tables**: Limited metadata and no data sample, as URL tables fetch data from external sources on-demand
-- **External Tables**: May have limited functionality depending on the external table engine type and its capabilities
+- **系统表**：系统表功能有限，因为它们与用户表的结构和用途不同
+- **Kafka 表**：不提供数据抽样和分区，因为 Kafka 表从流中读取数据，不在本地存储
+- **URL 表**：元数据有限且无数据抽样，因为 URL 表按需从外部源获取数据
+- **外部表**：功能可能有限，取决于外部表引擎类型及其能力
 
-### General Limitations
+### 通用限制
 
-- **System Table Access**: Requires read access to ClickHouse system tables (`system.tables`, `system.parts`, `system.query_log`, `system.part_log`, etc.)
-- **Data Retention**: Historical data depends on system table retention policies configured in ClickHouse
-- **Performance Impact**: Querying large tables with many parts may be slow, especially when loading comprehensive statistics and historical data
-- **Real-time Accuracy**: Some metrics may have slight delays as they are based on system table snapshots rather than real-time data
-- **Version Compatibility**: Some features may not be available in older ClickHouse versions, as they depend on specific system table columns and functionality introduced in newer versions
+- **系统表访问**：需要对 ClickHouse 系统表（`system.tables`、`system.parts`、`system.query_log`、`system.part_log` 等）的读权限
+- **数据保留期**：历史数据取决于 ClickHouse 中配置的系统表保留策略
+- **性能影响**：查询包含大量 Part 的大表可能较慢，尤其是在加载全面统计信息和历史数据时
+- **实时准确性**：部分指标基于系统表快照而非实时数据，可能有轻微延迟
+- **版本兼容性**：部分功能依赖较新版本引入的系统表列和功能，在较旧的 ClickHouse 版本中可能不可用
 
-## Integration with Other Features
+## 与其他功能的集成
 
-- **Schema Explorer**: Navigate to related tables
-- **Database View**: Access database-level information
-- **Dependency View**: Explore table dependencies
-- **Query Editor**: Use table information when writing queries
-- **Query Log Inspector**: Analyze query performance in detail
+- **Schema Explorer**：导航到相关表
+- **数据库视图**：访问数据库级信息
+- **依赖视图**：探索表依赖
+- **Query 编辑器**：编写查询时使用表信息
+- **Query Log Inspector**：深入分析查询性能
 
-## Next Steps
+## 下一步
 
-- **[Dependency View](./dependency-view.md)** — Explore table dependencies and relationships
-- **[Database View](./database-view.md)** — View database-level statistics
-- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** — Analyze query performance
-- **[Schema Explorer](./schema-explorer.md)** — Navigate database structure
-- **[SQL Editor](../03-query-experience/sql-editor.md)** — Query your tables
+- **[依赖视图](./dependency-view.md)** —— 探索表依赖和关系
+- **[数据库视图](./database-view.md)** —— 查看数据库级统计信息
+- **[Query Log Inspector](../03-query-experience/query-log-inspector.md)** —— 分析查询性能
+- **[Schema Explorer](./schema-explorer.md)** —— 浏览数据库结构
+- **[SQL 编辑器](../03-query-experience/sql-editor.md)** —— 查询你的表
