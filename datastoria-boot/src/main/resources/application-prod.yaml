@@ -18,4 +18,7 @@ datastoria:
       tenant: ${DATASTORIA_DEFAULT_TENANT:default}
       email: ${DATASTORIA_BOOTSTRAP_ADMIN_EMAIL:}
   cors:
-    allowed-origins: ${DATASTORIA_CORS_ALLOWED_ORIGINS}
+    # Only needed when the frontend is hosted on a different origin; empty (the default) means
+    # no cross-origin access is allowed, which is correct for the unified single-process
+    # deployment where the browser talks to this process same-origin.
+    allowed-origins: ${DATASTORIA_CORS_ALLOWED_ORIGINS:}

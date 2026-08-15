@@ -32,21 +32,23 @@ bin/datastoria init
 
 ```dotenv
 DATASTORIA_PROFILE=prod
-BACKEND_HOST=127.0.0.1
-BACKEND_PORT=8080
-FRONTEND_HOST=0.0.0.0
-FRONTEND_PORT=3000
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8080
 
 DATASTORIA_DB_URL=jdbc:mysql://mysql.internal:3306/datastoria?useSSL=true
 DATASTORIA_DB_USERNAME=datastoria
 DATASTORIA_DB_PASSWORD=<从密钥系统注入>
-DATASTORIA_CORS_ALLOWED_ORIGINS=https://datastoria.example.com
-DATASTORIA_AUTH_SUCCESS_URL=https://datastoria.example.com
+
+# 认证：JWT 密钥与初始管理员（首次启动引导创建）
+DATASTORIA_JWT_SECRET=<随机长密钥，从密钥系统注入>
+DATASTORIA_BOOTSTRAP_ADMIN_USERNAME=datastoria
+DATASTORIA_BOOTSTRAP_ADMIN_PASSWORD=<从密钥系统注入>
+
+# 多租户标识（默认 default）
 DATASTORIA_DEFAULT_TENANT=tenant-default
 
-SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID=<由身份平台提供>
-SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET=<从密钥系统注入>
-SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_SCOPE=openid,profile,email
+# 仅前后端分离部署（前端独立域名）时配置；统一单进程部署为同源访问，无需 CORS
+# DATASTORIA_CORS_ALLOWED_ORIGINS=https://app.example.com
 ```
 
 `application.yaml` 中的 `datastoria.master-key` 用于解密已保存的供应商和连接凭据，必须稳定
@@ -76,8 +78,8 @@ bin/datastoria logs 200
 - `/actuator` 仅在内网开放；
 - MySQL 和 ClickHouse 使用网络 ACL/TLS；
 - ClickHouse 账号按业务库和只读诊断范围授权；
-- CORS 只填写真实前端 Origin；
-- 生产认证至少配置一个 OAuth2/OIDC Provider。
+- 仅前后端分离部署时配置 CORS（统一部署同源访问，无需配置）；
+- 生产认证使用用户名/密码 + JWT（首启通过 bootstrap 管理员引导，之后建议修改默认密码）。
 
 ## 5. 升级与回滚
 
