@@ -70,8 +70,17 @@ datastoria:
       # 扫描量超限时直接终止查询，避免继续消耗集群资源。
       read-overflow-mode: throw
   # Base64-encoded 32-byte AES-256 key used to encrypt server-managed credentials at rest.
-  # Keep this value stable: changing it makes existing encrypted credentials unreadable.
-  master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
+  # Resolution: DATASTORIA_MASTER_KEY (or the built-in dev-profile default) wins; otherwise a
+  # random key is generated into master-key-file on first start. Back the key file up: losing
+  # it makes stored credentials unrecoverable. Rotating the active key does not break old data
+  # as long as the previous key stays in master-key-legacy.
+  master-key: ${DATASTORIA_MASTER_KEY:}
+  master-key-file: ${DATASTORIA_MASTER_KEY_FILE:data/master.key}
+  # Decrypt-only historical keys (comma-separated base64), oldest first. The two defaults are
+  # the keys that were historically hardcoded in this repository, kept so existing dev/prod
+  # databases keep decrypting. Set DATASTORIA_MASTER_KEY_LEGACY="" once no stored secret
+  # predates the current key.
+  master-key-legacy: ${DATASTORIA_MASTER_KEY_LEGACY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=,U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=}
 
 # Exactly one runtime profile is supported:
 #   dev  -> MySQL 5.7 with convenient local defaults and a fixed JWT secret / bootstrap admin

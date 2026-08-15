@@ -2,6 +2,9 @@ package io.github.ccweixiao.datastoria.common.crypto;
 
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -43,16 +46,37 @@ public class EnvelopeEncryptionService {
     }
   }
 
-  /** Decrypts using the matching nonce and key version. */
+  /**
+   * Decrypts using the matching nonce. The active key is tried first; if its GCM tag does not
+   * verify, each registered legacy key is tried (oldest first) so ciphertexts written before a key
+   * rotation stay readable. A tampered envelope or a key that was never registered fails with
+   * {@link IllegalStateException}.
+   */
   public byte[] decrypt(byte[] cipherText, byte[] nonce, String keyVersion) {
-    try {
-      SecretKey key = keyProvider.keyForVersion(keyVersion);
-      Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-      cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH_BITS, nonce));
-      return cipher.doFinal(cipherText);
-    } catch (Exception e) {
-      throw new IllegalStateException("AES-GCM decryption failed", e);
+    SecretKey key = keyProvider.keyForVersion(keyVersion);
+    Exception lastFailure = null;
+    for (SecretKey candidate : candidates(key)) {
+      try {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, candidate, new GCMParameterSpec(TAG_LENGTH_BITS, nonce));
+        return cipher.doFinal(cipherText);
+      } catch (Exception e) {
+        lastFailure = e;
+      }
     }
+    throw new IllegalStateException("AES-GCM decryption failed", lastFailure);
+  }
+
+  /** Active key first, then the decrypt-only legacy keys, deduplicated. */
+  private List<SecretKey> candidates(SecretKey key) {
+    List<SecretKey> candidates = new ArrayList<>(1 + keyProvider.legacyKeys().size());
+    candidates.add(key);
+    for (SecretKey legacy : keyProvider.legacyKeys()) {
+      if (!Arrays.equals(legacy.getEncoded(), key.getEncoded())) {
+        candidates.add(legacy);
+      }
+    }
+    return candidates;
   }
 
   /**

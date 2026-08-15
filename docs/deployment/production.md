@@ -51,8 +51,14 @@ DATASTORIA_DEFAULT_TENANT=tenant-default
 # DATASTORIA_CORS_ALLOWED_ORIGINS=https://app.example.com
 ```
 
-`application.yaml` 中的 `datastoria.master-key` 用于解密已保存的供应商和连接凭据，必须稳定
-备份并限制访问。丢失后不能恢复密文；轮换必须采用明确的数据重加密流程，不能直接替换。
+凭据加密主密钥（`datastoria.master-key`）按以下顺序解析，无需手工配置即可安全运行：
+
+1. `DATASTORIA_MASTER_KEY` 环境变量（base64 编码的 32 字节，从密钥系统注入）；
+2. 否则首次启动自动生成随机密钥并写入 `data/master.key`（权限 0600）。
+
+无论哪种来源，都必须**稳定备份并限制访问**：密钥丢失后已保存的供应商和连接凭据不可恢复。
+轮换主密钥时把旧 key 追加到 `DATASTORIA_MASTER_KEY_LEGACY`（逗号分隔，仅用于解密），存量
+密文仍可读取；确认没有旧密文后可清空该列表。
 
 ## 3. 启动与检查
 

@@ -6,6 +6,9 @@ spring:
     password: "Datastoria@123456"
 
 datastoria:
+  # Built-in dev key: zero local setup, deterministic across restarts so dev databases keep
+  # decrypting. Pre-rotation dev data is covered by master-key-legacy in application.yaml.
+  master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
   agent:
     repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
   skills:

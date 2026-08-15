@@ -53,8 +53,9 @@ npm run dev
 ```
 
 打开 `http://localhost:3000`，健康检查为 `http://127.0.0.1:8080/actuator/health`。
-本地配置只能用于开发。`datastoria.master-key` 位于 `application.yaml`，部署前应替换并稳定备份；
-修改后将无法读取使用旧密钥加密的凭据。
+本地配置只能用于开发。dev profile 使用内置的 `datastoria.master-key`；生产部署优先读取
+`DATASTORIA_MASTER_KEY`，未设置时首次启动自动生成 `data/master.key`（0600），必须稳定备份。
+轮换密钥时把旧 key 放入 `DATASTORIA_MASTER_KEY_LEGACY` 以保持存量密文可解密。
 
 ## 构建与验证
 
