@@ -23,6 +23,7 @@ JSON 对象，对应 SSE 帧 `data: {json}` 的 payload 部分（不含 `data: `
 | `error.jsonl` | 流错误 | start → start-step → error |
 | `cancel.jsonl` | 取消/断线 | start → start-step → text-start → text-delta → abort |
 | `continuation.jsonl` | 续跑（continuation） | start → tool-output-available → text → finish |
+| `question.jsonl` | HITL 提问挂起 | start → text → tool-input-start/delta/available → data-pending-action(question) → finish-step → finish |
 
 ## 来源与维护方式
 

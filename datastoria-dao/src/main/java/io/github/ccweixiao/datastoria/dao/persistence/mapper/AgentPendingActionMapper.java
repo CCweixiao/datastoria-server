@@ -52,4 +52,11 @@ public interface AgentPendingActionMapper extends BaseMapper<AgentPendingActionE
       @Param("tenantId") String tenantId,
       @Param("expectedRevision") long expectedRevision,
       @Param("now") Instant now);
+
+  int cancelPendingForRun(
+      @Param("tenantId") String tenantId,
+      @Param("userId") String userId,
+      @Param("runId") String runId,
+      @Param("resolvedBy") String resolvedBy,
+      @Param("now") Instant now);
 }

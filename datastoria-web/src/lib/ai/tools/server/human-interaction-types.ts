@@ -1,11 +1,20 @@
+type AskUserQuestionOptionBase = {
+  id: string;
+  label: string;
+  /** Optional secondary line explaining what this choice does. */
+  description?: string;
+};
+
 export type AskUserQuestionOption =
-  | { id: string; label: string; input: "none" }
-  | { id: string; label: string; input: "text" }
-  | { id: string; label: string; input: "select"; choices: string[] };
+  | (AskUserQuestionOptionBase & { input: "none" })
+  | (AskUserQuestionOptionBase & { input: "text" })
+  | (AskUserQuestionOptionBase & { input: "select"; choices: string[] });
 
 export type AskUserQuestionInput = {
   questions: {
     header: string;
+    /** Optional context line shown under the header. */
+    description?: string;
     options: AskUserQuestionOption[];
   }[];
 };

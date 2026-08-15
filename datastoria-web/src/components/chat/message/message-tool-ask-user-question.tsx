@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import type { AppUIMessage, PendingActionData, ToolPart } from "@/lib/ai/ai-types";
 import {
   type AskUserQuestionInput,
+  type AskUserQuestionOption,
   type AskUserQuestionOutput,
 } from "@/lib/ai/tools/server/human-interaction-types";
 import { cn } from "@/lib/utils";
-import { CircleAlert, HelpCircle, Loader2 } from "lucide-react";
+import { Check, CircleAlert, HelpCircle, Loader2, PenLine } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useChatAction } from "../chat-action-context";
 
@@ -120,11 +121,17 @@ function normalizeAskUserQuestionInput(value: unknown): AskUserQuestionInput | u
       questions: [
         {
           header: header.trim(),
-          options: choices.map((choice, index) => ({
-            id: `option-${index + 1}`,
-            label: (choice as { label: string }).label.trim(),
-            input: "none" as const,
-          })),
+          options: choices.map((choice, index) => {
+            const labeled = choice as { label: string; description?: unknown };
+            return {
+              id: `option-${index + 1}`,
+              label: labeled.label.trim(),
+              ...(typeof labeled.description === "string"
+                ? { description: labeled.description }
+                : {}),
+              input: "none" as const,
+            };
+          }),
         },
       ],
     };
@@ -150,11 +157,17 @@ function normalizeAskUserQuestionInput(value: unknown): AskUserQuestionInput | u
       questions: [
         {
           header: header.trim(),
-          options: options.map((opt, index) => ({
-            id: `option-${index + 1}`,
-            label: (opt as { label: string }).label.trim(),
-            input: "none" as const,
-          })),
+          options: options.map((opt, index) => {
+            const labeled = opt as { label: string; description?: unknown };
+            return {
+              id: `option-${index + 1}`,
+              label: labeled.label.trim(),
+              ...(typeof labeled.description === "string"
+                ? { description: labeled.description }
+                : {}),
+              input: "none" as const,
+            };
+          }),
         },
       ],
     };
@@ -204,6 +217,8 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [draftValue, setDraftValue] = useState("");
+  const [customActive, setCustomActive] = useState(false);
+  const [customValue, setCustomValue] = useState("");
   const questionKey = toolCallId || "ask-user-question";
 
   const question = input?.questions?.[0];
@@ -215,7 +230,13 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
         : question?.options.find((option) => option.id === selectedOptionId),
     [question?.options, selectedOptionId, singleOption]
   );
-  const shouldShowTypedInput = selectedOption?.input === "text";
+  // Options carrying descriptions render as a vertical choice list so the secondary line has
+  // room; description-less options stay compact pills.
+  const useChoiceCards = useMemo(
+    () => !!question?.options.some((option) => option.description),
+    [question?.options]
+  );
+  const isLocked = !!output || isSubmitting || hasSubmitted;
 
   const submitAnswer = async (
     answer: AskUserQuestionOutput
@@ -250,12 +271,14 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
   };
 
   const handleOptionChange = (optionId: string) => {
-    if (output || isSubmitting || hasSubmitted) return;
+    if (isLocked) return;
     const option = question?.options.find((item) => item.id === optionId);
     if (!option) return;
     setSubmitError(null);
     setSelectedOptionId(option.id);
     setDraftValue("");
+    setCustomActive(false);
+    setCustomValue("");
   };
 
   const handleSubmitSelectedOption = async () => {
@@ -275,6 +298,23 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
       value: normalizedValue,
     });
 
+    if (!result.success) {
+      setSubmitError(result.error);
+    }
+  };
+
+  const handleSubmitCustomAnswer = async () => {
+    const value = customValue.trim();
+    if (!value) {
+      setSubmitError(t("tool.enterValue"));
+      return;
+    }
+    const result = await submitAnswer({
+      optionId: "custom",
+      label: value,
+      input: "text",
+      value,
+    });
     if (!result.success) {
       setSubmitError(result.error);
     }
@@ -302,135 +342,206 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
   }
 
   return (
-    <div className="py-1">
-      <div className="flex items-start items-center gap-2">
-        {output ? (
-          <HelpCircle className="mt-0.5 h-3 w-3" />
-        ) : isSubmitting ? (
-          <Loader2 className="mt-0.5 h-3 w-3 animate-spin" />
-        ) : (
-          <HelpCircle className="mt-0.5 h-3 w-3 text-muted-foreground" />
+    <div
+      className={cn(
+        "my-2 overflow-hidden rounded-xl border shadow-sm transition-colors",
+        output || hasSubmitted
+          ? "border-emerald-500/30 bg-emerald-500/[0.04] dark:border-emerald-500/25"
+          : "border-primary/25 bg-primary/[0.03] dark:border-primary/25"
+      )}
+    >
+      <div className="flex flex-col gap-1 px-4 pt-3">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+              output || hasSubmitted
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-primary/10 text-primary"
+            )}
+          >
+            {output || hasSubmitted ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : isSubmitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <HelpCircle className="h-3.5 w-3.5" />
+            )}
+          </span>
+          <div className="text-sm font-medium text-foreground">{question.header}</div>
+          {!(output || hasSubmitted) && (
+            <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {t("tool.askUserQuestion")}
+            </span>
+          )}
+        </div>
+        {question.description && (
+          <div className="pl-8 text-xs leading-relaxed text-muted-foreground">
+            {question.description}
+          </div>
         )}
-        <div className="text-sm font-medium text-foreground">{question.header}</div>
       </div>
-      <div className={cn("mt-1 space-y-2", output && "pl-5")}>
-        {output ? (
-          <div className="rounded-md border border-border/50 bg-background/70 px-3 py-2 text-sm">
-            <div className="whitespace-pre-wrap break-all font-mono text-sm text-muted-foreground">
-              {previewValue(output.value)}
-            </div>
+
+      <div className="space-y-2.5 px-4 pb-3.5 pt-2.5">
+        {output || hasSubmitted ? (
+          <div className="ml-8 space-y-1.5">
+            {(output || hasSubmitted) && (
+              <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                {t("tool.answered")}
+              </div>
+            )}
+            {output && (
+              <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2">
+                <div className="whitespace-pre-wrap break-all font-mono text-sm text-muted-foreground">
+                  {previewValue(output.value)}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <>
             {!singleOption && (
               <RadioGroup
-                className="flex flex-wrap gap-2"
+                className={cn("gap-2", useChoiceCards ? "flex flex-col" : "flex flex-wrap")}
                 value={selectedOptionId}
                 onValueChange={handleOptionChange}
                 disabled={isSubmitting || hasSubmitted}
               >
                 {question.options.map((option) => {
                   const itemId = `ask-user-question-${questionKey}-${option.id}`;
+                  const isSelected = selectedOptionId === option.id;
                   return (
                     <div
                       key={option.id}
                       className={cn(
-                        "inline-flex items-center gap-2 bg-background/50 pl-0 pr-3 text-sm transition-colors hover:bg-background/80",
-                        selectedOptionId === option.id && "bg-background",
+                        "relative transition-all",
+                        useChoiceCards
+                          ? cn(
+                              "rounded-lg border px-3 py-2.5 transition-colors",
+                              isSelected
+                                ? "border-primary/50 bg-primary/[0.07] shadow-xs"
+                                : "border-border/70 bg-background/60 hover:border-primary/30 hover:bg-background"
+                            )
+                          : cn(
+                              "inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1.5 text-sm transition-colors",
+                              isSelected
+                                ? "border-primary/50 bg-primary/[0.08]"
+                                : "border-border/70 hover:border-primary/30 hover:bg-background/90"
+                            ),
                         (isSubmitting || hasSubmitted) && "cursor-not-allowed opacity-60"
                       )}
                     >
-                      <RadioGroupItem
-                        id={itemId}
-                        value={option.id}
-                        className="data-[state=checked]:border-transparent h-3 w-3"
-                      />
-                      <Label htmlFor={itemId} className="cursor-pointer text-sm font-normal">
+                      <RadioGroupItem id={itemId} value={option.id} className="h-3 w-3" />
+                      <Label
+                        htmlFor={itemId}
+                        className={cn(
+                          "cursor-pointer text-sm",
+                          useChoiceCards ? "font-medium" : "font-normal"
+                        )}
+                      >
                         {option.label}
                       </Label>
+                      {useChoiceCards && option.description && (
+                        <div className="pl-5 text-xs leading-relaxed text-muted-foreground">
+                          {option.description}
+                        </div>
+                      )}
+                      {useChoiceCards && isSelected && (
+                        <Check className="absolute right-3 top-3 h-4 w-4 text-primary" />
+                      )}
                     </div>
                   );
                 })}
               </RadioGroup>
             )}
 
-            {selectedOption && (
-              <>
-                {selectedOption.input === "select" ? (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedOption.choices.map((choice) => {
-                      const isSelected = draftValue === choice;
-                      return (
-                        <Button
-                          key={choice}
-                          type="button"
-                          size="sm"
-                          variant={isSelected ? "secondary" : "outline"}
-                          className={cn("text-xs", isSelected && "ring-1 ring-ring")}
-                          onClick={() => {
-                            setSubmitError(null);
-                            setDraftValue(choice);
-                          }}
-                          disabled={isSubmitting || hasSubmitted}
-                        >
-                          {choice}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                ) : shouldShowTypedInput ? (
+            {selectedOption && !customActive && (
+              <SelectedOptionEditor
+                option={selectedOption}
+                draftValue={draftValue}
+                setDraftValue={setDraftValue}
+                setSubmitError={setSubmitError}
+                disabled={isSubmitting || hasSubmitted}
+                isSubmitting={isSubmitting}
+                hasSubmitted={hasSubmitted}
+                showCancel={!singleOption}
+                onCancel={() => {
+                  setSelectedOptionId("");
+                  setDraftValue("");
+                  setSubmitError(null);
+                }}
+                onSubmit={() => void handleSubmitSelectedOption()}
+                submitLabel={t("tool.submit")}
+                submittingLabel={t("tool.submitting")}
+                submittedLabel={t("tool.submitted")}
+                cancelLabel={t("tool.cancel")}
+              />
+            )}
+
+            {/* Free-form escape hatch: answer with text the options did not anticipate. Hidden
+                when the selected option already opens a text editor. */}
+            {!(selectedOption && !customActive && selectedOption.input === "text") &&
+              (customActive ? (
+                <div className="space-y-2.5 rounded-lg border border-primary/30 bg-background/50 p-3">
                   <Textarea
-                    className="min-h-[150px] font-mono text-xs focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input"
-                    placeholder={selectedOption.label}
-                    value={draftValue}
+                    className="min-h-[90px] text-sm focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input"
+                    placeholder={t("tool.customAnswerPlaceholder")}
+                    value={customValue}
                     onChange={(e) => {
                       setSubmitError(null);
-                      setDraftValue(e.target.value);
+                      setCustomValue(e.target.value);
                     }}
                     disabled={isSubmitting || hasSubmitted}
                   />
-                ) : (
-                  <div className="rounded-md border border-border/50 bg-background/70 px-3 py-2 text-sm">
-                    {selectedOption.label}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => void handleSubmitSelectedOption()}
-                    disabled={isSubmitting || hasSubmitted}
-                  >
-                    {isSubmitting || hasSubmitted ? (
-                      <>
-                        {isSubmitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                        {isSubmitting ? t("tool.submitting") : t("tool.submitted")}
-                      </>
-                    ) : (
-                      t("tool.submit")
-                    )}
-                  </Button>
-                  {!singleOption && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => void handleSubmitCustomAnswer()}
+                      disabled={isSubmitting || hasSubmitted}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          {t("tool.submitting")}
+                        </>
+                      ) : (
+                        t("tool.submit")
+                      )}
+                    </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       className="h-8"
                       onClick={() => {
-                        setSelectedOptionId("");
-                        setDraftValue("");
+                        setCustomActive(false);
+                        setCustomValue("");
                         setSubmitError(null);
                       }}
                       disabled={isSubmitting || hasSubmitted}
                     >
-                      Cancel
+                      {t("tool.cancel")}
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </>
-            )}
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border/80 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                  onClick={() => {
+                    setSelectedOptionId("");
+                    setDraftValue("");
+                    setSubmitError(null);
+                    setCustomActive(true);
+                  }}
+                  disabled={isSubmitting || hasSubmitted}
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                  {t("tool.customAnswer")}
+                </button>
+              ))}
           </>
         )}
 
@@ -443,3 +554,109 @@ export const MessageToolAskUserQuestion = memo(function MessageToolAskUserQuesti
     </div>
   );
 });
+
+function SelectedOptionEditor({
+  option,
+  draftValue,
+  setDraftValue,
+  setSubmitError,
+  disabled,
+  isSubmitting,
+  hasSubmitted,
+  showCancel,
+  onCancel,
+  onSubmit,
+  submitLabel,
+  submittingLabel,
+  submittedLabel,
+  cancelLabel,
+}: {
+  option: AskUserQuestionOption;
+  draftValue: string;
+  setDraftValue: (value: string) => void;
+  setSubmitError: (value: string | null) => void;
+  disabled: boolean;
+  isSubmitting: boolean;
+  hasSubmitted: boolean;
+  showCancel: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+  submitLabel: string;
+  submittingLabel: string;
+  submittedLabel: string;
+  cancelLabel: string;
+}) {
+  return (
+    <div className="space-y-2.5 rounded-lg border border-border/50 bg-background/50 p-3">
+      {option.input === "select" ? (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">{option.label}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {option.choices.map((choice) => {
+              const isSelected = draftValue === choice;
+              return (
+                <Button
+                  key={choice}
+                  type="button"
+                  size="sm"
+                  variant={isSelected ? "secondary" : "outline"}
+                  className={cn("h-7 rounded-full text-xs", isSelected && "ring-1 ring-ring")}
+                  onClick={() => {
+                    setSubmitError(null);
+                    setDraftValue(choice);
+                  }}
+                  disabled={disabled}
+                >
+                  {choice}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      ) : option.input === "text" ? (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">{option.label}</div>
+          <Textarea
+            className="min-h-[120px] font-mono text-xs focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input"
+            placeholder={option.label}
+            value={draftValue}
+            onChange={(e) => {
+              setSubmitError(null);
+              setDraftValue(e.target.value);
+            }}
+            disabled={disabled}
+          />
+        </div>
+      ) : (
+        <div className="rounded-md border border-border/50 bg-background/70 px-3 py-2 text-sm">
+          {option.label}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" className="h-8" onClick={onSubmit} disabled={disabled}>
+          {isSubmitting || hasSubmitted ? (
+            <>
+              {isSubmitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+              {isSubmitting ? submittingLabel : submittedLabel}
+            </>
+          ) : (
+            submitLabel
+          )}
+        </Button>
+        {showCancel && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8"
+            onClick={onCancel}
+            disabled={disabled}
+          >
+            {cancelLabel}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}

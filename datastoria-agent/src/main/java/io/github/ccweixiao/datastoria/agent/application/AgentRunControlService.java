@@ -107,6 +107,9 @@ public class AgentRunControlService {
                   RunTransition.cancelling(Instant.now()));
             }
           }
+          // Cascade: a cancelled run must not leave answerable questions behind.
+          actions.cancelPendingForRun(
+              identity.tenantId(), identity.userId(), runId, identity.userId());
           return snapshot(requireOwned(identity, runId));
         });
   }

@@ -76,4 +76,13 @@
         revision = revision + 1, updated_at = #{now}
     WHERE id = #{id} AND tenant_id = #{tenantId} AND status = 'pending' AND revision = #{expectedRevision}
   </update>
+
+  <update id="cancelPendingForRun">
+    UPDATE ds_agent_pending_action
+    SET status = 'cancelled', resolved_by = #{resolvedBy}, resolved_at = #{now},
+        revision = revision + 1, updated_at = #{now}
+    WHERE tenant_id = #{tenantId} AND run_id = #{runId} AND status = 'pending'
+      AND EXISTS (SELECT 1 FROM ds_agent_run r
+                  WHERE r.id = #{runId} AND r.tenant_id = #{tenantId} AND r.user_id = #{userId})
+  </update>
 </mapper>

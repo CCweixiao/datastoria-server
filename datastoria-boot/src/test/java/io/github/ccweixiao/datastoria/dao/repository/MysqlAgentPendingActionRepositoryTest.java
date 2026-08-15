@@ -162,8 +162,75 @@ class MysqlAgentPendingActionRepositoryTest {
     assertThat(repo.find(TENANT, USER, "run-1", "action-6")).isEmpty();
   }
 
+  @Test
+  void cancelPendingForRunCancelsOnlyPendingRowsOfThatRun() {
+    insertRunRow("run-2");
+    repo.create(USER, pending("action-7", PendingActionType.QUESTION));
+    repo.create(USER, pending("action-8", PendingActionType.QUESTION, "run-2"));
+    repo.resolve(
+        TENANT,
+        USER,
+        "run-1",
+        "action-7",
+        resolution(PendingActionStatus.RESPONDED, "{\"answer\":\"yes\"}", "a"));
+
+    int cancelled = repo.cancelPendingForRun(TENANT, USER, "run-1", USER);
+
+    assertThat(cancelled).isEqualTo(0); // run-1's only action was already responded
+    assertThat(repo.find(TENANT, USER, "run-1", "action-7").orElseThrow().status())
+        .isEqualTo(PendingActionStatus.RESPONDED);
+    assertThat(repo.cancelPendingForRun(TENANT, USER, "run-2", USER)).isEqualTo(1);
+    assertThat(repo.find(TENANT, USER, "run-2", "action-8").orElseThrow().status())
+        .isEqualTo(PendingActionStatus.CANCELLED);
+    // Cancelled actions can no longer be answered.
+    assertThatThrownBy(
+            () ->
+                repo.resolve(
+                    TENANT,
+                    USER,
+                    "run-2",
+                    "action-8",
+                    resolution(PendingActionStatus.RESPONDED, "{\"answer\":\"yes\"}", "b")))
+        .isInstanceOf(PendingActionConflictException.class);
+  }
+
+  /** Adds another run row reusing the session created by {@link #insertRun}. */
+  private void insertRunRow(String runId) {
+    jdbc.sql(
+            "INSERT INTO ds_agent_run"
+                + " (id,tenant_id,user_id,session_id,agent_revision_id,model_id,status,revision,"
+                + " created_at,updated_at)"
+                + " VALUES (:id,:tenant,:user,'session-1','agent-rev','model','waiting_input',0,"
+                + " :now,:now)")
+        .param("id", runId)
+        .param("tenant", TENANT)
+        .param("user", USER)
+        .param("now", java.sql.Timestamp.from(NOW))
+        .update();
+  }
+
   private AgentPendingAction pending(String id, PendingActionType type) {
     return pending(id, type, NOW.plusSeconds(300));
+  }
+
+  private AgentPendingAction pending(String id, PendingActionType type, String runId) {
+    AgentPendingAction base = pending(id, type, NOW.plusSeconds(300));
+    return new AgentPendingAction(
+        base.id(),
+        base.tenantId(),
+        runId,
+        base.toolCallId(),
+        base.actionType(),
+        base.requestJson(),
+        base.responseJson(),
+        base.resolutionDigest(),
+        base.status(),
+        base.expiresAt(),
+        base.resolvedBy(),
+        base.resolvedAt(),
+        base.revision(),
+        base.createdAt(),
+        base.updatedAt());
   }
 
   private AgentPendingAction pending(String id, PendingActionType type, Instant expiresAt) {

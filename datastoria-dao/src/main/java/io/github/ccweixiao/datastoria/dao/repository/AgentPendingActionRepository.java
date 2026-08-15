@@ -32,4 +32,10 @@ public interface AgentPendingActionRepository {
 
   /** Marks all due pending actions expired and returns the affected count. */
   int expireDue(Instant now);
+
+  /**
+   * Cancels every still-pending action of one run (called when the run is cancelled so waiting
+   * questions/approvals do not linger as answerable rows). Returns the affected count.
+   */
+  int cancelPendingForRun(String tenantId, String userId, String runId, String resolvedBy);
 }

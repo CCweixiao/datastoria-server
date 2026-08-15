@@ -621,8 +621,21 @@ class HarnessAgentFactoryTest {
           ToolUseBlock.builder()
               .id("question-call")
               .name("ask_user_question")
-              .input(Map.of("questions", List.of(Map.of("question", "Which cluster?"))))
-              .content("{\"questions\":[{\"question\":\"Which cluster?\"}]}")
+              .input(
+                  Map.of(
+                      "questions",
+                      List.of(
+                          Map.of(
+                              "header",
+                              "Which cluster?",
+                              "options",
+                              List.of(
+                                  Map.of("id", "o1", "label", "Prod", "input", "none"),
+                                  Map.of("id", "o2", "label", "Staging", "input", "none"))))))
+              .content(
+                  "{\"questions\":[{\"header\":\"Which cluster?\",\"options\":[{\"id\":\"o1\","
+                      + " \"label\":\"Prod\",\"input\":\"none\"},{\"id\":\"o2\",\"label\":"
+                      + " \"Staging\",\"input\":\"none\"}]}]}")
               .state(ToolCallState.FINISHED)
               .build();
       return Flux.just(

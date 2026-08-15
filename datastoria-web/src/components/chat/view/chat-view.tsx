@@ -43,6 +43,46 @@ function useStableCallback<Args extends unknown[], Return>(
   return useCallback((...args: Args) => callbackRef.current(...args), []);
 }
 
+/**
+ * Finds the newest unanswered ask_user_question in the transcript: a `data-pending-action` part
+ * of kind question whose tool call has no output yet. Runs are durable, so the question survives
+ * reloads; only the latest assistant turn is considered so stale questions from earlier turns do
+ * not swallow new messages.
+ */
+function findOpenQuestion(messages: AppUIMessage[]) {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const message = messages[messageIndex];
+    if (message.role !== "assistant") continue;
+    const toolHasOutput = new Set(
+      message.parts
+        .filter(
+          (part) =>
+            (part as { type?: string }).type === "dynamic-tool" &&
+            (part as { output?: unknown }).output !== undefined &&
+            (part as { output?: unknown }).output !== null
+        )
+        .map((part) => (part as { toolCallId?: string }).toolCallId)
+    );
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = message.parts[partIndex] as {
+        type?: string;
+        data?: { actionType?: string; toolCallId?: string; runId?: string; actionId?: string };
+      };
+      if (
+        part.type === "data-pending-action" &&
+        part.data?.actionType === "question" &&
+        part.data.toolCallId &&
+        !toolHasOutput.has(part.data.toolCallId)
+      ) {
+        return part.data;
+      }
+    }
+    // Nothing open in the latest assistant turn.
+    return undefined;
+  }
+  return undefined;
+}
+
 interface ChatViewProps {
   chat: RemoteChat;
   onClose?: () => void;
@@ -125,6 +165,32 @@ export const ChatView = forwardRef<ChatViewHandle, ChatViewProps>(function ChatV
   const handleSubmit = useStableCallback(
     async ({ text, files = [] }: { text: string; files?: ChatInputImageAttachment[] }) => {
       if (!chat || (!text.trim() && files.length === 0)) return;
+
+      // Typing while a question is open answers it (Gemini-CLI style) instead of racing a new
+      // run past the suspended one. Attachments are not answers; they fall through to a new
+      // message. If the resume request fails (e.g. the action expired), fall back to sending a
+      // regular message so the user's text is never lost.
+      const openQuestion =
+        files.length === 0 && text.trim().length > 0
+          ? findOpenQuestion(messages as AppUIMessage[])
+          : undefined;
+      if (openQuestion?.runId && openQuestion.actionId && status === "ready") {
+        const customAnswer = text.trim();
+        try {
+          await ChatFactory.respondToQuestion(chat, openQuestion.runId, openQuestion.actionId, {
+            optionId: "custom",
+            label: customAnswer,
+            input: "text",
+            value: customAnswer,
+          });
+          if (user?.id) {
+            setInputHistory(appendChatInputHistory(user.id, chat.id, customAnswer));
+          }
+          return;
+        } catch {
+          // fall through to a normal message
+        }
+      }
 
       const mentionMetadata = connection ? MentionContext.toMetadata(text, connection) : undefined;
       const createdAt = Date.now();

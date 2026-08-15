@@ -135,4 +135,9 @@ public class MyBatisAgentPendingActionRepository implements AgentPendingActionRe
   public int expireDue(Instant now) {
     return mapper.expireDue(now);
   }
+
+  @Override
+  public int cancelPendingForRun(String tenantId, String userId, String runId, String resolvedBy) {
+    return mapper.cancelPendingForRun(tenantId, userId, runId, resolvedBy, Instant.now());
+  }
 }

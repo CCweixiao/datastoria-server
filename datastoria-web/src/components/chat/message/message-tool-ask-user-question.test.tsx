@@ -301,6 +301,51 @@ describe("MessageToolAskUserQuestion", () => {
     expect(container.textContent).toContain("Please enter a value before submitting.");
   });
 
+  it("submits a custom free-form answer when options do not fit", async () => {
+    act(() => {
+      root.render(
+        <MessageToolAskUserQuestion
+          part={createToolPart()}
+          pendingAction={pendingAction}
+          isRunning={false}
+        />
+      );
+    });
+
+    clickText(container, "Custom answer");
+    const textarea = container.querySelector("textarea");
+    expect(textarea instanceof HTMLTextAreaElement).toBe(true);
+
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      throw new Error("Custom answer textarea not found");
+    }
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    act(() => {
+      setter?.call(textarea, "recent 2 hours");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await act(async () => {
+      clickText(container, "Submit");
+      await Promise.resolve();
+    });
+
+    expect(onToolOutputMock).toHaveBeenCalledWith({
+      runId: "run-1",
+      actionId: "question-1",
+      toolCallId: "ask-user-question-1",
+      output: {
+        optionId: "custom",
+        label: "recent 2 hours",
+        input: "text",
+        value: "recent 2 hours",
+      },
+    });
+  });
+
   it("submits the selected choice for select options", async () => {
     act(() => {
       root.render(
