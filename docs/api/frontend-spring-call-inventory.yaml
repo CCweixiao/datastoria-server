@@ -43,10 +43,24 @@ operations:
   - { method: PUT, path: /api/me/ai/model-preference, callSite: lib/ai/configuration/configuration-gateway.ts }
   - { method: GET, path: /api/me/ai/preferences, callSite: lib/configuration-client.ts }
   - { method: PUT, path: /api/me/ai/preferences, callSite: lib/configuration-client.ts }
-  - { method: GET, path: /api/auth/providers, callSite: lib/auth-client.ts }
-  - { method: GET, path: /api/auth/session, callSite: lib/auth-client.ts }
-  - { method: GET, path: "/api/auth/signin/{}", callSite: lib/auth-client.ts }
-  - { method: POST, path: /api/auth/signout, callSite: lib/auth-client.ts }
+  - { method: GET, path: /api/ai/providers/available, callSite: lib/user-model-client.ts }
+  - { method: GET, path: /api/me/ai/models, callSite: lib/user-model-client.ts }
+  - { method: POST, path: /api/me/ai/models, callSite: lib/user-model-client.ts }
+  - { method: DELETE, path: "/api/me/ai/models/{}", callSite: lib/user-model-client.ts }
+  - { method: GET, path: /api/me/ai/providers, callSite: lib/user-model-client.ts }
+  - { method: POST, path: /api/me/ai/providers, callSite: lib/user-model-client.ts }
+  - { method: DELETE, path: "/api/me/ai/providers/{}", callSite: lib/user-model-client.ts }
+  - { method: GET, path: /api/me/query-history, callSite: lib/query-history-client.ts }
+  - { method: POST, path: /api/me/query-history, callSite: lib/query-history-client.ts }
+  - { method: DELETE, path: "/api/me/query-history/{}", callSite: lib/query-history-client.ts }
+  - { method: DELETE, path: /api/me/query-history, callSite: lib/query-history-client.ts }
+  - { method: GET, path: /api/admin/users, callSite: lib/user-admin-client.ts }
+  - { method: POST, path: /api/admin/users, callSite: lib/user-admin-client.ts }
+  - { method: PUT, path: "/api/admin/users/{}", callSite: lib/user-admin-client.ts }
+  - { method: POST, path: "/api/admin/users/{}/reset-password", callSite: lib/user-admin-client.ts }
+  - { method: DELETE, path: "/api/admin/users/{}", callSite: lib/user-admin-client.ts }
+  - { method: POST, path: /api/auth/login, callSite: lib/auth-client.ts }
+  - { method: GET, path: /api/auth/me, callSite: lib/auth-client.ts }
   - { method: GET, path: /api/connections, callSite: lib/connection/connection-manager.ts }
   - { method: POST, path: /api/connections, callSite: lib/connection/connection-manager.ts }
   - { method: PUT, path: "/api/connections/{}", callSite: lib/connection/connection-manager.ts }

@@ -3,6 +3,7 @@ package io.github.ccweixiao.datastoria.controller.compat.p3;
 import java.time.Instant;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -32,6 +33,17 @@ public abstract class AbstractP3ApiTest {
   @Autowired protected WebTestClient web;
   @Autowired protected TestDbHelper dbHelper;
   @Autowired protected ObjectMapper objectMapper;
+
+  /**
+   * Fixtures assert English error titles/messages, so every request pins {@code Accept-Language:
+   * en}. Without it the server falls back to the JVM default locale and non-English developer
+   * machines fail these assertions.
+   */
+  @BeforeEach
+  void pinEnglishResponses() {
+    web = web.mutate().defaultHeaders(headers -> headers.set("Accept-Language", "en")).build();
+  }
+
   @Autowired protected ApplicationContext applicationContext;
 
   /**

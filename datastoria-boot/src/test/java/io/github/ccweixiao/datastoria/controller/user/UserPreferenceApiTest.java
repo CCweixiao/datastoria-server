@@ -158,7 +158,7 @@ class UserPreferenceApiTest {
         .jsonPath("$.entries['settings.query-context']")
         .isEqualTo("{\"max_execution_time\": 60}")
         .jsonPath("$.entries['settings.ui']")
-        .isEqualTo("{\"theme\": \"dark\"}")
+        .isEqualTo("{\"theme\": \"dark\", \"language\": \"system\"}")
         .jsonPath("$.revision")
         .isEqualTo(0);
   }

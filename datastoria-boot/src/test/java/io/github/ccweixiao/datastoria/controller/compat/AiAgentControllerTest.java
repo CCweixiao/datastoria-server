@@ -33,6 +33,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.TextBlock;
 import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolResultBlock;
@@ -42,6 +43,8 @@ import io.agentscope.core.model.ChatUsage;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.ToolSchema;
+import io.agentscope.core.state.AgentState;
+import io.agentscope.core.state.AgentStateStore;
 import io.github.ccweixiao.datastoria.agent.application.ChatRunService;
 import io.github.ccweixiao.datastoria.agent.application.RunLifecycleRecorder;
 import io.github.ccweixiao.datastoria.agent.application.RunMessageContext;
@@ -88,6 +91,7 @@ class AiAgentControllerTest {
   @Autowired AgentRunSkillRepository runSkillRepository;
   @Autowired AgentPendingActionRepository pendingActions;
   @Autowired AgentEventRepository agentEvents;
+  @Autowired AgentStateStore stateStore;
   @Autowired RunLifecycleRecorder lifecycleRecorder;
   @Autowired ChatMessageRepository messageRepository;
   @Autowired JdbcClient jdbc;
@@ -220,6 +224,10 @@ class AiAgentControllerTest {
                             "execute_sql",
                             "{\"sql\":\"SELECT 1\"}")))))
         .blockLast();
+    // Resume reads AgentScope's persisted native state (not the recorded events), so seed the
+    // state store exactly as a real pause would have.
+    primeNativeAgentState(
+        "resume-run", "resume-reply", "resume-call", "execute_sql", "{\"sql\":\"SELECT 1\"}");
     webTestClient
         .post()
         .uri("/api/ai/runs/resume-run/actions/resume-action:deny")
@@ -311,6 +319,11 @@ class AiAgentControllerTest {
                     {"questions":[{"header":"Which cluster?","options":[{"id":"prod","label":"Production","input":"none"}]}]}
                     """)))
         .blockLast();
+    // Resume reads AgentScope's persisted native state (not the recorded events), so seed the
+    // state store. A question pause is answered with a ToolResultMessage (not ConfirmResults),
+    // so the pending tool must NOT be left in ASKING state — presence of the state is all the
+    // resume path requires.
+    primeNativeAgentState("question-run", "question-reply");
 
     webTestClient
         .post()
@@ -1431,5 +1444,52 @@ class AiAgentControllerTest {
     String observedAnswer() {
       return observedAnswer;
     }
+  }
+
+  /**
+   * Seeds the AgentScope native state for a run paused via {@link RunLifecycleRecorder#tap}, which
+   * records the durable events but does not save AgentScope state the way a real pause does. {@code
+   * HarnessAgentFactory} resumes exclusively from this native state.
+   */
+  private static java.util.Map<String, Object> readInput(String inputJson) {
+    try {
+      return new ObjectMapper()
+          .readValue(
+              inputJson,
+              new com.fasterxml.jackson.core.type.TypeReference<
+                  java.util.Map<String, Object>>() {});
+    } catch (java.io.IOException e) {
+      throw new IllegalArgumentException(e);
+    }
+  }
+
+  private void primeNativeAgentState(String runId, String replyId) {
+    primeNativeAgentState(runId, replyId, null, null, null);
+  }
+
+  private void primeNativeAgentState(
+      String runId, String replyId, String toolCallId, String toolName, String inputJson) {
+    List<io.agentscope.core.message.ContentBlock> content;
+    if (toolCallId == null) {
+      content = List.of(TextBlock.builder().text("paused for a question").build());
+    } else {
+      content =
+          List.of(
+              ToolUseBlock.builder()
+                  .id(toolCallId)
+                  .name(toolName)
+                  .input(readInput(inputJson))
+                  .content(inputJson)
+                  .state(ToolCallState.ASKING)
+                  .build());
+    }
+    AgentState state =
+        AgentState.builder()
+            .userId(USER)
+            .sessionId(runId)
+            .replyId(replyId)
+            .context(List.of(Msg.builder().role(MsgRole.ASSISTANT).content(content).build()))
+            .build();
+    stateStore.save(USER, runId, "agent_state", state);
   }
 }

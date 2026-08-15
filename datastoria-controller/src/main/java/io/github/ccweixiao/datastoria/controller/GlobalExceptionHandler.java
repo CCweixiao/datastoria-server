@@ -1,8 +1,9 @@
 package io.github.ccweixiao.datastoria.controller;
 
+import java.util.Locale;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -52,80 +53,80 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(NotFoundException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleNotFound(
-      NotFoundException ex) {
+      NotFoundException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .body(problems.forError(ApiErrorCode.NOT_FOUND, safeMessage(ex)));
+        .body(problems.forError(ApiErrorCode.NOT_FOUND, safeMessage(ex), locale));
   }
 
   @ExceptionHandler(BadCredentialsException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleBadCredentials(
-      BadCredentialsException ex) {
+      BadCredentialsException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-        .body(problems.forError(ApiErrorCode.AUTHENTICATION_FAILED));
+        .body(problems.forError(ApiErrorCode.AUTHENTICATION_FAILED, locale));
   }
 
   @ExceptionHandler(AdminAccessRequiredException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleAdminAccessRequired(
-      AdminAccessRequiredException ex) {
+      AdminAccessRequiredException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-        .body(problems.forError(ApiErrorCode.ADMIN_ACCESS_REQUIRED));
+        .body(problems.forError(ApiErrorCode.ADMIN_ACCESS_REQUIRED, locale));
   }
 
   @ExceptionHandler(ProtectedAdminAccountException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleProtectedAdminAccount(
-      ProtectedAdminAccountException ex) {
+      ProtectedAdminAccountException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-        .body(problems.forError(ApiErrorCode.ADMIN_ACCOUNT_PROTECTED));
+        .body(problems.forError(ApiErrorCode.ADMIN_ACCOUNT_PROTECTED, locale));
   }
 
   @ExceptionHandler(ConflictException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleConflict(
-      ConflictException ex) {
-    return ResponseEntity.status(HttpStatus.CONFLICT).body(problems.forError(ex.code()));
+      ConflictException ex, Locale locale) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(problems.forError(ex.code(), locale));
   }
 
   @ExceptionHandler(RevisionConflictException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleConflict(
-      RevisionConflictException ex) {
+      RevisionConflictException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(problems.forError(ApiErrorCode.REVISION_CONFLICT));
+        .body(problems.forError(ApiErrorCode.REVISION_CONFLICT, locale));
   }
 
   @ExceptionHandler(PendingActionConflictException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handlePendingActionConflict(
-      PendingActionConflictException ex) {
+      PendingActionConflictException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(problems.forError(ApiErrorCode.ACTION_ALREADY_RESOLVED));
+        .body(problems.forError(ApiErrorCode.ACTION_ALREADY_RESOLVED, locale));
   }
 
   @ExceptionHandler(PendingActionExpiredException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handlePendingActionExpired(
-      PendingActionExpiredException ex) {
+      PendingActionExpiredException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(problems.forError(ApiErrorCode.ACTION_EXPIRED));
+        .body(problems.forError(ApiErrorCode.ACTION_EXPIRED, locale));
   }
 
   @ExceptionHandler(ResourceInUseException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleResourceInUse(
-      ResourceInUseException ex) {
+      ResourceInUseException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
-        .body(problems.forError(ApiErrorCode.RESOURCE_IN_USE, safeMessage(ex)));
+        .body(problems.forError(ApiErrorCode.RESOURCE_IN_USE, safeMessage(ex), locale));
   }
 
   @ExceptionHandler(ProviderOperationException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleProviderOperation(
-      ProviderOperationException ex) {
+      ProviderOperationException ex, Locale locale) {
     return ResponseEntity.status(ex.status())
         .body(
             problems.forStatus(
-                ex.status(), ex.code(), "Provider operation failed", safeMessage(ex)));
+                ex.status(), ex.code(), "Provider operation failed", safeMessage(ex), locale));
   }
 
   @ExceptionHandler(ClientSecretNotAllowedException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleClientSecret(
-      ClientSecretNotAllowedException ex) {
+      ClientSecretNotAllowedException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(problems.forError(ApiErrorCode.CLIENT_SECRET_NOT_ALLOWED));
+        .body(problems.forError(ApiErrorCode.CLIENT_SECRET_NOT_ALLOWED, locale));
   }
 
   /**
@@ -134,8 +135,7 @@ public class GlobalExceptionHandler {
    * docs/api/p3-openapi-extensions.yaml} {@code PlainTextError}.
    */
   @ExceptionHandler(PlainTextException.class)
-  public ResponseEntity<String> handlePlainText(PlainTextException ex) {
-    java.util.Locale locale = LocaleContextHolder.getLocale();
+  public ResponseEntity<String> handlePlainText(PlainTextException ex, Locale locale) {
     return ResponseEntity.status(ex.status())
         .contentType(ex.contentType() != null ? ex.contentType() : MediaType.TEXT_PLAIN)
         .header("X-Error-Code", ex.code().name())
@@ -146,32 +146,32 @@ public class GlobalExceptionHandler {
   /** P3 share-visitor attempting a write while {@code allow-write=false}; ADR-0001. */
   @ExceptionHandler(SharePermissionDeniedException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleSharePermissionDenied(
-      SharePermissionDeniedException ex) {
+      SharePermissionDeniedException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-        .body(problems.forError(ApiErrorCode.SHARE_PERMISSION_DENIED));
+        .body(problems.forError(ApiErrorCode.SHARE_PERMISSION_DENIED, locale));
   }
 
   /** P3 revoke with no active share row; ADR-0001. */
   @ExceptionHandler(ShareNotFoundException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleShareNotFound(
-      ShareNotFoundException ex) {
+      ShareNotFoundException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .body(problems.forError(ApiErrorCode.SHARE_NOT_FOUND));
+        .body(problems.forError(ApiErrorCode.SHARE_NOT_FOUND, locale));
   }
 
   /** P3 feedback referencing a missing message; ADR-0003. */
   @ExceptionHandler(FeedbackTargetNotFoundException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleFeedbackTargetNotFound(
-      FeedbackTargetNotFoundException ex) {
+      FeedbackTargetNotFoundException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .body(problems.forError(ApiErrorCode.FEEDBACK_TARGET_NOT_FOUND));
+        .body(problems.forError(ApiErrorCode.FEEDBACK_TARGET_NOT_FOUND, locale));
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleValidation(
-      MethodArgumentNotValidException ex) {
+      MethodArgumentNotValidException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex)));
+        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex), locale));
   }
 
   /**
@@ -181,9 +181,9 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(WebExchangeBindException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleWebFluxBind(
-      WebExchangeBindException ex) {
+      WebExchangeBindException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex)));
+        .body(problems.forStatusWithErrors(ApiErrorCode.INVALID_REQUEST, fieldErrors(ex), locale));
   }
 
   private static java.util.Map<String, Object> fieldErrors(
@@ -209,29 +209,29 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleIllegal(
-      IllegalArgumentException ex) {
+      IllegalArgumentException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-        .body(problems.forError(ApiErrorCode.INVALID_REQUEST, safeMessage(ex)));
+        .body(problems.forError(ApiErrorCode.INVALID_REQUEST, safeMessage(ex), locale));
   }
 
   @ExceptionHandler(NoResourceFoundException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleMissingStaticResource(
-      NoResourceFoundException ex) {
+      NoResourceFoundException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
-        .body(problems.forError(ApiErrorCode.NOT_FOUND));
+        .body(problems.forError(ApiErrorCode.NOT_FOUND, locale));
   }
 
   @ExceptionHandler(MethodNotAllowedException.class)
   public ResponseEntity<org.springframework.http.ProblemDetail> handleMethodNotAllowed(
-      MethodNotAllowedException ex) {
+      MethodNotAllowedException ex, Locale locale) {
     return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
         .allow(ex.getSupportedMethods().toArray(org.springframework.http.HttpMethod[]::new))
-        .body(problems.forError(ApiErrorCode.METHOD_NOT_ALLOWED));
+        .body(problems.forError(ApiErrorCode.METHOD_NOT_ALLOWED, locale));
   }
 
   @ExceptionHandler(Exception.class)
   public Mono<ResponseEntity<org.springframework.http.ProblemDetail>> handleUnexpected(
-      Exception ex) {
+      Exception ex, Locale locale) {
     // A browser can cancel a streaming query after its 200 response has already been committed
     // (for example when switching tabs or refreshing a dashboard). Treat that transport event as
     // normal cancellation: attempting to write a second error response only produces a misleading
@@ -242,7 +242,7 @@ public class GlobalExceptionHandler {
     log.error("Unexpected error", ex);
     return Mono.just(
         ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(problems.forError(ApiErrorCode.INTERNAL_ERROR)));
+            .body(problems.forError(ApiErrorCode.INTERNAL_ERROR, locale)));
   }
 
   private static String safeMessage(Exception ex) {

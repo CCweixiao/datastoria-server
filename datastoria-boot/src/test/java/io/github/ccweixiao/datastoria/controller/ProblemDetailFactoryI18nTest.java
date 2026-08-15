@@ -4,9 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Locale;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.i18n.LocaleContextHolder;
 
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 
@@ -14,16 +12,9 @@ class ProblemDetailFactoryI18nTest {
 
   private final ProblemDetailFactory factory = new ProblemDetailFactory();
 
-  @AfterEach
-  void resetLocale() {
-    LocaleContextHolder.resetLocaleContext();
-  }
-
   @Test
   void rendersEnglishProblemDetailsByDefault() {
-    LocaleContextHolder.setLocale(Locale.ENGLISH);
-
-    var problem = factory.forError(ApiErrorCode.REVISION_CONFLICT);
+    var problem = factory.forError(ApiErrorCode.REVISION_CONFLICT, Locale.ENGLISH);
 
     assertThat(problem.getProperties()).containsEntry("code", "REVISION_CONFLICT");
     assertThat(problem.getProperties()).containsEntry("locale", "en");
@@ -35,9 +26,7 @@ class ProblemDetailFactoryI18nTest {
 
   @Test
   void rendersChineseProblemDetailsForChineseLocale() {
-    LocaleContextHolder.setLocale(Locale.SIMPLIFIED_CHINESE);
-
-    var problem = factory.forError(ApiErrorCode.REVISION_CONFLICT);
+    var problem = factory.forError(ApiErrorCode.REVISION_CONFLICT, Locale.SIMPLIFIED_CHINESE);
 
     assertThat(problem.getTitle()).isEqualTo("版本冲突");
     assertThat(problem.getProperties()).containsEntry("locale", "zh-CN");

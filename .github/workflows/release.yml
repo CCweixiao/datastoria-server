@@ -76,14 +76,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ARGS=""
+          case "${GITHUB_REF_NAME}" in
+            *preview*|*alpha*|*beta*|*rc*) ARGS="--prerelease" ;;
+          esac
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "DataStoria ${GITHUB_REF_NAME}" \
             --generate-notes \
-            --prerelease \
+            $ARGS \
             target/dist/datastoria-*.tar.gz \
             target/dist/SHA256SUMS

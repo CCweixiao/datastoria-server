@@ -165,7 +165,9 @@ class MysqlCkQueryHistoryRepositoryTest {
   }
 
   private CkQueryHistory entry(String sql, String conn) {
-    return new CkQueryHistory(Ulid.next(), TENANT, USER, conn, conn, sql, null, null);
+    // The service layer stamps the run time before saving; the repository contract expects it.
+    Instant now = Instant.now();
+    return new CkQueryHistory(Ulid.next(), TENANT, USER, conn, conn, sql, now, now);
   }
 
   private void insert(String id, String conn, String sql, String executedAt) {

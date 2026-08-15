@@ -12,12 +12,19 @@ class GlobalExceptionHandlerTest {
 
   @Test
   void ignoresClientDisconnectWithoutAttemptingAnotherResponse() {
-    assertThat(handler.handleUnexpected(new AbortedException()).blockOptional()).isEmpty();
+    assertThat(
+            handler
+                .handleUnexpected(new AbortedException(), java.util.Locale.ENGLISH)
+                .blockOptional())
+        .isEmpty();
   }
 
   @Test
   void preservesInternalServerErrorForTrulyUnexpectedFailures() {
-    var response = handler.handleUnexpected(new IllegalStateException("boom")).block();
+    var response =
+        handler
+            .handleUnexpected(new IllegalStateException("boom"), java.util.Locale.ENGLISH)
+            .block();
 
     assertThat(response).isNotNull();
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);

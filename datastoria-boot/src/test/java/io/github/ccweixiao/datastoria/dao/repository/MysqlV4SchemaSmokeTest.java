@@ -128,7 +128,7 @@ class MysqlV4SchemaSmokeTest {
   }
 
   @Test
-  void sessionCascadeDeletesMessagesAndFeedbackButNotShares() {
+  void sessionCascadeDeletesMessagesButKeepsFeedbackAndShares() {
     insertSession("sess_i", TENANT, USER, "ch-test", "I", NOW);
     insertMessage("msg_i1", TENANT, "sess_i", USER, "user", 1, NOW);
     insertMessage("msg_i2", TENANT, "sess_i", USER, "assistant", 2, NOW);
@@ -142,7 +142,8 @@ class MysqlV4SchemaSmokeTest {
             .update();
     assertThat(deleted).isEqualTo(1);
 
-    // Cascade reaches messages and feedback.
+    // Cascade reaches messages. Feedback keeps no session FK since V26 (query-error feedback
+    // can reference an ephemeral agent session), so it survives as an audit row like shares.
     assertThat(
             jdbc.sql("SELECT COUNT(*) FROM ds_chat_message WHERE session_id = :s")
                 .param("s", "sess_i")
@@ -154,7 +155,7 @@ class MysqlV4SchemaSmokeTest {
                 .param("s", "sess_i")
                 .query(Long.class)
                 .single())
-        .isZero();
+        .isEqualTo(1);
     // Share has no FK and remains as an audit row.
     List<Map<String, Object>> shares =
         jdbc.sql("SELECT * FROM ds_session_share WHERE session_id = :s")

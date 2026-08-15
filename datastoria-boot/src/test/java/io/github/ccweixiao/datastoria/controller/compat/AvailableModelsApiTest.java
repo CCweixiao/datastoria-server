@@ -219,6 +219,16 @@ class AvailableModelsApiTest {
             .getResponseBody();
     String providerId = providerResp.get("id").asText();
 
+    // Models only surface in the catalog when the provider (or model) has a stored credential.
+    web.put()
+        .uri("/api/admin/ai/providers/{id}/credential", providerId)
+        .header("x-datastoria-user-email", "dev@example.com")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"secretKind\":\"api_key\",\"value\":\"test-key\",\"expiresAt\":null}")
+        .exchange()
+        .expectStatus()
+        .is2xxSuccessful();
+
     web.post()
         .uri("/api/admin/ai/models")
         .header("x-datastoria-user-email", "dev@example.com")

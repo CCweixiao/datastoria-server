@@ -152,7 +152,7 @@ class ClickHouseConnectionApiTest {
   }
 
   @Test
-  void connectionIsIsolatedByUserAndRejectsEmbeddedCredentials() {
+  void connectionsAreTenantSharedAndRejectEmbeddedCredentials() {
     String id =
         web.post()
             .uri("/api/connections")
@@ -177,12 +177,14 @@ class ClickHouseConnectionApiTest {
             .path("id")
             .asText();
 
+    // Connections are admin-managed and tenant-shared (see 9dfb161): another user in the
+    // same tenant can read the connection to run queries against it.
     web.get()
         .uri("/api/connections/{id}", id)
         .header(IDENTITY_HEADER, "other@example.com")
         .exchange()
         .expectStatus()
-        .isNotFound();
+        .isOk();
 
     web.post()
         .uri("/api/connections")

@@ -105,9 +105,7 @@ describe("Connection query context parameters", () => {
     await connection.query("SELECT 1").response;
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "/backend/api/connections/connection-1/query"
-    );
+    expect(fetchMock.mock.calls[0][0]).toBe("/backend/api/connections/connection-1/query");
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.parameters.max_execution_time).toBe(60);
     expect(body.parameters.output_format_pretty_row_numbers).toBe(true);
