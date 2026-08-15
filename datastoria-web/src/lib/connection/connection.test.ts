@@ -106,7 +106,7 @@ describe("Connection query context parameters", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://127.0.0.1:8080/api/connections/connection-1/query"
+      "/backend/api/connections/connection-1/query"
     );
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.parameters.max_execution_time).toBe(60);

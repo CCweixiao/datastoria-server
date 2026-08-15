@@ -43,3 +43,6 @@ docs/public/manual/*
 docs/public/api/*
 resources/skills/clickhouse/
 resources/skills/vizlayer/
+
+# Next.js static export build output
+out/

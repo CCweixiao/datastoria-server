@@ -2,9 +2,9 @@
 
 > 生产环境的 MySQL、TLS、备份、升级和密钥要求见[生产部署](production.md)。
 
-统一发布模式把 Spring Boot 可执行 JAR 与 Next.js standalone 服务放入同一个 `tar.gz`，
-不依赖 Nginx，也不要求单独安装或发布前端。发布包仍然保留两个独立进程，未来可把 JAR 和
-standalone 目录拆到不同主机。
+统一发布模式把 Spring Boot 可执行 JAR 与 Next.js 静态导出产物（`output: "export"`）放入
+同一个 `tar.gz`。`bin/datastoria start` 只启动一个 Java 进程，由它同时提供 Web 页面与
+`/api/**` 接口；目标机器只需要 JDK 17，不需要 Node.js，也不依赖 Nginx。
 
 ## 构建
 
@@ -14,14 +14,14 @@ standalone 目录拆到不同主机。
 bin/build-package.sh
 ```
 
-脚本依次执行 Java clean/package（包含测试）、Next.js production build，并生成：
+脚本依次执行 Java clean/package（包含测试）、Next.js 静态导出构建，并生成：
 
 ```text
 target/dist/datastoria-<version>.tar.gz
 ```
 
-默认前端请求 `/backend/**`，由 Next.js 基础设施代理转发给同包 Java 服务。若要生成前后端
-分离部署版本，在构建时指定公开 Java 地址：
+默认前端与后端同源：浏览器直接请求同源的 `/api/**`。若要生成前后端分离部署版本（前端
+单独托管、指向公开 Java 地址），在构建时指定该地址：
 
 ```bash
 NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL=https://api.example.com \
@@ -40,7 +40,7 @@ bin/datastoria status
 
 `init` 创建 `conf/datastoria.env`。在 dev profile 下还会生成权限为 `0600` 的开发加密
 主密钥；`start` 在没有显式执行 `init` 时也会安全生成该密钥。默认入口为
-`http://服务器地址:3000`。
+`http://服务器地址:8080`（`conf/datastoria.env` 中的 `SERVER_PORT`）。
 
 管理命令：
 
@@ -69,7 +69,7 @@ bin/datastoria logs 200
 datastoria-<version>/
 ├── app/
 │   ├── backend/datastoria-server.jar
-│   └── frontend/                 # Next.js standalone
+│   └── frontend/                 # Next.js 静态导出产物（out/）
 ├── bin/datastoria
 ├── conf/
 │   └── datastoria.env.example
@@ -92,6 +92,6 @@ bin/datastoria init
 bin/datastoria start
 bin/datastoria status
 curl -fsS http://127.0.0.1:8080/actuator/health
-curl -fsS http://127.0.0.1:3000/
+curl -fsS http://127.0.0.1:8080/
 bin/datastoria stop
 ```

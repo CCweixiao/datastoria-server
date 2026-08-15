@@ -20,7 +20,7 @@
     "dev:next": "next dev",
     "build": "next build --webpack",
     "release": "node scripts/download-release-notes.mjs && npm run build",
-    "start": "next start",
+    "start": "echo 'Static export builds are served by the Spring Boot backend (bin/build-package.sh); next start is unsupported with output: export'",
     "typecheck": "node ./node_modules/@typescript/native/bin/tsc --project tsconfig.typecheck.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

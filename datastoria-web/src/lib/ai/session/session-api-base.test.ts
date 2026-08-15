@@ -13,9 +13,9 @@ describe("session-api-base", () => {
     vi.resetModules();
   });
 
-  it("always targets Spring Boot and defaults to the local backend", () => {
+  it("targets the same-origin /backend base by default", () => {
     withEnv({ NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL: undefined });
-    expect(getSessionApiBase()).toBe("http://127.0.0.1:8080");
+    expect(getSessionApiBase()).toBe("/backend");
   });
 
   it("strips trailing slashes from the configured backend URL", () => {

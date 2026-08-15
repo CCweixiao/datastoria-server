@@ -20,7 +20,7 @@ describe("configuration gateway", () => {
     await getAiConfigurationGateway().listAvailableModels();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8080/api/ai/models/available",
+      "/backend/api/ai/models/available",
       expect.objectContaining({
         body: "{}",
       })
@@ -112,7 +112,7 @@ describe("configuration gateway", () => {
     const createBody = String(fetchMock.mock.calls[0][1]?.body);
     expect(createBody).not.toContain("server-only-secret");
     expect(fetchMock.mock.calls[1][0]).toBe(
-      "http://127.0.0.1:8080/api/admin/ai/providers/provider-zhipu/credential"
+      "/backend/api/admin/ai/providers/provider-zhipu/credential"
     );
     expect(String(fetchMock.mock.calls[1][1]?.body)).toContain("server-only-secret");
   });

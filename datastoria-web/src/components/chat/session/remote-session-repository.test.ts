@@ -35,7 +35,7 @@ describe("RemoteSessionRepository", () => {
     const repository = new RemoteSessionRepository();
     await repository.getSession("session-1", { shareCode: "share-token" });
 
-    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/ai/chat/sessions/session-1", {
+    expect(fetchMock).toHaveBeenCalledWith("/backend/api/ai/chat/sessions/session-1", {
       headers: { "Accept-Language": "en", [SESSION_SHARE_CODE_HEADER]: "share-token" },
       credentials: "include",
       cache: "no-store",

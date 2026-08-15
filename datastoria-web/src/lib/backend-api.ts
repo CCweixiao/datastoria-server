@@ -1,16 +1,13 @@
 import { getAuthToken } from "@/lib/auth-token-store";
 
 export function backendApiUrl(path: string): string {
+  // Empty base means same-origin (frontend served by the Spring Boot backend).
+  // An absolute base is used for `next dev` (CORS on the backend allows it) and
+  // for a separately hosted frontend pointing at a public Java origin.
   const base = (process.env.NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL ?? "/backend").replace(
     /\/+$/,
     ""
   );
-  if (base.startsWith("/") && typeof window === "undefined") {
-    const internalBase = (
-      process.env.DATASTORIA_JAVA_INTERNAL_URL ?? "http://127.0.0.1:8080"
-    ).replace(/\/+$/, "");
-    return `${internalBase}${path}`;
-  }
   return `${base}${path}`;
 }
 

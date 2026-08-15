@@ -1,24 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 https://maven.apache.org/xsd/assembly-2.2.0.xsd">
-    <id>standalone</id>
+    <id>static</id>
     <formats>
         <format>tar.gz</format>
     </formats>
     <includeBaseDirectory>false</includeBaseDirectory>
     <fileSets>
+        <!-- Next.js `output: "export"` build output, served by the Spring Boot
+             backend via spring.web.resources.static-locations. -->
         <fileSet>
-            <directory>${project.basedir}/.next/standalone</directory>
+            <directory>${project.basedir}/out</directory>
             <outputDirectory>/</outputDirectory>
-            <useDefaultExcludes>false</useDefaultExcludes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/.next/static</directory>
-            <outputDirectory>/.next/static</outputDirectory>
-            <useDefaultExcludes>false</useDefaultExcludes>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/public</directory>
-            <outputDirectory>/public</outputDirectory>
             <useDefaultExcludes>false</useDefaultExcludes>
         </fileSet>
     </fileSets>

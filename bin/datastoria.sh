@@ -7,6 +7,7 @@ CONF_DIR="$INSTALL_DIR/conf"
 RUN_DIR="$INSTALL_DIR/run"
 LOG_DIR="$INSTALL_DIR/logs"
 DATA_DIR="$INSTALL_DIR/data"
+FRONTEND_DIR="$INSTALL_DIR/app/frontend"
 ENV_FILE="${DATASTORIA_ENV_FILE:-$CONF_DIR/datastoria.env}"
 
 mkdir -p "$RUN_DIR" "$LOG_DIR" "$DATA_DIR"
@@ -18,19 +19,15 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 DATASTORIA_PROFILE="${DATASTORIA_PROFILE:-dev}"
-BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
-BACKEND_PORT="${BACKEND_PORT:-8080}"
-FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
-FRONTEND_PORT="${FRONTEND_PORT:-3000}"
+SERVER_HOST="${SERVER_HOST:-0.0.0.0}"
+SERVER_PORT="${SERVER_PORT:-8080}"
 if [[ -z "${JAVA_BIN:-}" && -n "${JAVA_HOME:-}" ]]; then
   JAVA_BIN="$JAVA_HOME/bin/java"
 else
   JAVA_BIN="${JAVA_BIN:-java}"
 fi
-NODE_BIN="${NODE_BIN:-node}"
 JAVA_OPTS="${JAVA_OPTS:--Xms256m -Xmx1024m}"
-BACKEND_PID_FILE="$RUN_DIR/backend.pid"
-FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
+SERVER_PID_FILE="$RUN_DIR/server.pid"
 
 is_running() {
   local pid_file="$1"
@@ -63,9 +60,9 @@ initialize() {
   echo "DataStoria initialization complete (profile $DATASTORIA_PROFILE)."
 }
 
-start_backend() {
-  if is_running "$BACKEND_PID_FILE"; then
-    echo "Backend already running (PID $(cat "$BACKEND_PID_FILE"))."
+start_server() {
+  if is_running "$SERVER_PID_FILE"; then
+    echo "DataStoria already running (PID $(cat "$SERVER_PID_FILE"))."
     return
   fi
   if ! command -v "$JAVA_BIN" >/dev/null 2>&1; then
@@ -78,6 +75,10 @@ start_backend() {
     echo "JDK 17 is required to run DataStoria (found: ${java_major:-unknown}). Set JAVA_HOME or JAVA_BIN." >&2
     return 1
   fi
+  if [[ ! -f "$FRONTEND_DIR/index.html" ]]; then
+    echo "Exported frontend is missing: $FRONTEND_DIR/index.html" >&2
+    return 1
+  fi
   local -a java_opts
   read -r -a java_opts <<<"$JAVA_OPTS"
   (
@@ -85,56 +86,31 @@ start_backend() {
     exec nohup "$JAVA_BIN" "${java_opts[@]}" -jar app/backend/datastoria-server.jar \
       "--spring.profiles.active=$DATASTORIA_PROFILE" \
       "--spring.config.additional-location=optional:file:$CONF_DIR/" \
-      "--server.address=$BACKEND_HOST" \
-      "--server.port=$BACKEND_PORT"
-  ) >>"$LOG_DIR/backend.log" 2>&1 &
-  echo $! >"$BACKEND_PID_FILE"
-  if ! wait_for_url "Backend" "http://$BACKEND_HOST:$BACKEND_PORT/actuator/health" "$BACKEND_PID_FILE"; then
-    stop_process "Backend" "$BACKEND_PID_FILE"
+      "--server.address=$SERVER_HOST" \
+      "--server.port=$SERVER_PORT" \
+      "--spring.web.resources.static-locations=file:$FRONTEND_DIR/"
+  ) >>"$LOG_DIR/server.log" 2>&1 &
+  echo $! >"$SERVER_PID_FILE"
+  if ! wait_for_url "Backend" "http://127.0.0.1:$SERVER_PORT/actuator/health" "$SERVER_PID_FILE"; then
+    stop_server
     return 1
   fi
-  echo "Backend started: http://$BACKEND_HOST:$BACKEND_PORT"
+  if ! wait_for_url "Web app" "http://127.0.0.1:$SERVER_PORT/" "$SERVER_PID_FILE"; then
+    echo "Backend is up but the web app did not serve the landing page." >&2
+    stop_server
+    return 1
+  fi
+  echo "DataStoria started: http://$SERVER_HOST:$SERVER_PORT (single process, no Node.js required)"
 }
 
-start_frontend() {
-  if is_running "$FRONTEND_PID_FILE"; then
-    echo "Frontend already running (PID $(cat "$FRONTEND_PID_FILE"))."
-    return
-  fi
-  if ! command -v "$NODE_BIN" >/dev/null 2>&1; then
-    echo "Node.js runtime not found: $NODE_BIN" >&2
-    return 1
-  fi
-  local node_major
-  node_major="$("$NODE_BIN" --version | sed 's/^v//' | cut -d. -f1)"
-  if ((node_major < 20)); then
-    echo "Node.js 20 or newer is required (found: $node_major)." >&2
-    return 1
-  fi
-  (
-    cd "$INSTALL_DIR/app/frontend"
-    export HOSTNAME="$FRONTEND_HOST"
-    export PORT="$FRONTEND_PORT"
-    export DATASTORIA_JAVA_INTERNAL_URL="http://$BACKEND_HOST:$BACKEND_PORT"
-    exec nohup "$NODE_BIN" server.js
-  ) >>"$LOG_DIR/frontend.log" 2>&1 &
-  echo $! >"$FRONTEND_PID_FILE"
-  if ! wait_for_url "Frontend" "http://127.0.0.1:$FRONTEND_PORT/" "$FRONTEND_PID_FILE"; then
-    stop_process "Frontend" "$FRONTEND_PID_FILE"
-    return 1
-  fi
-  echo "Frontend started: http://$FRONTEND_HOST:$FRONTEND_PORT"
-}
-
-stop_process() {
-  local name="$1" pid_file="$2"
-  if ! is_running "$pid_file"; then
-    rm -f "$pid_file"
-    echo "$name is not running."
+stop_server() {
+  if ! is_running "$SERVER_PID_FILE"; then
+    rm -f "$SERVER_PID_FILE"
+    echo "DataStoria is not running."
     return
   fi
   local pid
-  pid="$(cat "$pid_file")"
+  pid="$(cat "$SERVER_PID_FILE")"
   kill "$pid"
   for _ in {1..20}; do
     kill -0 "$pid" 2>/dev/null || break
@@ -143,45 +119,26 @@ stop_process() {
   if kill -0 "$pid" 2>/dev/null; then
     kill -9 "$pid"
   fi
-  rm -f "$pid_file"
-  echo "$name stopped."
-}
-
-start_all() {
-  start_backend
-  if ! start_frontend; then
-    stop_process "Backend" "$BACKEND_PID_FILE"
-    return 1
-  fi
-  echo "DataStoria is ready at http://127.0.0.1:$FRONTEND_PORT"
-}
-
-status_all() {
-  if is_running "$BACKEND_PID_FILE"; then
-    echo "Backend: running (PID $(cat "$BACKEND_PID_FILE"), profile $DATASTORIA_PROFILE)"
-  else
-    echo "Backend: stopped"
-  fi
-  if is_running "$FRONTEND_PID_FILE"; then
-    echo "Frontend: running (PID $(cat "$FRONTEND_PID_FILE"))"
-  else
-    echo "Frontend: stopped"
-  fi
+  rm -f "$SERVER_PID_FILE"
+  echo "DataStoria stopped."
 }
 
 case "${1:-}" in
   init) initialize ;;
-  start) start_all ;;
-  stop)
-    stop_process "Frontend" "$FRONTEND_PID_FILE"
-    stop_process "Backend" "$BACKEND_PID_FILE"
-    ;;
+  start) start_server ;;
+  stop) stop_server ;;
   restart)
     "$0" stop
     "$0" start
     ;;
-  status) status_all ;;
-  logs) tail -n "${2:-100}" "$LOG_DIR/backend.log" "$LOG_DIR/frontend.log" ;;
+  status)
+    if is_running "$SERVER_PID_FILE"; then
+      echo "DataStoria: running (PID $(cat "$SERVER_PID_FILE"), profile $DATASTORIA_PROFILE)"
+    else
+      echo "DataStoria: stopped"
+    fi
+    ;;
+  logs) tail -n "${2:-100}" "$LOG_DIR/server.log" ;;
   *)
     echo "Usage: $0 {init|start|stop|restart|status|logs [lines]}" >&2
     exit 2

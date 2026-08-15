@@ -33,10 +33,13 @@ import reactor.util.context.Context;
  * remote caller and does not weaken production auth.
  *
  * <ul>
- *   <li>CORS preflight and the public paths ({@code /api/auth/login}, actuator health/info) skip
- *       auth.
- *   <li>Any other path without a valid token (and without a pre-resolved identity) is rejected with
- *       {@code text/plain} 401 (written directly because filter-thrown exceptions bypass
+ *   <li>Only the protected namespaces — {@code /api/**} and {@code /actuator/**} — require a token.
+ *       Everything else is the statically exported frontend served by this process and is public
+ *       (the SPA itself performs login and attaches the Bearer token for API calls).
+ *   <li>Within the protected namespaces, CORS preflight and the public paths ({@code
+ *       /api/auth/login}, actuator health/info) skip auth.
+ *   <li>A protected path without a valid token (and without a pre-resolved identity) is rejected
+ *       with {@code text/plain} 401 (written directly because filter-thrown exceptions bypass
  *       {@code @RestControllerAdvice}).
  * </ul>
  */
@@ -55,7 +58,7 @@ public class JwtIdentityWebFilter implements WebFilter {
   @Override
   public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
     String path = exchange.getRequest().getPath().pathWithinApplication().value();
-    if (isPublic(exchange, path)) {
+    if (!isProtected(path) || isPublic(exchange, path)) {
       return chain.filter(exchange);
     }
     Identity preResolved = exchange.getAttribute(IdentityContext.PRE_RESOLVED_KEY);
@@ -88,6 +91,11 @@ public class JwtIdentityWebFilter implements WebFilter {
   private static Mono<Void> publish(
       Identity identity, ServerWebExchange exchange, WebFilterChain chain) {
     return chain.filter(exchange).contextWrite(Context.of(IdentityContext.CONTEXT_KEY, identity));
+  }
+
+  /** Auth is enforced on the API and actuator namespaces only; the exported SPA is public. */
+  private static boolean isProtected(String path) {
+    return path.startsWith("/api") || path.startsWith("/actuator");
   }
 
   private static boolean isPublic(ServerWebExchange exchange, String path) {

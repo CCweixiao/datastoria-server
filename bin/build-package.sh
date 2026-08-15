@@ -20,7 +20,10 @@ PACKAGE_NAME="datastoria-${VERSION}"
 DIST_DIR="$PROJECT_DIR/target/dist"
 STAGE_DIR="$DIST_DIR/$PACKAGE_NAME"
 ARCHIVE="$DIST_DIR/$PACKAGE_NAME.tar.gz"
-PUBLIC_API_BASE="${NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL:-/backend}"
+# Empty API base = same-origin: the Spring Boot backend serves the statically
+# exported frontend, so the browser calls /api/** directly. Set an absolute
+# URL only for a separately hosted frontend.
+PUBLIC_API_BASE="${NEXT_PUBLIC_DATASTORIA_JAVA_API_BASE_URL:-}"
 
 for command in java node npm pnpm tar; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -58,10 +61,10 @@ BACKEND_JAR="$(
 }
 WEB_ARCHIVE="$(
   find "$PROJECT_DIR/datastoria-web/target" -maxdepth 1 -type f \
-    -name 'datastoria-web-*-standalone.tar.gz' | head -1
+    -name 'datastoria-web-*-static.tar.gz' | head -1
 )"
 [[ -n "$WEB_ARCHIVE" ]] || {
-  echo "Frontend standalone archive was not produced." >&2
+  echo "Frontend static-export archive was not produced." >&2
   exit 1
 }
 

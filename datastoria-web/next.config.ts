@@ -13,8 +13,13 @@ const nextConfig: NextConfig = {
   distDir: process.env.DATASTORIA_NEXT_DIST_DIR ?? ".next",
   reactStrictMode: false,
   transpilePackages: ["@number-flow/react", "number-flow"],
-  // Enable standalone output for Docker deployment
-  output: "standalone",
+  // Static export: the build output in `out/` is served by the Spring Boot
+  // backend (or any static file server); no Node.js runtime is required.
+  output: "export",
+  images: {
+    // No Next.js image optimization server exists in static export mode.
+    unoptimized: true,
+  },
   experimental: {
     // Optimize barrel file imports for better performance
     // This transforms barrel imports to direct imports at build time

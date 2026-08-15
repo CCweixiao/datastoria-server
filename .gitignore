@@ -42,6 +42,8 @@ application-prod.yml
 .env
 .env.*
 !.env.example
+# Shared dev-server config: points `next dev` at the local backend (no secrets).
+!datastoria-web/.env.development
 
 ### Local databases ###
 data/
