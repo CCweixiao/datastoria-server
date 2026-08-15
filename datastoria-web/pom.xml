@@ -4,7 +4,7 @@
     <parent>
         <groupId>io.github.ccweixiao.datastoria</groupId>
         <artifactId>datastoria-parent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
     <artifactId>datastoria-web</artifactId>
     <packaging>pom</packaging>
@@ -89,7 +89,7 @@
         <profile>
             <id>web-dev</id>
             <properties>
-                <datastoria.web.dev-api-base-url>http://127.0.0.1:8081</datastoria.web.dev-api-base-url>
+                <datastoria.web.dev-api-base-url>http://127.0.0.1:8080</datastoria.web.dev-api-base-url>
             </properties>
             <build>
                 <plugins>

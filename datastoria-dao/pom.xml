@@ -4,7 +4,7 @@
     <parent>
         <groupId>io.github.ccweixiao.datastoria</groupId>
         <artifactId>datastoria-parent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
     <artifactId>datastoria-dao</artifactId>
     <name>DataStoria DAO</name>
