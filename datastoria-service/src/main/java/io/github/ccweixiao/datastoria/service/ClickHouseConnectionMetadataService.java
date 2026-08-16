@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -33,9 +35,27 @@ import reactor.core.scheduler.Scheduler;
 @Service
 public class ClickHouseConnectionMetadataService {
 
-  private static final String SERVER_QUERY =
+  private static final Logger log =
+      LoggerFactory.getLogger(ClickHouseConnectionMetadataService.class);
+
+  /**
+   * Core identity facts from functions that have existed for many major versions. A failure here
+   * means the server is genuinely unusable, so it still fails the request.
+   */
+  private static final String CORE_QUERY =
       """
-      SELECT currentUser(), timezone(), hostName(), FQDN(), version(),
+      SELECT currentUser(), timezone(), hostName(), FQDN(), version()
+      FORMAT JSONCompact
+      """;
+
+  /**
+   * Version-dependent capability probes, kept separate so a rejected probe (restricted user,
+   * hardened system-table policy, very old server) degrades to conservative defaults instead of
+   * failing the whole metadata request.
+   */
+  private static final String CAPABILITY_QUERY =
+      """
+      SELECT
         hasColumnInTable('system', 'functions', 'description'),
         (SELECT count() > 0 FROM system.functions WHERE name = 'formatQuery'),
         hasColumnInTable('system', 'metric_log', 'ProfileEvent_MergeSourceParts'),
@@ -46,6 +66,7 @@ public class ClickHouseConnectionMetadataService {
         (SELECT readonly != 0 FROM system.settings WHERE name = 'skip_unavailable_shards' LIMIT 1)
       FORMAT JSONCompact
       """;
+
   private static final String TOPOLOGY_QUERY =
       """
       SELECT cluster, host_name, host_address, port, shard_num, replica_num, is_local
@@ -114,15 +135,25 @@ public class ClickHouseConnectionMetadataService {
 
   private Mono<ClickHouseConnectionMetadataResponse> load(ClickHouseConnection connection) {
     String password = decryptPassword(connection);
-    Mono<JsonNode> server = executeJson(connection, password, SERVER_QUERY);
+    Mono<JsonNode> core = executeJson(connection, password, CORE_QUERY);
+    Mono<JsonNode> capabilities =
+        executeJson(connection, password, CAPABILITY_QUERY)
+            .doOnError(
+                error ->
+                    log.warn(
+                        "Capability probe failed for connection {}; degrading to conservative"
+                            + " defaults (all probed features treated as absent)",
+                        connection.id(),
+                        error))
+            .onErrorReturn(objectMapper.createObjectNode());
     Mono<JsonNode> topology =
         executeJson(connection, password, TOPOLOGY_QUERY)
             .onErrorReturn(objectMapper.createObjectNode());
     Mono<JsonNode> events =
         executeJson(connection, password, EVENTS_QUERY)
             .onErrorReturn(objectMapper.createObjectNode());
-    return Mono.zip(server, topology, events)
-        .map(tuple -> map(connection, tuple.getT1(), tuple.getT2(), tuple.getT3()));
+    return Mono.zip(core, capabilities, topology, events)
+        .map(tuple -> map(connection, tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4()));
   }
 
   private Mono<JsonNode> executeJson(
@@ -140,8 +171,13 @@ public class ClickHouseConnectionMetadataService {
   }
 
   private ClickHouseConnectionMetadataResponse map(
-      ClickHouseConnection connection, JsonNode server, JsonNode topology, JsonNode events) {
-    JsonNode row = server.path("data").path(0);
+      ClickHouseConnection connection,
+      JsonNode core,
+      JsonNode capabilities,
+      JsonNode topology,
+      JsonNode events) {
+    JsonNode row = core.path("data").path(0);
+    JsonNode probed = capabilities.path("data").path(0);
     String hostName = text(row, 2, connection.name());
     String fqdn = text(row, 3, hostName);
     String configuredCluster = blankToNull(connection.cluster());
@@ -184,14 +220,14 @@ public class ClickHouseConnectionMetadataService {
         text(row, 4, null),
         text(row, 0, connection.username()),
         text(row, 1, "UTC"),
-        bool(row, 5),
-        bool(row, 7),
-        bool(row, 8),
-        bool(row, 9),
-        bool(row, 10),
-        bool(row, 11),
-        bool(row, 6),
-        bool(row, 12),
+        bool(probed, 0),
+        bool(probed, 2),
+        bool(probed, 3),
+        bool(probed, 4),
+        bool(probed, 5),
+        bool(probed, 6),
+        bool(probed, 1),
+        bool(probed, 7),
         List.copyOf(hostNames),
         detectedCluster,
         List.copyOf(nodes),

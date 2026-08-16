@@ -4,6 +4,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -45,6 +47,7 @@ import io.github.ccweixiao.datastoria.common.domain.ChatMessage;
 import io.github.ccweixiao.datastoria.common.domain.ChatSession;
 import io.github.ccweixiao.datastoria.common.domain.Model;
 import io.github.ccweixiao.datastoria.common.domain.Ulid;
+import io.github.ccweixiao.datastoria.common.dto.ClickHouseConnectionMetadataResponse;
 import io.github.ccweixiao.datastoria.common.error.ApiErrorCode;
 import io.github.ccweixiao.datastoria.common.error.NotFoundException;
 import io.github.ccweixiao.datastoria.common.error.PlainTextException;
@@ -59,6 +62,7 @@ import io.github.ccweixiao.datastoria.dao.repository.AuditLogRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ChatMessageRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ChatSessionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ModelRepository;
+import io.github.ccweixiao.datastoria.service.ClickHouseConnectionMetadataService;
 import io.github.ccweixiao.datastoria.service.ClickHouseConnectionService;
 import io.github.ccweixiao.datastoria.service.RcaTemplateCatalog;
 
@@ -73,16 +77,19 @@ import reactor.core.scheduler.Scheduler;
  * event stream; the controller encodes it.
  *
  * <p><b>Threading:</b> {@link #stream} runs the blocking resolution and run creation on the
- * dedicated {@link JdbcSchedulerConfig#JDBC_SCHEDULER jdbc scheduler} via {@code
- * Mono.fromCallable}, so none of it blocks the Netty event loop. The returned {@code
- * Flux<AgentRunEvent>} is subscribed once by WebFlux when writing the SSE response (no manual
- * subscribe), preserving the P4.2 single-use / auto-binding contract.
+ * dedicated {@link JdbcSchedulerConfig#JDBC_SCHEDULER jdbc scheduler} (the cached connection
+ * metadata fetch is composed in front of it and hops back via {@code publishOn}), so none of it
+ * blocks the Netty event loop. The returned {@code Flux<AgentRunEvent>} is subscribed once by
+ * WebFlux when writing the SSE response (no manual subscribe), preserving the P4.2 single-use /
+ * auto-binding contract.
  *
  * <p>AgentScope-free: depends only on {@link AgentRunService}, repositories, and the {@link
  * ModelAdapterProvider} seam. Credentials are resolved inside the provider (P4.8), never here.
  */
 @Service
 public class ChatRunService {
+
+  private static final Logger log = LoggerFactory.getLogger(ChatRunService.class);
 
   /** Fallback system prompt when no published agent revision is referenced. */
   static final String DEFAULT_SYSTEM_PROMPT =
@@ -125,6 +132,7 @@ public class ChatRunService {
   private final SkillToolAvailability skillToolAvailability;
   private final SlashCommandExpander slashCommandExpander;
   private final ClickHouseConnectionService clickHouseConnectionService;
+  private final ClickHouseConnectionMetadataService connectionMetadataService;
   private final RcaTemplateCatalog rcaTemplateCatalog;
   private final ModelAdapterProvider modelAdapterProvider;
   private final ModelTitleGenerator titleGenerator;
@@ -151,6 +159,7 @@ public class ChatRunService {
       SkillToolAvailability skillToolAvailability,
       SlashCommandExpander slashCommandExpander,
       ClickHouseConnectionService clickHouseConnectionService,
+      ClickHouseConnectionMetadataService connectionMetadataService,
       RcaTemplateCatalog rcaTemplateCatalog,
       ModelAdapterProvider modelAdapterProvider,
       ModelTitleGenerator titleGenerator,
@@ -173,6 +182,7 @@ public class ChatRunService {
     this.skillToolAvailability = skillToolAvailability;
     this.slashCommandExpander = slashCommandExpander;
     this.clickHouseConnectionService = clickHouseConnectionService;
+    this.connectionMetadataService = connectionMetadataService;
     this.rcaTemplateCatalog = rcaTemplateCatalog;
     this.modelAdapterProvider = modelAdapterProvider;
     this.titleGenerator = titleGenerator;
@@ -190,8 +200,9 @@ public class ChatRunService {
    * RunCancellationPersister} wired into {@link AgentRunService}.
    */
   public Mono<Flux<AgentRunEvent>> stream(AgentChatRequest req, Identity identity) {
-    return Mono.fromCallable(() -> prepareRun(req, identity))
-        .subscribeOn(jdbcScheduler)
+    return connectionMetadataForRun(req.connectionId(), identity)
+        .publishOn(jdbcScheduler)
+        .map(metadata -> prepareRun(req, identity, metadata))
         .map(
             prepared -> {
               Flux<AgentRunEvent> events = agentRunService.start(prepared.runRequest());
@@ -208,6 +219,29 @@ public class ChatRunService {
               return lifecycleRecorder.tap(ctx, events);
             })
         .onErrorResume(failure -> cleanupEphemeral(req, identity).then(Mono.error(failure)));
+  }
+
+  /**
+   * Best-effort connection metadata for capability hints. The value is served from the shared
+   * 5-minute cache, and any failure (unknown connection, unreachable server) degrades to empty so
+   * it can never block or fail the run itself.
+   */
+  private Mono<java.util.Optional<ClickHouseConnectionMetadataResponse>> connectionMetadataForRun(
+      String connectionId, Identity identity) {
+    if (connectionId == null || connectionId.isBlank()) {
+      return Mono.just(java.util.Optional.empty());
+    }
+    return connectionMetadataService
+        .get(connectionId, identity)
+        .map(java.util.Optional::of)
+        .onErrorResume(
+            error -> {
+              log.warn(
+                  "Connection metadata unavailable for run start ({}); capability hints skipped",
+                  connectionId,
+                  error);
+              return Mono.just(java.util.Optional.empty());
+            });
   }
 
   /** Generates an optional first-turn title with the selected server-side model and credential. */
@@ -417,13 +451,15 @@ public class ChatRunService {
       JsonNode snapshot =
           run.inputSnapshotJson() == null ? null : mapper.readTree(run.inputSnapshotJson());
       AgentRuntimeConfig configured = AgentContextOptions.apply(base, snapshot);
-      return applyDatabaseContext(configured, snapshot == null ? null : snapshot.path("context"));
+      return applyDatabaseContext(
+          configured, snapshot == null ? null : snapshot.path("context"), null);
     } catch (Exception ignored) {
       return base;
     }
   }
 
-  private String runtimeOptionsSnapshot(JsonNode context, JsonNode databaseContext) {
+  private String runtimeOptionsSnapshot(
+      JsonNode context, JsonNode databaseContext, java.util.List<String> capabilityHints) {
     var safe = mapper.createObjectNode();
     if (context != null && context.isObject()) {
       for (String key :
@@ -433,7 +469,7 @@ public class ChatRunService {
         }
       }
     }
-    JsonNode safeDatabaseContext = sanitizedDatabaseContext(databaseContext);
+    JsonNode safeDatabaseContext = sanitizedDatabaseContext(databaseContext, capabilityHints);
     if (safeDatabaseContext.size() > 0) {
       safe.set("context", safeDatabaseContext);
     }
@@ -494,7 +530,14 @@ public class ChatRunService {
     }
   }
 
-  private PreparedRun prepareRun(AgentChatRequest req, Identity identity) {
+  private PreparedRun prepareRun(
+      AgentChatRequest req,
+      Identity identity,
+      java.util.Optional<ClickHouseConnectionMetadataResponse> connectionMetadata) {
+    // Capability gaps are resolved server-side (cached connection metadata) and persisted with the
+    // run snapshot, so resume replays exactly what the run started with.
+    java.util.List<String> capabilityHints =
+        connectionMetadata.map(ClickHouseCapabilityHints::render).orElse(java.util.List.of());
     String tenant = identity.tenantId();
     String user = identity.userId();
     Objects.requireNonNull(tenant, "tenant");
@@ -613,7 +656,7 @@ public class ChatRunService {
             idempotencyKey,
             idempotencyKey,
             req.connectionId(),
-            runtimeOptionsSnapshot(req.agentContext(), req.context()),
+            runtimeOptionsSnapshot(req.agentContext(), req.context(), capabilityHints),
             null,
             null,
             null,
@@ -642,7 +685,9 @@ public class ChatRunService {
             context,
             adapter,
             applyDatabaseContext(
-                AgentContextOptions.apply(agent.config(), req.agentContext()), req.context()),
+                AgentContextOptions.apply(agent.config(), req.agentContext()),
+                req.context(),
+                capabilityHints),
             resolvedCapabilities.capabilities(),
             req.ephemeral() ? java.util.List.of() : loadHistory(req, tenant),
             slashCommandExpander.expand(
@@ -844,37 +889,77 @@ public class ChatRunService {
     return identity.tenantId() + '\u0000' + identity.userId() + '\u0000' + req.sessionId();
   }
 
+  /**
+   * Appends sanitized database-context facts and probed capability notes to the system prompt. On
+   * run start {@code capabilityHints} comes from the server-side connection metadata; on resume it
+   * is null and the hints stored in the run snapshot are replayed instead.
+   */
   private AgentRuntimeConfig applyDatabaseContext(
-      AgentRuntimeConfig config, JsonNode databaseContext) {
-    JsonNode safe = sanitizedDatabaseContext(databaseContext);
+      AgentRuntimeConfig config, JsonNode databaseContext, java.util.List<String> capabilityHints) {
+    JsonNode safe = sanitizedDatabaseContext(databaseContext, capabilityHints);
     if (safe.size() == 0) {
       return config;
     }
-    String facts =
-        "\n\n## Diagnosis Context\n"
-            + "Database context facts:\n"
-            + "- Cluster name: "
-            + safe.path("clusterName").asText("unknown")
-            + "\n- Server version: "
-            + safe.path("serverVersion").asText("unknown")
-            + "\n- ClickHouse user: "
-            + safe.path("clickHouseUser").asText("unknown")
-            + "\nUse these facts only when they materially change the answer. Do not infer missing values.";
+    StringBuilder facts =
+        new StringBuilder("\n\n## Diagnosis Context\n")
+            .append("Database context facts:\n")
+            .append("- Cluster name: ")
+            .append(safe.path("clusterName").asText("unknown"))
+            .append("\n- Server version: ")
+            .append(safe.path("serverVersion").asText("unknown"))
+            .append("\n- ClickHouse user: ")
+            .append(safe.path("clickHouseUser").asText("unknown"));
+    JsonNode hints = safe.path("capabilityHints");
+    if (hints.isArray() && hints.size() > 0) {
+      facts.append("\nServer capability notes (probed at connect time):");
+      for (JsonNode hint : hints) {
+        facts.append("\n- ").append(hint.asText());
+      }
+    }
+    facts
+        .append("\nUse these facts only when they materially change the answer. Do not infer")
+        .append(" missing values.");
     return config.withRequestOptions(
         config.systemPrompt() + facts, config.reasoningEffort(), config.outputReasoning());
   }
 
-  private JsonNode sanitizedDatabaseContext(JsonNode databaseContext) {
+  /**
+   * Whitelists the client-supplied context keys and the capability hints. When {@code hints} is
+   * non-null (run start) it authoritatively replaces any client-sent array; when null (resume) the
+   * stored array is copied back so the resumed prompt matches the original run.
+   */
+  private JsonNode sanitizedDatabaseContext(
+      JsonNode databaseContext, java.util.List<String> capabilityHints) {
     var safe = mapper.createObjectNode();
-    if (databaseContext == null || !databaseContext.isObject()) {
-      return safe;
-    }
-    for (String key : java.util.List.of("clusterName", "serverVersion", "clickHouseUser")) {
-      String value =
-          databaseContext.path(key).asText("").replace('\r', ' ').replace('\n', ' ').trim();
-      if (!value.isBlank()) {
-        safe.put(key, value.substring(0, Math.min(value.length(), 255)));
+    if (databaseContext != null && databaseContext.isObject()) {
+      for (String key : java.util.List.of("clusterName", "serverVersion", "clickHouseUser")) {
+        String value =
+            databaseContext.path(key).asText("").replace('\r', ' ').replace('\n', ' ').trim();
+        if (!value.isBlank()) {
+          safe.put(key, value.substring(0, Math.min(value.length(), 255)));
+        }
       }
+    }
+    if (capabilityHints != null) {
+      if (!capabilityHints.isEmpty()) {
+        var array = safe.putArray("capabilityHints");
+        capabilityHints.stream()
+            .limit(8)
+            .forEach(hint -> array.add(hint.substring(0, Math.min(hint.length(), 255))));
+      }
+    } else if (databaseContext != null && databaseContext.path("capabilityHints").isArray()) {
+      var array = safe.putArray("capabilityHints");
+      databaseContext
+          .path("capabilityHints")
+          .forEach(
+              hint -> {
+                if (array.size() < 8) {
+                  String value = hint.asText("").replace('\r', ' ').replace('\n', ' ').trim();
+                  if (!value.isBlank()) {
+                    array.add(value.substring(0, Math.min(value.length(), 255)));
+                  }
+                }
+              });
     }
     return safe;
   }
