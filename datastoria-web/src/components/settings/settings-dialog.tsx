@@ -1,3 +1,4 @@
+import { useAuthSession } from "@/components/auth-session-provider";
 import { useConnection } from "@/components/connection/connection-context";
 import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Dialog as SharedDialog } from "@/components/shared/use-dialog";
@@ -26,8 +27,18 @@ export interface ShowSettingsDialogOptions {
   onCancel?: () => void;
 }
 
-function getAvailableSettingsSection(section: SettingsSection, hasConnection: boolean) {
+/** Sections restricted to administrators (platform-level configuration). */
+const ADMIN_ONLY_SECTIONS: ReadonlySet<SettingsSection> = new Set(["query-context", "agent"]);
+
+function getAvailableSettingsSection(
+  section: SettingsSection,
+  hasConnection: boolean,
+  isAdmin: boolean
+) {
   if (section === "query-context" && !hasConnection) {
+    return "ui";
+  }
+  if (ADMIN_ONLY_SECTIONS.has(section) && !isAdmin) {
     return "ui";
   }
   return section;
@@ -44,14 +55,16 @@ function SettingsDialogWrapper({
 }) {
   const { connection } = useConnection();
   const { t } = useUiPreferences();
+  const { user } = useAuthSession();
+  const isAdmin = user?.role === "ADMIN";
   const hasConnection = connection !== null;
   const [activeSection, setActiveSection] = useState<SettingsSection>(() =>
-    getAvailableSettingsSection(initialSection, hasConnection)
+    getAvailableSettingsSection(initialSection, hasConnection, isAdmin)
   );
 
   useEffect(() => {
-    setActiveSection((current) => getAvailableSettingsSection(current, hasConnection));
-  }, [hasConnection]);
+    setActiveSection((current) => getAvailableSettingsSection(current, hasConnection, isAdmin));
+  }, [hasConnection, isAdmin]);
 
   const handleClose = useCallback(() => {
     if (onCancel) {
@@ -84,7 +97,7 @@ function SettingsDialogWrapper({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
 
-                  {hasConnection && (
+                  {hasConnection && isAdmin && (
                     <SidebarMenuItem>
                       <Collapsible defaultOpen className="group/collapsible">
                         <CollapsibleTrigger asChild>
@@ -131,15 +144,17 @@ function SettingsDialogWrapper({
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
 
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              className="cursor-pointer"
-                              onClick={() => setActiveSection("agent")}
-                              isActive={activeSection === "agent"}
-                            >
-                              <span>{t("settings.agent.title")}</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
+                          {isAdmin && (
+                            <SidebarMenuSubItem>
+                              <SidebarMenuSubButton
+                                className="cursor-pointer"
+                                onClick={() => setActiveSection("agent")}
+                                isActive={activeSection === "agent"}
+                              >
+                                <span>{t("settings.agent.title")}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          )}
 
                           <SidebarMenuSubItem>
                             <SidebarMenuSubButton

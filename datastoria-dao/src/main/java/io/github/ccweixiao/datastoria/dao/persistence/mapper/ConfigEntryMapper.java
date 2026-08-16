@@ -19,6 +19,9 @@ public interface ConfigEntryMapper extends BaseMapper<ConfigEntryEntity> {
       @Param("userId") String userId,
       @Param("configKey") String configKey);
 
+  ConfigEntryEntity findTenantEntry(
+      @Param("tenantId") String tenantId, @Param("configKey") String configKey);
+
   int casUpdate(
       @Param("id") String id,
       @Param("tenantId") String tenantId,

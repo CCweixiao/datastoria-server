@@ -30,11 +30,6 @@ export interface AgentContext {
   outputReasoning?: boolean;
   /** Preferred reasoning level for models that expose configurable reasoning. */
   reasoningLevel?: ReasoningLevel;
-  /**
-   * Upper bound on the agent's reasoning/tool loop. The server clamps the value to its
-   * DATASTORIA_AGENT_MAX_ITERS ceiling; undefined follows the server default.
-   */
-  maxIters?: number;
 }
 
 export type MessageRole = "user" | "assistant" | "system" | "data" | "tool";

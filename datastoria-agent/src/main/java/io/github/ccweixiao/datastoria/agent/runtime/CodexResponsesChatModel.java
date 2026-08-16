@@ -64,6 +64,12 @@ public final class CodexResponsesChatModel extends ChatModelBase {
         mapper);
   }
 
+  /** Advertises the model's context window so harness compaction can scale with it. */
+  public CodexResponsesChatModel withContextWindowSize(int contextWindowSize) {
+    setContextWindowSize(contextWindowSize);
+    return this;
+  }
+
   CodexResponsesChatModel(
       String modelName,
       String accessToken,

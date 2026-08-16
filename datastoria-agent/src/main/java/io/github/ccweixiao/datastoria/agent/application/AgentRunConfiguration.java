@@ -1,15 +1,25 @@
 package io.github.ccweixiao.datastoria.agent.application;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import io.agentscope.core.shutdown.AgentScopeJvmShutdownHook;
+import io.agentscope.core.shutdown.GracefulShutdownConfig;
+import io.agentscope.core.shutdown.GracefulShutdownManager;
+import io.agentscope.core.shutdown.PartialReasoningPolicy;
 import io.agentscope.core.state.AgentStateStore;
+import io.github.ccweixiao.datastoria.agent.runtime.AgentHarnessSettings;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentToolRegistry;
 import io.github.ccweixiao.datastoria.agent.runtime.CancellationRegistry;
 import io.github.ccweixiao.datastoria.agent.runtime.HarnessAgentFactory;
@@ -29,10 +39,57 @@ import reactor.core.scheduler.Scheduler;
 public class AgentRunConfiguration {
 
   @Bean
+  AgentHarnessSettings agentHarnessSettings(
+      @Value("${datastoria.agent.data-dir:}") String dataDir,
+      @Value("${datastoria.agent.max-iters:25}") int maxIters,
+      @Value("${datastoria.agent.tool-result-eviction-chars:32768}") int evictionChars,
+      @Value("${datastoria.agent.compaction.trigger-ratio:0.8}") double triggerRatio,
+      @Value("${datastoria.agent.compaction.fallback-context-tokens:100000}")
+          int fallbackContextTokens,
+      @Value("${datastoria.agent.shutdown-timeout-seconds:20}") int shutdownTimeoutSeconds)
+      throws IOException {
+    Path resolved =
+        dataDir == null || dataDir.isBlank()
+            ? null
+            : Path.of(dataDir.trim()).toAbsolutePath().normalize();
+    AgentHarnessSettings settings =
+        new AgentHarnessSettings(
+            resolved,
+            maxIters,
+            evictionChars,
+            triggerRatio,
+            fallbackContextTokens,
+            shutdownTimeoutSeconds);
+    // Fail fast on an unusable data directory rather than per-run at eviction time.
+    Files.createDirectories(settings.dataDir());
+    return settings;
+  }
+
+  /**
+   * AgentScope graceful shutdown: on SIGTERM the JVM hook stops accepting new reasoning/acting,
+   * interrupts in-flight runs and waits up to the configured timeout before the JVM exits. The
+   * per-agent {@code GracefulShutdownMiddleware} is attached by the {@link HarnessAgentFactory};
+   * this bean only installs the process-wide hook and policy once.
+   */
+  @Bean
+  GracefulShutdownManager gracefulShutdownManager(AgentHarnessSettings settings) {
+    GracefulShutdownManager manager = GracefulShutdownManager.getInstance();
+    manager.setConfig(
+        new GracefulShutdownConfig(
+            Duration.ofSeconds(settings.shutdownTimeoutSeconds()), PartialReasoningPolicy.SAVE));
+    AgentScopeJvmShutdownHook.register(manager);
+    return manager;
+  }
+
+  @Bean
   HarnessAgentFactory harnessAgentFactory(
-      AgentToolRegistry toolRegistry, AgentStateStore stateStore) {
+      AgentToolRegistry toolRegistry,
+      AgentStateStore stateStore,
+      AgentHarnessSettings settings,
+      GracefulShutdownManager shutdownManager) {
     // AgentStateStoreConfig always supplies the MySQL-backed store.
-    return new HarnessAgentFactory(Clock.systemUTC(), toolRegistry, stateStore);
+    return new HarnessAgentFactory(
+        Clock.systemUTC(), toolRegistry, stateStore, settings, shutdownManager);
   }
 
   @Bean

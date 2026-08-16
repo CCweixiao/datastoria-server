@@ -1,6 +1,7 @@
 package io.github.ccweixiao.datastoria.agent.runtime;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,22 @@ public final class ClickHouseAgentTools {
 
   private static final int DEFAULT_TABLE_LIMIT = 100;
   private static final int MAX_TABLE_LIMIT = 500;
+
+  /**
+   * Model-context bound on execute_sql results; the server guardrail alone allows up to 10K rows.
+   */
+  private static final int MAX_RESULT_ROWS_FOR_MODEL = 200;
+
+  /** Per-value bound on execute_sql results (e.g. long SQL text in query_log rows). */
+  private static final int MAX_CELL_CHARS = 2_000;
+
+  /**
+   * Total serialized-row budget for execute_sql results. Keeps the bounded output comfortably under
+   * {@link AgentToolExecutionPolicy#MAX_OUTPUT_CHARS} so wide results degrade gracefully instead of
+   * tripping the hard output cap (which surfaces as a tool error).
+   */
+  private static final int MAX_RESULT_CHARS_FOR_MODEL = 192_000;
+
   private static final int MAX_COLUMNS_PER_TABLE = 100;
   private static final Map<String, Object> EXECUTE_SQL_SETTINGS =
       Map.of(
@@ -784,16 +801,80 @@ public final class ClickHouseAgentTools {
                 column.put("name", metadata.path("name").asText());
                 column.put("type", metadata.path("type").asText());
               });
+      // The server guardrail may return up to 10K rows / 10MB; that is far beyond any model
+      // context. Bound what enters the conversation (rows, per-value length, total size) and
+      // tell the model the result was capped.
       ArrayNode rows = result.putArray("rows");
-      response.path("data").forEach(rows::add);
-      result.put("rowCount", rows.size());
+      int totalRows = 0;
+      int emittedChars = 0;
+      boolean cellsTruncated = false;
+      boolean budgetExhausted = false;
+      for (JsonNode row : response.path("data")) {
+        totalRows++;
+        if (rows.size() >= MAX_RESULT_ROWS_FOR_MODEL || budgetExhausted) {
+          continue;
+        }
+        ArrayNode arrayRow = row.isArray() ? rows.addArray() : null;
+        ObjectNode objectRow = row.isObject() ? rows.addObject() : null;
+        int rowChars = 0;
+        if (arrayRow != null) {
+          for (JsonNode cell : row) {
+            cellsTruncated |= writeBoundedCell(arrayRow, cell);
+            rowChars += arrayRow.get(arrayRow.size() - 1).asText("").length();
+          }
+        } else if (objectRow != null) {
+          Iterator<Map.Entry<String, JsonNode>> fields = row.fields();
+          while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            cellsTruncated |= writeBoundedCell(objectRow, field.getKey(), field.getValue());
+            rowChars += objectRow.get(field.getKey()).asText("").length();
+          }
+        } else {
+          rows.add(row);
+          rowChars = row.asText("").length();
+        }
+        emittedChars += rowChars;
+        if (emittedChars >= MAX_RESULT_CHARS_FOR_MODEL) {
+          budgetExhausted = true;
+        }
+      }
+      result.put("rowCount", totalRows);
       if (!rows.isEmpty()) {
         result.set("sampleRow", rows.get(0));
+      }
+      if (totalRows > rows.size() || cellsTruncated) {
+        result.put("truncated", true);
+        result.put(
+            "guidance",
+            "The result was capped for the model context (at most "
+                + MAX_RESULT_ROWS_FOR_MODEL
+                + " rows and "
+                + (MAX_RESULT_CHARS_FOR_MODEL / 1_000)
+                + "K characters shown, long values shortened). Refine the SQL with aggregation,"
+                + " filters, or LIMIT, or select narrower columns instead of re-running as-is.");
       }
       return mapper.writeValueAsString(result);
     } catch (JsonProcessingException error) {
       throw new IllegalStateException("Invalid ClickHouse JSON response", error);
     }
+  }
+
+  private boolean writeBoundedCell(ArrayNode row, JsonNode cell) {
+    if (cell.isTextual() && cell.asText().length() > MAX_CELL_CHARS) {
+      row.add(cell.asText().substring(0, MAX_CELL_CHARS) + "…[truncated]");
+      return true;
+    }
+    row.add(cell);
+    return false;
+  }
+
+  private boolean writeBoundedCell(ObjectNode row, String name, JsonNode cell) {
+    if (cell.isTextual() && cell.asText().length() > MAX_CELL_CHARS) {
+      row.put(name, cell.asText().substring(0, MAX_CELL_CHARS) + "…[truncated]");
+      return true;
+    }
+    row.set(name, cell);
+    return false;
   }
 
   private String firstQueryText(String raw) {

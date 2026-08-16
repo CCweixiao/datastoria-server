@@ -23,6 +23,8 @@ operations:
   - { method: GET, path: "/api/ai/skills/{}", callSite: components/settings/skills/skills-detail-view.tsx }
   - { method: GET, path: "/api/ai/skills/{}/resource", callSite: components/settings/skills/skills-detail-view.tsx }
   - { method: POST, path: /api/ai/models/available, callSite: lib/ai/configuration/configuration-gateway.ts }
+  - { method: GET, path: /api/admin/ai/harness-settings, callSite: lib/ai/harness-settings-client.ts }
+  - { method: PUT, path: /api/admin/ai/harness-settings, callSite: lib/ai/harness-settings-client.ts }
   - { method: GET, path: /api/admin/ai/providers, callSite: lib/ai/configuration/configuration-gateway.ts }
   - { method: POST, path: /api/admin/ai/providers, callSite: lib/ai/configuration/configuration-gateway.ts }
   - { method: PUT, path: "/api/admin/ai/providers/{}", callSite: lib/ai/configuration/configuration-gateway.ts }

@@ -167,6 +167,49 @@ class ConfiguredModelAdapterProviderTest {
     verify(oauth).accessToken("codex", identity);
   }
 
+  @Test
+  void advertisesConfiguredContextWindowOnTheModel() {
+    ModelProviderRepository providers = mock(ModelProviderRepository.class);
+    SecretService secrets = mock(SecretService.class);
+    when(providers.findById("provider-1", "tenant-1"))
+        .thenReturn(Optional.of(provider("openai", "https://example.test/v1", "provider-secret")));
+    when(secrets.decrypt("provider-secret", "tenant-1")).thenReturn("server-only-key");
+    Instant now = Instant.now();
+    Model withWindow =
+        new Model(
+            "model-1",
+            "tenant-1",
+            null,
+            "provider-1",
+            "gpt-test",
+            "GPT",
+            null,
+            "manual",
+            true,
+            false,
+            "{\"contextWindowTokens\":1000000}",
+            "{}",
+            null,
+            0,
+            now,
+            now,
+            null);
+
+    ModelAdapter adapter =
+        new ConfiguredModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+            .adapterFor(withWindow);
+
+    assertThat(adapter.modelFor(null).getContextWindowSize()).isEqualTo(1_000_000);
+
+    // Without advertised capabilities the window stays unknown (harness uses its fallback).
+    ModelAdapter fallback =
+        new ConfiguredModelAdapterProvider(
+                providers, secrets, mock(OAuthCredentialService.class), new ObjectMapper())
+            .adapterFor(model(null));
+    assertThat(fallback.modelFor(null).getContextWindowSize()).isZero();
+  }
+
   private static Model model(String secretId) {
     Instant now = Instant.now();
     return new Model(

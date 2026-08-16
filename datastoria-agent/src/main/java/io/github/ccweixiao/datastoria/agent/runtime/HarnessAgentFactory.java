@@ -26,11 +26,14 @@ import io.agentscope.core.model.ToolSchema;
 import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionRule;
+import io.agentscope.core.shutdown.GracefulShutdownManager;
+import io.agentscope.core.shutdown.GracefulShutdownMiddleware;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.github.ccweixiao.datastoria.agent.application.ChatAttachment;
 import io.github.ccweixiao.datastoria.agent.application.ChatToolExchange;
 import io.github.ccweixiao.datastoria.agent.application.ChatTurn;
@@ -62,12 +65,20 @@ public final class HarnessAgentFactory {
   private final Clock clock;
   private final AgentToolRegistry toolRegistry;
   private final AgentStateStore stateStore;
+  private final AgentHarnessSettings settings;
+  private final GracefulShutdownManager shutdownManager;
 
   public HarnessAgentFactory(
-      Clock clock, AgentToolRegistry toolRegistry, AgentStateStore stateStore) {
+      Clock clock,
+      AgentToolRegistry toolRegistry,
+      AgentStateStore stateStore,
+      AgentHarnessSettings settings,
+      GracefulShutdownManager shutdownManager) {
     this.clock = clock;
     this.toolRegistry = toolRegistry;
     this.stateStore = stateStore;
+    this.settings = settings;
+    this.shutdownManager = shutdownManager;
   }
 
   public RunnableAgent create(
@@ -197,7 +208,10 @@ public final class HarnessAgentFactory {
             .toolkit(toolkit)
             .permissionContext(permissionContext)
             .stateStore(stateStore)
-            .maxIters(config.maxIters());
+            .maxIters(config.maxIters())
+            // AgentScope runtime data (tool-result offload and any workspace writes) lives under
+            // the configured data directory, never the process working directory.
+            .workspace(settings.dataDir());
     if (!capabilities.skills().isEmpty()) {
       builder.skillRepository(new InMemoryAgentSkillRepository(capabilities.skills()));
     } else {
@@ -209,8 +223,20 @@ public final class HarnessAgentFactory {
                 CompactionConfig.builder()
                     .flushBeforeCompact(false)
                     .offloadBeforeCompact(false)
+                    // Trigger scales with the model's context window (fallback when unknown), so
+                    // a 200K-window model compacts at 160K and a 1M-window model at 800K.
+                    .triggerTokens(config.compactionTriggerTokens(model.getContextWindowSize()))
                     .model(safeCompactionModel(model))
                     .build())
+            // Backstop for oversized tool results: full text is offloaded to the data directory
+            // and only a bounded preview stays in the model context.
+            .toolResultEviction(
+                ToolResultEvictionConfig.builder()
+                    .maxResultChars(config.toolResultEvictionChars())
+                    .build())
+            // Tracks in-flight reasoning/acting so the JVM shutdown hook interrupts and settles
+            // runs instead of dropping them mid-flight.
+            .middleware(new GracefulShutdownMiddleware(shutdownManager))
             .disableFilesystemTools()
             .disableShellTool()
             .disableMemoryTools()

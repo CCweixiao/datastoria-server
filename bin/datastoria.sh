@@ -112,9 +112,11 @@ stop_server() {
   local pid
   pid="$(cat "$SERVER_PID_FILE")"
   kill "$pid"
-  for _ in {1..20}; do
+  # SIGTERM first: lets the JVM shutdown hook settle in-flight agent runs (the graceful-shutdown
+  # timeout defaults to 20s) before Spring closes. Wait up to 30s, then force-kill.
+  for _ in {1..60}; do
     kill -0 "$pid" 2>/dev/null || break
-    sleep 0.25
+    sleep 0.5
   done
   if kill -0 "$pid" 2>/dev/null; then
     kill -9 "$pid"

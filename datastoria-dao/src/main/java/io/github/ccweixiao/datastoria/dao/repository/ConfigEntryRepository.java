@@ -17,6 +17,15 @@ public interface ConfigEntryRepository {
   ConfigEntry upsertUserEntry(
       String tenantId, String userId, String configKey, String valueJson, Long ifMatch);
 
+  /** The tenant-scope entry for (tenantId, configKey), if any (admin-managed layer). */
+  Optional<ConfigEntry> findTenantEntry(String tenantId, String configKey);
+
+  /**
+   * Upserts a tenant-scope entry (scope_id = tenantId) with the same optimistic-lock semantics as
+   * {@link #upsertUserEntry}.
+   */
+  ConfigEntry upsertTenantEntry(String tenantId, String configKey, String valueJson, Long ifMatch);
+
   Optional<ConfigEntry> findById(String id, String tenantId);
 
   /** Returns all non-deleted entries contributing to the effective config for this user. */

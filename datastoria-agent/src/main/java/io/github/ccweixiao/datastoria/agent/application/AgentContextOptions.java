@@ -9,6 +9,8 @@ import io.github.ccweixiao.datastoria.agent.runtime.AgentRuntimeConfig;
 
 /**
  * Validates browser presentation hints and applies them at the server-owned AgentScope boundary.
+ * Harness runtime knobs (loop bound, eviction, compaction) are intentionally NOT request-settable;
+ * they come from {@code datastoria.agent.*} defaults merged with tenant-level admin overrides.
  */
 final class AgentContextOptions {
 
@@ -19,11 +21,7 @@ final class AgentContextOptions {
 
   private AgentContextOptions() {}
 
-  /**
-   * Applies whitelisted request hints. {@code maxIters} may only lower the loop bound within the
-   * server-configured ceiling; anything invalid keeps the configured default.
-   */
-  static AgentRuntimeConfig apply(AgentRuntimeConfig config, JsonNode context, int serverMaxIters) {
+  static AgentRuntimeConfig apply(AgentRuntimeConfig config, JsonNode context) {
     if (context == null || !context.isObject()) {
       return config;
     }
@@ -35,20 +33,8 @@ final class AgentContextOptions {
     }
     boolean outputReasoning =
         !context.has("outputReasoning") || context.path("outputReasoning").asBoolean(true);
-    return config
-        .withRequestOptions(
-            appendLanguagePolicy(config.systemPrompt(), language), reasoning, outputReasoning)
-        .withMaxIters(resolvedMaxIters(config, context, serverMaxIters));
-  }
-
-  private static int resolvedMaxIters(
-      AgentRuntimeConfig config, JsonNode context, int serverMaxIters) {
-    int ceiling = Math.max(1, serverMaxIters);
-    JsonNode requested = context.path("maxIters");
-    if (requested.isIntegralNumber() && requested.canConvertToInt() && requested.asInt() >= 1) {
-      return Math.min(requested.asInt(), ceiling);
-    }
-    return Math.min(config.maxIters(), ceiling);
+    return config.withRequestOptions(
+        appendLanguagePolicy(config.systemPrompt(), language), reasoning, outputReasoning);
   }
 
   private static String normalizedLanguage(String value) {

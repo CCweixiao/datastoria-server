@@ -2,6 +2,8 @@ package io.github.ccweixiao.datastoria.agent.runtime;
 
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.agentscope.extensions.model.anthropic.AnthropicChatModel;
@@ -59,12 +61,17 @@ public final class ConfiguredModelAdapterProvider implements ModelAdapterProvide
     if (!githubCopilot && !openAiCodex && !anthropic && !gemini && !isOpenAiCompatible(provider)) {
       throw new IllegalArgumentException("Unsupported provider type");
     }
+    // Advertised to AgentScope so compaction thresholds can scale with the real window.
+    Integer contextWindow = contextWindowTokens(modelConfig);
     if (openAiCodex) {
       if (identity == null) {
         throw new IllegalStateException("Authenticated identity is required for OAuth provider");
       }
       String accessToken = oauthCredentialService.accessToken("codex", identity);
       var providerModel = new CodexResponsesChatModel(modelConfig.modelKey(), accessToken, mapper);
+      if (contextWindow != null) {
+        providerModel.withContextWindowSize(contextWindow);
+      }
       return ignored -> providerModel;
     }
     String apiKey;
@@ -91,6 +98,9 @@ public final class ConfiguredModelAdapterProvider implements ModelAdapterProvide
       if (baseUrl != null) {
         builder.baseUrl(baseUrl);
       }
+      if (contextWindow != null) {
+        builder.contextWindowSize(contextWindow);
+      }
       var providerModel = builder.build();
       return ignored -> providerModel;
     }
@@ -103,6 +113,9 @@ public final class ConfiguredModelAdapterProvider implements ModelAdapterProvide
       String baseUrl = resolvedBaseUrl(provider);
       if (baseUrl != null) {
         builder.baseUrl(baseUrl);
+      }
+      if (contextWindow != null) {
+        builder.contextWindowSize(contextWindow);
       }
       var providerModel = builder.build();
       return ignored -> providerModel;
@@ -119,8 +132,35 @@ public final class ConfiguredModelAdapterProvider implements ModelAdapterProvide
     if (baseUrl != null) {
       builder.baseUrl(baseUrl);
     }
+    if (contextWindow != null) {
+      builder.contextWindowSize(contextWindow);
+    }
     var providerModel = builder.build();
     return ignored -> providerModel;
+  }
+
+  /**
+   * Reads the model's advertised context window from its capabilities JSON (the settings page
+   * stores {@code contextWindowTokens}; provider discovery uses the same key). Null when absent —
+   * the harness then falls back to the configured default window.
+   */
+  private Integer contextWindowTokens(Model modelConfig) {
+    String json = modelConfig.capabilitiesJson();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      JsonNode node = mapper.readTree(json);
+      int value =
+          node.path("contextWindowTokens")
+              .asInt(
+                  node.path("context_window_tokens")
+                      .asInt(
+                          node.path("contextWindow").asInt(node.path("context_length").asInt(0))));
+      return value > 0 ? value : null;
+    } catch (JsonProcessingException error) {
+      return null;
+    }
   }
 
   private static boolean isAnthropic(String providerKey) {

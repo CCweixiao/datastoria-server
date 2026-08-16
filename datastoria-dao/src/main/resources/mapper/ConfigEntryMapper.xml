@@ -19,6 +19,14 @@
       AND config_key = #{configKey} AND deleted_at IS NULL
   </select>
 
+  <select id="findTenantEntry" resultMap="ConfigMap">
+    SELECT id, tenant_id, scope_type, scope_id, config_key, value_json, schema_version, revision,
+           created_at, updated_at, deleted_at
+    FROM ds_config_entry
+    WHERE tenant_id = #{tenantId} AND scope_type = 'tenant' AND scope_id = #{tenantId}
+      AND config_key = #{configKey} AND deleted_at IS NULL
+  </select>
+
   <update id="casUpdate">
     UPDATE ds_config_entry
     SET value_json = #{valueJson}, revision = revision + 1, updated_at = #{now}

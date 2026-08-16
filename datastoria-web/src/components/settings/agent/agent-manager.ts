@@ -49,11 +49,6 @@ export type AgentConfiguration = {
   outputReasoning?: boolean;
   /** Preferred reasoning level for models that expose configurable reasoning. Defaults to DEFAULT_REASONING_LEVEL. */
   reasoningLevel?: ReasoningLevel;
-  /**
-   * Maximum agent reasoning/tool loop iterations. Undefined follows the server default; the
-   * server clamps any value to its DATASTORIA_AGENT_MAX_ITERS ceiling.
-   */
-  maxIters?: number;
   /** Whether eligible ClickHouse errors should auto-trigger an inline AI explanation. */
   autoExplainClickHouseErrors?: boolean;
   /** ClickHouse error codes that should never auto-trigger inline explanation. */
@@ -65,17 +60,6 @@ export type AgentConfiguration = {
   /** @deprecated use aiResponseLanguage */
   sqlReviewLanguage?: ResponseLanguage;
 };
-
-/** Upper bound the settings UI offers; the server may still clamp tighter. */
-export const AGENT_MAX_ITERS_INPUT_LIMIT = 50;
-
-export function normalizeMaxIters(raw: number | undefined): number | undefined {
-  if (raw === undefined || !Number.isFinite(raw)) {
-    return undefined;
-  }
-  const bounded = Math.min(Math.max(Math.trunc(raw), 1), AGENT_MAX_ITERS_INPUT_LIMIT);
-  return bounded;
-}
 
 export class AgentConfigurationManager {
   private static configuration: AgentConfiguration | null = null;
@@ -125,7 +109,6 @@ export class AgentConfigurationManager {
             ...this.defaults(),
             ...current,
             reasoningLevel: normalizeReasoningLevel(current.reasoningLevel),
-            maxIters: normalizeMaxIters(current.maxIters),
             aiResponseLanguage: normalizeAIResponseLanguage(
               current.aiResponseLanguage ?? current.sqlReviewLanguage ?? current.autoExplainLanguage
             ),
@@ -150,7 +133,6 @@ export class AgentConfigurationManager {
     const normalized = {
       ...rest,
       reasoningLevel: normalizeReasoningLevel(cfg.reasoningLevel),
-      maxIters: normalizeMaxIters(cfg.maxIters),
       aiResponseLanguage: normalizeAIResponseLanguage(cfg.aiResponseLanguage),
     };
     this.configuration = normalized;

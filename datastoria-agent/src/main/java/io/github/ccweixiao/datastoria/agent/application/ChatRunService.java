@@ -1,6 +1,5 @@
 package io.github.ccweixiao.datastoria.agent.application;
 
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.github.ccweixiao.datastoria.agent.runtime.AgentHarnessSettings;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentRunCapabilities;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentRuntimeConfig;
 import io.github.ccweixiao.datastoria.agent.runtime.AgentToolExecutionPolicy;
@@ -24,6 +24,7 @@ import io.github.ccweixiao.datastoria.agent.runtime.ModelAdapterProvider;
 import io.github.ccweixiao.datastoria.agent.runtime.ModelTitleGenerator;
 import io.github.ccweixiao.datastoria.agent.runtime.QuestionResumeRequest;
 import io.github.ccweixiao.datastoria.agent.runtime.RepositoryAgentTools;
+import io.github.ccweixiao.datastoria.agent.runtime.RepositorySource;
 import io.github.ccweixiao.datastoria.agent.runtime.SqlWorkflowAgentTools;
 import io.github.ccweixiao.datastoria.agent.skill.SkillBundle;
 import io.github.ccweixiao.datastoria.agent.skill.SkillCatalog;
@@ -142,7 +143,8 @@ public class ChatRunService {
   private final CheckpointStore checkpointStore;
   private final PendingActionCheckpointCodec pendingCheckpointCodec;
   private final String repositoryRoot;
-  private final int maxIters;
+  private final RepositorySource repositorySource;
+  private final AgentHarnessSettingsService harnessSettings;
   private final java.util.Set<String> ephemeralSessions =
       java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -169,7 +171,9 @@ public class ChatRunService {
       PendingActionCheckpointCodec pendingCheckpointCodec,
       ObjectMapper mapper,
       @Value("${datastoria.agent.repository-root:${user.dir}}") String repositoryRoot,
-      @Value("${datastoria.agent.max-iters:25}") int configuredMaxIters,
+      @Value("${datastoria.agent.repository-remote:https://github.com/ClickHouse/ClickHouse.git}")
+          String repositoryRemote,
+      AgentHarnessSettingsService harnessSettings,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.agentRunService = agentRunService;
     this.runRepository = runRepository;
@@ -193,8 +197,8 @@ public class ChatRunService {
     this.pendingCheckpointCodec = pendingCheckpointCodec;
     this.mapper = mapper;
     this.repositoryRoot = repositoryRoot;
-    // Server-owned guardrail: the ReAct loop bound and the ceiling for request-level overrides.
-    this.maxIters = Math.max(1, Math.min(configuredMaxIters, 100));
+    this.repositorySource = RepositorySource.of(repositoryRoot, repositoryRemote);
+    this.harnessSettings = harnessSettings;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -441,20 +445,21 @@ public class ChatRunService {
   }
 
   private AgentRuntimeConfig resolvePinnedAgentConfig(AgentRun run, String tenantId) {
+    AgentHarnessSettings effective = harnessSettings.effective(tenantId);
     AgentRuntimeConfig base;
     if (BUILTIN_DEFAULT_REVISION.equals(run.agentRevisionId())) {
-      base = AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, maxIters);
+      base = AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, effective);
     } else {
       AgentRevision revision =
           agentRevisionRepository
               .findById(run.agentRevisionId(), tenantId)
               .orElseThrow(() -> new NotFoundException("AgentRevision", run.agentRevisionId()));
-      base = AgentRuntimeConfig.minimal(revision.systemPrompt(), maxIters);
+      base = AgentRuntimeConfig.minimal(revision.systemPrompt(), effective);
     }
     try {
       JsonNode snapshot =
           run.inputSnapshotJson() == null ? null : mapper.readTree(run.inputSnapshotJson());
-      AgentRuntimeConfig configured = AgentContextOptions.apply(base, snapshot, maxIters);
+      AgentRuntimeConfig configured = AgentContextOptions.apply(base, snapshot);
       return applyDatabaseContext(
           configured, snapshot == null ? null : snapshot.path("context"), null);
     } catch (Exception ignored) {
@@ -467,7 +472,7 @@ public class ChatRunService {
     var safe = mapper.createObjectNode();
     if (context != null && context.isObject()) {
       for (String key :
-          java.util.List.of("responseLanguage", "reasoningLevel", "outputReasoning", "maxIters")) {
+          java.util.List.of("responseLanguage", "reasoningLevel", "outputReasoning")) {
         if (context.has(key)) {
           safe.set(key, context.get(key));
         }
@@ -500,15 +505,13 @@ public class ChatRunService {
             mapper,
             toolPolicy,
             rcaTemplateCatalog.findEnabled("high_part_count").orElse(null));
-    Path configuredRoot =
-        repositoryRoot == null || repositoryRoot.isBlank() ? null : Path.of(repositoryRoot);
     return new AgentRunCapabilities(
         skills,
         java.util.List.of(
             clickHouseTools,
             new SqlWorkflowAgentTools(
                 adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
-            new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
+            new RepositoryAgentTools(repositorySource, mapper, toolPolicy),
             new HumanInteractionAgentTools()));
   }
 
@@ -689,7 +692,7 @@ public class ChatRunService {
             context,
             adapter,
             applyDatabaseContext(
-                AgentContextOptions.apply(agent.config(), req.agentContext(), maxIters),
+                AgentContextOptions.apply(agent.config(), req.agentContext()),
                 req.context(),
                 capabilityHints),
             resolvedCapabilities.capabilities(),
@@ -718,8 +721,6 @@ public class ChatRunService {
             mapper,
             toolPolicy,
             rcaTemplateCatalog.findEnabled("high_part_count").orElse(null));
-    Path configuredRoot =
-        repositoryRoot == null || repositoryRoot.isBlank() ? null : Path.of(repositoryRoot);
     return new ResolvedCapabilities(
         new AgentRunCapabilities(
             toRuntimeSkills(selectedSkills),
@@ -727,7 +728,7 @@ public class ChatRunService {
                 clickHouseTools,
                 new SqlWorkflowAgentTools(
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
-                new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
+                new RepositoryAgentTools(repositorySource, mapper, toolPolicy),
                 new HumanInteractionAgentTools())),
         selectedSkills);
   }
@@ -1024,10 +1025,11 @@ public class ChatRunService {
   }
 
   private ResolvedAgent resolveAgent(AgentChatRequest req, String tenant) {
+    AgentHarnessSettings effective = harnessSettings.effective(tenant);
     String agentId = req.agentId();
     if (agentId == null || agentId.isBlank()) {
       return new ResolvedAgent(
-          AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, maxIters), BUILTIN_DEFAULT_REVISION);
+          AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, effective), BUILTIN_DEFAULT_REVISION);
     }
     AgentDefinition def =
         agentDefinitionRepository
@@ -1036,14 +1038,14 @@ public class ChatRunService {
     String revisionId = def.publishedRevisionId();
     if (revisionId == null) {
       return new ResolvedAgent(
-          AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, maxIters), BUILTIN_DEFAULT_REVISION);
+          AgentRuntimeConfig.minimal(DEFAULT_SYSTEM_PROMPT, effective), BUILTIN_DEFAULT_REVISION);
     }
     AgentRevision revision =
         agentRevisionRepository
             .findById(revisionId, tenant)
             .orElseThrow(() -> new NotFoundException("AgentRevision", revisionId));
     return new ResolvedAgent(
-        AgentRuntimeConfig.minimal(revision.systemPrompt(), maxIters), revision.id());
+        AgentRuntimeConfig.minimal(revision.systemPrompt(), effective), revision.id());
   }
 
   private static String normalize(String value) {

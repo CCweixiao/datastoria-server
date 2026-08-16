@@ -159,6 +159,45 @@ class ClickHouseAgentToolsTest {
   }
 
   @Test
+  void executeSqlCapsRowsAndCellValuesForTheModelContext() throws Exception {
+    ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
+    when(service.findById(anyString(), any())).thenReturn(Mono.just(connection(null)));
+    String longValue = "x".repeat(5_000);
+    StringBuilder data = new StringBuilder("[");
+    for (int i = 0; i < 300; i++) {
+      if (i > 0) {
+        data.append(',');
+      }
+      data.append("[\"").append(longValue).append("\",").append(i).append(']');
+    }
+    data.append(']');
+    when(service.queryReadOnly(anyString(), anyString(), any(), any()))
+        .thenReturn(
+            Mono.just(
+                "{\"meta\":[{\"name\":\"payload\",\"type\":\"String\"},{\"name\":\"n\",\"type\":"
+                    + "\"UInt32\"}],\"data\":"
+                    + data
+                    + "}"));
+    ClickHouseAgentTools tools =
+        new ClickHouseAgentTools(service, "connection", new Identity("tenant", "user", Set.of()));
+
+    JsonNode output =
+        new ObjectMapper().readTree(tools.executeSql("SELECT payload, n FROM wide").block());
+
+    // 300 wide rows: bounded by both the row cap and the character budget, never the hard
+    // 256K policy cap (which would surface as a tool error instead of degraded data).
+    assertThat(output.path("rows").size()).isLessThan(300);
+    assertThat(output.path("rowCount").asInt()).isEqualTo(300);
+    assertThat(output.path("truncated").asBoolean()).isTrue();
+    assertThat(output.path("guidance").asText()).contains("capped");
+    assertThat(output.path("rows").path(0).path(0).asText().length()).isLessThanOrEqualTo(2_100);
+    assertThat(output.path("rows").path(0).path(0).asText()).endsWith("…[truncated]");
+    assertThat(output.path("rows").path(0).path(1).asInt()).isEqualTo(0);
+    int serializedRows = output.path("rows").toString().length();
+    assertThat(serializedRows).isLessThan(220_000);
+  }
+
+  @Test
   void executeSqlAllowsConfiguredClusterAllReplicas() {
     ClickHouseConnectionService service = mock(ClickHouseConnectionService.class);
     when(service.findById(anyString(), any())).thenReturn(Mono.just(connection("analytics")));

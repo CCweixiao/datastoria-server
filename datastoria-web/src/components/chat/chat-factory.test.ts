@@ -230,30 +230,6 @@ describe("buildSendMessagesRequestPayload", () => {
     });
     expect(payload).not.toHaveProperty("context");
   });
-
-  it("forwards the configured iteration bound and omits it when unset", () => {
-    const base = {
-      sessionId: "session-1",
-      connectionId: "default@https://example.com",
-      messages: [createMessage({})],
-      trigger: "submit-message",
-      messageId: "message-1",
-      body: {},
-      currentModel: undefined,
-      generateTitle: false,
-      pruneValidateSql: true,
-      chatPersistenceMode: "remote" as const,
-    };
-
-    const withBound = buildSendMessagesRequestPayload({
-      ...base,
-      maxIters: 12,
-    });
-    expect(withBound.agentContext).toMatchObject({ maxIters: 12 });
-
-    const unset = buildSendMessagesRequestPayload({ ...base });
-    expect(unset.agentContext).not.toHaveProperty("maxIters");
-  });
 });
 
 describe("buildAgentContextWithResponseLanguage", () => {

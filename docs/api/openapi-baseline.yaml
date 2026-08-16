@@ -846,7 +846,6 @@ components:
         outputReasoning: { type: boolean }
         reasoningLevel: { type: string }
         responseLanguage: { type: string }
-        maxIters: { type: integer, minimum: 1, description: Reasoning/tool loop bound override; clamped to the DATASTORIA_AGENT_MAX_ITERS ceiling. }
 
     RemoteInitialTurnRequest:
       type: object

@@ -67,6 +67,36 @@ public class MyBatisConfigEntryRepository implements ConfigEntryRepository {
   }
 
   @Override
+  public Optional<ConfigEntry> findTenantEntry(String tenantId, String configKey) {
+    return Optional.ofNullable(mapper.findTenantEntry(tenantId, configKey))
+        .map(ConfigEntryEntity::toDomain);
+  }
+
+  @Override
+  public ConfigEntry upsertTenantEntry(
+      String tenantId, String configKey, String valueJson, Long ifMatch) {
+    ConfigEntryEntity current = mapper.findTenantEntry(tenantId, configKey);
+    if (current != null) {
+      long expected = ifMatch != null ? ifMatch : current.getRevision();
+      int rows = mapper.casUpdate(current.getId(), tenantId, valueJson, expected, Instant.now());
+      if (rows == 0) {
+        throw new RevisionConflictException(
+            "ConfigEntry", current.getId(), expected, current.getRevision());
+      }
+      return findById(current.getId(), tenantId).orElseThrow();
+    }
+    if (ifMatch != null && ifMatch > 0) {
+      // The caller saw a revision that no longer exists (or never did); treat as a conflict
+      // instead of silently creating a fresh entry.
+      throw new RevisionConflictException("ConfigEntry", configKey, ifMatch, 0);
+    }
+    ConfigEntry fresh =
+        new ConfigEntry(
+            null, tenantId, "tenant", tenantId, configKey, valueJson, "1", 0, null, null, null);
+    return save(fresh);
+  }
+
+  @Override
   public Optional<ConfigEntry> findById(String id, String tenantId) {
     return Optional.ofNullable(
             mapper.selectOne(
