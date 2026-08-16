@@ -66,7 +66,9 @@ public class UserAccountService {
     return Mono.fromCallable(
             () -> {
               UserAccount account = requireOrdinaryUser(tenantId, userId);
-              return users.save(
+              // The account already exists — update it. save() inserts and would violate the
+              // primary key.
+              return users.update(
                   new UserAccount(
                       account.userId(),
                       account.tenantId(),

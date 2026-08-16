@@ -2,6 +2,9 @@ package io.github.ccweixiao.datastoria.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -91,6 +94,21 @@ class UserAccountServiceTest {
     service.delete("tenant", user.userId()).block();
 
     verify(users).delete("tenant", user.userId());
+  }
+
+  @Test
+  void resetPasswordUpdatesExistingRowInsteadOfInserting() {
+    UserAccount user = account("user", "USER");
+    when(users.findByTenantIdAndUserId("tenant", user.userId())).thenReturn(Optional.of(user));
+    when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
+    when(users.update(any(UserAccount.class))).thenReturn(user);
+
+    service.resetPassword("tenant", user.userId(), "new-password").block();
+
+    // save() inserts; with an existing user_id that violates the primary key (the 500 seen in
+    // production). Resetting a password must go through update().
+    inOrder(users).verify(users).update(any(UserAccount.class));
+    verify(users, never()).save(any());
   }
 
   private static UserAccount account(String username, String role) {
