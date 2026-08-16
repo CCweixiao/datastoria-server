@@ -58,7 +58,7 @@ DataStoria 支持多种连接方式，取决于你的 ClickHouse 部署情况：
 
 ### 第 1 步：打开 DataStoria
 
-1. 访问 `http://localhost:3000`（或你配置的端口）
+1. 访问 `http://localhost:8080`（或你配置的端口）
 2. 你将看到 DataStoria 的欢迎界面
 
 ![DataStoria 欢迎界面](../../en/manual/01-getting-started/img/welcome.png)
@@ -91,14 +91,13 @@ DataStoria 支持多种连接方式，取决于你的 ClickHouse 部署情况：
 
 > **注意**
 >
-> 如果配置正确但连接仍然失败，原因可能是 **CORS**。ClickHouse 23.11 及之后版本默认启用 CORS。对于更早的版本，需要在 `config.xml` 中手动配置 CORS。配置细节参见 [PR #56483](https://github.com/ClickHouse/ClickHouse/pull/56483)。
->
+> 如果配置正确但连接仍然失败：DataStoria 的所有查询都由后端服务代理执行，浏览器不直接访问 ClickHouse，因此**无需为 ClickHouse 配置 CORS**。请检查后端进程所在主机能否访问该 URL（防火墙、安全组、Docker 网络等），以及账号密码是否有权登录。
 
 ### 第 5 步：保存并连接
 
 点击 **"Save"**（保存）存储该连接，应用将连接到你的 ClickHouse 实例并进入主界面。
 
-> 注意：出于隐私考虑，连接信息保存在你本地，而不是服务端。
+> 注意：连接信息保存在服务端数据库中；密码使用 AES-256 信封加密存储，且任何接口都不会把密码明文返回给浏览器。
 
 
 ## 基本导航

@@ -419,10 +419,6 @@ export class Connection {
 
     const queryParameters = this.buildQueryParameters(params);
 
-    // Can't add this header automatically
-    // Some clusters are deployed after load balancers which may have enable CORS already
-    // queryParameters["add_http_cors_header"] = "1";
-
     // Create abort controller for the caller to use
     const abortController = new AbortController();
 

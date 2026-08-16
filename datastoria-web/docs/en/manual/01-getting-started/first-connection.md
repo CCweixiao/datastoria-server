@@ -58,7 +58,7 @@ If your ClickHouse server is behind a proxy or load balancer:
 
 ### Step 1: Open DataStoria
 
-1. Navigate to `http://localhost:3000` (or your configured port)
+1. Navigate to `http://localhost:8080` (or your configured port)
 2. You'll see the DataStoria welcome screen
 
 ![DataStoria Welcome Screen](./img/welcome.png)
@@ -91,14 +91,13 @@ Fill in the connection form with your ClickHouse details:
 
 > **NOTE**
 >
-> If connection fails despite correct settings, the cause may be **CORS**. ClickHouse 23.11 and later enable CORS by default. For earlier versions, configure CORS manually in `config.xml`. See [PR #56483](https://github.com/ClickHouse/ClickHouse/pull/56483) for configuration details.
->
+> If connection fails despite correct settings: all DataStoria queries are proxied by the backend service — the browser never talks to ClickHouse directly, so **no ClickHouse CORS configuration is needed**. Check that the host running the backend can reach the URL (firewall, security groups, Docker networking) and that the credentials are valid.
 
 ### Step 5: Save and Connect
 
 Click **"Save"** to store the connection and the application will connect to your ClickHouse instance and bring you to the main UI.
 
-> NOTE: Connection information is saved in your local NOT the server side for privacy consideration.
+> NOTE: Connections are stored in the server-side database; passwords are encrypted at rest with AES-256 envelope encryption and never returned to the browser in plaintext.
 
 
 ## Basic Navigation
