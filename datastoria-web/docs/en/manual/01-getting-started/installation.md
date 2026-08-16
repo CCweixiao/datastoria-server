@@ -107,8 +107,14 @@ tighten them, never loosen them. Admin queries are exempt:
 |---|---|---|
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL` | Connection metadata cache TTL (ISO-8601 duration) | `PT5M` |
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE` | Max cached metadata entries | `1000` |
-| `DATASTORIA_AGENT_REPOSITORY_ROOT` | Agent runtime repository root | process working directory |
+| `DATASTORIA_AGENT_REPOSITORY_ROOT` | Source repository behind `search_file`/`read_file` and the code viewer; when missing, the first tool use shallow-clones the remote (10-minute budget; failures surface manual remediation in the agent conversation) | `<install>/data/code-repos/clickhouse` (`/tmp/datastoria-code-repos/clickhouse` in dev) |
+| `DATASTORIA_AGENT_REPOSITORY_REMOTE` | Remote used for the automatic shallow clone | `https://github.com/ClickHouse/ClickHouse.git` |
+| `DATASTORIA_MODEL_ENRICHMENT_ENABLED` | Best-effort model metadata enrichment from public catalogs (OpenRouter / models.dev) when syncing models; network failures are skipped silently, fixed 120s budget | `true` |
 | `DATASTORIA_AGENT_MAX_ITERS` | Upper bound on the agent reasoning/tool loop per message (Settings → AI → Agent may only lower the bound within this ceiling) | `25` |
+| `DATASTORIA_AGENT_DATA_DIR` | AgentScope runtime data directory (tool-result offload etc.) | `~/.datastoria.agent` |
+| `DATASTORIA_AGENT_TOOL_RESULT_EVICTION_CHARS` | Character threshold above which oversized tool results are offloaded with a preview | `32768` |
+| `DATASTORIA_AGENT_COMPACTION_TRIGGER_RATIO` / `_FALLBACK_CONTEXT_TOKENS` | Compaction trigger ratio (model context window × ratio) and the fallback window when the model does not advertise one | `0.8` / `100000` |
+| `DATASTORIA_AGENT_SHUTDOWN_TIMEOUT_SECONDS` | Max seconds to settle in-flight agent runs after SIGTERM (`bin/datastoria stop` waits before force-killing) | `20` |
 
 ### Required in prod
 

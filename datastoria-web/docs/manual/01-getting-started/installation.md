@@ -94,8 +94,14 @@ ClickHouse 连接密码和 AI 供应商 API key 使用 AES-256 信封加密存�
 |---|---|---|
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL` | 连接元数据缓存 TTL（ISO-8601 时长） | `PT5M` |
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE` | 元数据缓存最大条目数 | `1000` |
-| `DATASTORIA_AGENT_REPOSITORY_ROOT` | Agent 运行时仓库根目录 | 进程工作目录 |
+| `DATASTORIA_AGENT_REPOSITORY_ROOT` | 源码探索（`search_file`/`read_file` 与代码查看器）的仓库目录；目录不存在时首次工具调用自动浅克隆远程仓库（10 分钟超时，失败会把手动处理指引反馈到 agent 对话） | `<部署目录>/data/code-repos/clickhouse`（dev 为 `/tmp/datastoria-code-repos/clickhouse`） |
+| `DATASTORIA_AGENT_REPOSITORY_REMOTE` | 自动浅克隆使用的远程仓库 | `https://github.com/ClickHouse/ClickHouse.git` |
+| `DATASTORIA_MODEL_ENRICHMENT_ENABLED` | 同步模型时是否从公共权威目录（OpenRouter / models.dev）补全模型元数据；联网失败自动跳过，固定 120 秒超时 | `true` |
 | `DATASTORIA_AGENT_MAX_ITERS` | Agent 单条消息内"推理-工具调用"循环轮数上限（设置 → AI → 智能体里的配置只能在该上限内调低） | `25` |
+| `DATASTORIA_AGENT_DATA_DIR` | AgentScope 运行数据目录（工具结果落盘等） | `~/.datastoria.agent` |
+| `DATASTORIA_AGENT_TOOL_RESULT_EVICTION_CHARS` | 超大工具结果落盘只留预览的字符阈值 | `32768` |
+| `DATASTORIA_AGENT_COMPACTION_TRIGGER_RATIO` / `_FALLBACK_CONTEXT_TOKENS` | 上下文压缩触发比例（模型窗口 × 比例）与模型未上报窗口时的回退窗口 | `0.8` / `100000` |
+| `DATASTORIA_AGENT_SHUTDOWN_TIMEOUT_SECONDS` | SIGTERM 后在途 agent 运行的最长等待秒数（`bin/datastoria stop` 据此等待后再强杀） | `20` |
 
 ### prod 必填清单
 
