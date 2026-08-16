@@ -74,7 +74,7 @@ encryption:
 
 | Variable | Description | Default |
 |---|---|---|
-| `DATASTORIA_MASTER_KEY` | Master key (base64-encoded 32 bytes). Optional: when unset, a random key is generated into `data/master.key` (0600) on first start — **back that file up**, losing it makes stored credentials unrecoverable | built-in dev key / auto-generated |
+| `DATASTORIA_MASTER_KEY` | Master key (base64-encoded 32 bytes; generate with `openssl rand -base64 32`). Optional: when unset, a random key is generated into `data/master.key` (0600) on first start — **back that file up**, losing it makes stored credentials unrecoverable | built-in dev key / auto-generated |
 | `DATASTORIA_MASTER_KEY_FILE` | Master key file path | `data/master.key` |
 | `DATASTORIA_MASTER_KEY_LEGACY` | Legacy master keys (comma-separated, decrypt-only). After rotating the master key, keep the previous key here so existing ciphertexts stay readable | repository's historical keys |
 

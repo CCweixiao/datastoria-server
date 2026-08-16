@@ -53,7 +53,8 @@ DATASTORIA_DEFAULT_TENANT=tenant-default
 
 凭据加密主密钥（`datastoria.master-key`）按以下顺序解析，无需手工配置即可安全运行：
 
-1. `DATASTORIA_MASTER_KEY` 环境变量（base64 编码的 32 字节，从密钥系统注入）；
+1. `DATASTORIA_MASTER_KEY` 环境变量（base64 编码的 32 字节，从密钥系统注入；
+   也可用 `openssl rand -base64 32` 自行生成）；
 2. 否则首次启动自动生成随机密钥并写入 `data/master.key`（权限 0600）。
 
 无论哪种来源，都必须**稳定备份并限制访问**：密钥丢失后已保存的供应商和连接凭据不可恢复。

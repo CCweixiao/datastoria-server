@@ -62,7 +62,7 @@ ClickHouse 连接密码和 AI 供应商 API key 使用 AES-256 信封加密存�
 
 | 变量 | 说明 | 默认值 |
 |---|---|---|
-| `DATASTORIA_MASTER_KEY` | 主密钥（base64 的 32 字节）。可省略：未设置时首启自动生成随机 key 写入 `data/master.key`（权限 0600），**务必备份该文件**，丢失后已存凭据不可恢复 | dev 内置 key / 自动生成 |
+| `DATASTORIA_MASTER_KEY` | 主密钥（base64 的 32 字节，可用 `openssl rand -base64 32` 生成）。可省略：未设置时首启自动生成随机 key 写入 `data/master.key`（权限 0600），**务必备份该文件**，丢失后已存凭据不可恢复 | dev 内置 key / 自动生成 |
 | `DATASTORIA_MASTER_KEY_FILE` | 主密钥文件路径 | `data/master.key` |
 | `DATASTORIA_MASTER_KEY_LEGACY` | 历史主密钥（逗号分隔，仅解密用）。轮换主密钥后把旧 key 放这里，存量密文仍可读取 | 仓库历史内置 key |
 
