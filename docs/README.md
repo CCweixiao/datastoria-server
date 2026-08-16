@@ -21,6 +21,7 @@ docs/
 ├── product/       产品愿景、能力边界和功能模块
 ├── architecture/  当前系统结构、数据流和部署边界
 ├── development/   本地开发、调试、ClickHouse 联调
+├── testing/       Agent 对话手工测试场景与记录模板
 ├── deployment/    生产部署和统一安装包
 ├── manual/        管理平台操作手册
 ├── operations/    运行维护与故障排查
