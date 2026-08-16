@@ -21,7 +21,9 @@ import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 import io.github.ccweixiao.datastoria.common.dto.DiscoveredModelResponse;
 import io.github.ccweixiao.datastoria.service.ProviderRemoteClient;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = "datastoria.model.enrichment.enabled=false")
 @ActiveProfiles("dev")
 class ProviderDiscoveryApiTest {
 

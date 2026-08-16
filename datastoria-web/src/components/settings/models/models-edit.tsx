@@ -391,12 +391,49 @@ function AdminModelsEdit() {
     setBusy(`discover:${provider.id}`);
     try {
       const discovered = await gateway.discoverModels(provider.id);
-      const existing = new Set(
-        models.filter((model) => model.providerId === provider.id).map((model) => model.modelKey)
+      const existingByKey = new Map(
+        models
+          .filter((model) => model.providerId === provider.id)
+          .map((model) => [model.modelKey, model])
       );
-      const additions = discovered.filter((model) => !existing.has(model.modelKey));
-      await Promise.all(
-        additions.map((model) =>
+      const additions = discovered.filter((model) => !existingByKey.has(model.modelKey));
+      // Fill catalog metadata (context window, output, reasoning/image, free) into existing
+      // models that lack it. Never overwrites values already set on the model.
+      const updates = discovered
+        .map((model) => {
+          const existing = existingByKey.get(model.modelKey);
+          if (!existing) {
+            return null;
+          }
+          const capabilities = modelCapabilities(existing);
+          const hadContext = capabilities.contextWindowTokens ?? undefined;
+          const hadOutput = capabilities.maxOutputTokens ?? undefined;
+          const hadImage = capabilities.supportsImageInput ?? false;
+          const hadReasoning = capabilities.supportsReasoning ?? false;
+          const input: ModelInput = {
+            providerId: existing.providerId,
+            modelKey: existing.modelKey,
+            displayName: existing.displayName,
+            description: existing.description ?? "",
+            enabled: existing.enabled,
+            isFree: existing.isFree || model.isFree,
+            supportsImageInput: hadImage || model.supportsImageInput,
+            supportsReasoning: hadReasoning || model.supportsReasoning,
+            tier: capabilities.tier ?? "balanced",
+            contextWindowTokens: hadContext ?? model.contextWindowTokens ?? undefined,
+            maxOutputTokens: hadOutput ?? model.maxOutputTokens ?? undefined,
+          };
+          const changed =
+            input.isFree !== existing.isFree ||
+            input.supportsImageInput !== hadImage ||
+            input.supportsReasoning !== hadReasoning ||
+            input.contextWindowTokens !== hadContext ||
+            input.maxOutputTokens !== hadOutput;
+          return changed ? { existing, input } : null;
+        })
+        .filter((entry): entry is { existing: ServerModel; input: ModelInput } => entry !== null);
+      await Promise.all([
+        ...additions.map((model) =>
           gateway.createModel({
             ...EMPTY_MODEL,
             providerId: provider.id,
@@ -404,18 +441,24 @@ function AdminModelsEdit() {
             displayName: model.displayName || model.modelKey,
             supportsReasoning: model.supportsReasoning,
             supportsImageInput: model.supportsImageInput,
+            isFree: model.isFree ?? false,
             tier: model.tier,
             contextWindowTokens: model.contextWindowTokens ?? undefined,
             maxOutputTokens: model.maxOutputTokens ?? undefined,
             source: "discovered",
           })
-        )
-      );
+        ),
+        ...updates.map(({ existing, input }) => gateway.updateModel(existing, input)),
+      ]);
       await Promise.all([load(), refreshModelCatalog()]);
       toastManager.show(
-        additions.length
-          ? t("models.syncedCount", { count: additions.length })
-          : t("models.catalogCurrent"),
+        additions.length && updates.length
+          ? t("models.syncedWithUpdates", { added: additions.length, updated: updates.length })
+          : additions.length
+            ? t("models.syncedCount", { count: additions.length })
+            : updates.length
+              ? t("models.updatedCount", { count: updates.length })
+              : t("models.catalogCurrent"),
         "success"
       );
     } catch (error) {

@@ -7,10 +7,11 @@ public record DiscoveredModelResponse(
     String tier,
     Boolean supportsReasoning,
     Boolean supportsImageInput,
+    Boolean isFree,
     Integer contextWindowTokens,
     Integer maxOutputTokens) {
 
   public DiscoveredModelResponse(String modelKey, String displayName, String providerKey) {
-    this(modelKey, displayName, providerKey, "balanced", false, false, null, null);
+    this(modelKey, displayName, providerKey, "balanced", false, false, false, null, null);
   }
 }

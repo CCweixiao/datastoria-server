@@ -60,6 +60,7 @@ export interface DiscoveredModel {
   tier: "flagship" | "balanced" | "fast" | "specialized";
   supportsReasoning: boolean;
   supportsImageInput: boolean;
+  isFree: boolean;
   contextWindowTokens?: number | null;
   maxOutputTokens?: number | null;
 }

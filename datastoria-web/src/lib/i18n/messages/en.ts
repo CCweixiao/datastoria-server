@@ -164,10 +164,28 @@ export const en = {
   "agent.contextPruning": "Context Pruning",
   "agent.contextPruningHelp":
     "Enable surgical pruning of SQL validations from history to save tokens.",
-  "agent.maxIters": "Max Iterations",
-  "agent.maxItersPlaceholder": "Server default",
-  "agent.maxItersHelp":
-    "Upper bound on the agent's reasoning/tool loop per message. Empty follows the server default (DATASTORIA_AGENT_MAX_ITERS); values above the server ceiling are clamped.",
+  "agent.runtimeTitle": "Agent Runtime Settings (administrator)",
+  "agent.runtimeHelp":
+    "Tenant-level overrides for the agent runtime knobs; empty fields follow the config-file defaults (shown as placeholders). Applies to every agent run in this tenant.",
+  "agent.runtimeFollowDefault": "Follow config default",
+  "agent.runtimeMaxIters": "Max Iterations",
+  "agent.runtimeMaxItersHelp":
+    "Upper bound on the agent reasoning/tool loop per message (1–100). Default: DATASTORIA_AGENT_MAX_ITERS (25).",
+  "agent.runtimeEvictionChars": "Tool Result Eviction (chars)",
+  "agent.runtimeEvictionCharsHelp":
+    "Tool results larger than this are offloaded to disk with a preview (min 2048). Default: DATASTORIA_AGENT_TOOL_RESULT_EVICTION_CHARS (32768).",
+  "agent.runtimeTriggerRatio": "Compaction Trigger Ratio",
+  "agent.runtimeTriggerRatioHelp":
+    "Compaction triggers at model context window × this ratio (0.1–0.95). Default: DATASTORIA_AGENT_COMPACTION_TRIGGER_RATIO (0.8).",
+  "agent.runtimeFallbackTokens": "Fallback Context Tokens",
+  "agent.runtimeFallbackTokensHelp":
+    "Context window assumed when a model does not advertise one (min 8192). Default: DATASTORIA_AGENT_COMPACTION_FALLBACK_CONTEXT_TOKENS (100000).",
+  "agent.runtimeSaved": "Agent runtime settings saved.",
+  "agent.runtimeSaveFailed": "Failed to save agent runtime settings.",
+  "agent.runtimeLoadFailed": "Failed to load agent runtime settings.",
+  "agent.runtimeUnavailable":
+    "This backend does not support agent runtime settings yet (possibly an older build); upgrade the server and retry.",
+  "agent.runtimeInvalidNumber": "Enter a valid number or leave the field empty.",
   "agent.outputReasoning": "Output Reasoning",
   "agent.outputReasoningHelp":
     "Request reasoning summaries when the selected model supports reasoning output.",
@@ -270,6 +288,9 @@ export const en = {
   "models.modelRequired": "Enter a model ID and display name",
   "models.modelDeleted": "Model deleted",
   "models.syncedCount": "Synced {count} new model(s)",
+  "models.updatedCount": "Filled catalog metadata for {count} model(s)",
+  "models.syncedWithUpdates":
+    "Synced {added} new model(s) and filled catalog metadata for {updated}",
   "models.catalogCurrent": "Model catalog is up to date",
   "models.discoveryFailed": "Model discovery failed",
   "models.loadFailed": "Failed to load model configuration",

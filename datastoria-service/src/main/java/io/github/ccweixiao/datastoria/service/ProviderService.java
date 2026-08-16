@@ -2,6 +2,8 @@ package io.github.ccweixiao.datastoria.service;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,12 +34,15 @@ import reactor.core.scheduler.Scheduler;
 @Service
 public class ProviderService {
 
+  private static final Logger log = LoggerFactory.getLogger(ProviderService.class);
+
   private final ModelProviderRepository providerRepo;
   private final ModelProviderSecretRepository providerSecrets;
   private final ModelRepository modelRepo;
   private final SecretService secretService;
   private final TransactionTemplate transactions;
   private final ProviderRemoteClient remoteClient;
+  private final ModelCatalogEnricher catalogEnricher;
   private final Scheduler jdbcScheduler;
 
   public ProviderService(
@@ -47,6 +52,7 @@ public class ProviderService {
       SecretService secretService,
       TransactionTemplate transactions,
       ProviderRemoteClient remoteClient,
+      ModelCatalogEnricher catalogEnricher,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.providerRepo = providerRepo;
     this.providerSecrets = providerSecrets;
@@ -54,6 +60,7 @@ public class ProviderService {
     this.secretService = secretService;
     this.transactions = transactions;
     this.remoteClient = remoteClient;
+    this.catalogEnricher = catalogEnricher;
     this.jdbcScheduler = jdbcScheduler;
   }
 
@@ -248,7 +255,32 @@ public class ProviderService {
     }
     String credential = secretService.decrypt(provider.secretId(), identity.tenantId());
     try {
-      return remoteClient.discoverModels(provider, credential);
+      List<DiscoveredModelResponse> discovered = remoteClient.discoverModels(provider, credential);
+      List<DiscoveredModelResponse> enriched =
+          catalogEnricher.enrich(provider.providerKey(), discovered);
+      log.info(
+          "Model sync for provider '{}' returned {} models (catalog metadata applied to {})",
+          provider.providerKey(),
+          discovered.size(),
+          enriched.stream()
+              .filter(m -> m.contextWindowTokens() != null || Boolean.TRUE.equals(m.isFree()))
+              .count());
+      for (DiscoveredModelResponse model : enriched) {
+        log.info(
+            "Model sync '{}': {} ctx={} out={} reasoning={} image={} free={} tier={}",
+            provider.providerKey(),
+            model.modelKey(),
+            model.contextWindowTokens() == null ? "-" : model.contextWindowTokens(),
+            model.maxOutputTokens() == null ? "-" : model.maxOutputTokens(),
+            model.supportsReasoning(),
+            model.supportsImageInput(),
+            model.isFree(),
+            model.tier());
+      }
+      return enriched;
+    } catch (RuntimeException error) {
+      log.warn("Model sync for provider '{}' failed: {}", provider.providerKey(), error.toString());
+      throw error;
     } finally {
       // Strings cannot be zeroed; keep scope minimal and never log or retain the value.
       credential = null;

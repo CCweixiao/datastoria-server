@@ -155,10 +155,27 @@ export const zhCN: Record<MessageKey, string> = {
   "agent.addSelected": "添加所选项",
   "agent.contextPruning": "上下文裁剪",
   "agent.contextPruningHelp": "从历史记录中精准裁剪 SQL 校验内容以节省 Token。",
-  "agent.maxIters": "最大迭代轮数",
-  "agent.maxItersPlaceholder": "跟随服务端默认",
-  "agent.maxItersHelp":
-    "单条消息内智能体“推理-工具调用”循环的轮数上限。留空跟随服务端默认值（DATASTORIA_AGENT_MAX_ITERS）；超出服务端上限的值会被自动收紧。",
+  "agent.runtimeTitle": "智能体运行参数（管理员）",
+  "agent.runtimeHelp":
+    "租户级智能体运行参数覆盖；留空的项跟随配置文件默认值（以占位符显示）。对当前租户的所有智能体会话生效。",
+  "agent.runtimeFollowDefault": "跟随配置默认值",
+  "agent.runtimeMaxIters": "最大迭代轮数",
+  "agent.runtimeMaxItersHelp":
+    "单条消息内“推理-工具调用”循环的轮数上限（1–100）。默认：DATASTORIA_AGENT_MAX_ITERS（25）。",
+  "agent.runtimeEvictionChars": "工具结果卸载阈值（字符）",
+  "agent.runtimeEvictionCharsHelp":
+    "超过该大小的工具结果落盘只留预览（最小 2048）。默认：DATASTORIA_AGENT_TOOL_RESULT_EVICTION_CHARS（32768）。",
+  "agent.runtimeTriggerRatio": "压缩触发比例",
+  "agent.runtimeTriggerRatioHelp":
+    "模型上下文窗口 × 该比例触发压缩（0.1–0.95）。默认：DATASTORIA_AGENT_COMPACTION_TRIGGER_RATIO（0.8）。",
+  "agent.runtimeFallbackTokens": "回退上下文窗口（tokens）",
+  "agent.runtimeFallbackTokensHelp":
+    "模型未上报窗口时使用的回退值（最小 8192）。默认：DATASTORIA_AGENT_COMPACTION_FALLBACK_CONTEXT_TOKENS（100000）。",
+  "agent.runtimeSaved": "智能体运行参数已保存。",
+  "agent.runtimeSaveFailed": "保存智能体运行参数失败。",
+  "agent.runtimeLoadFailed": "加载智能体运行参数失败。",
+  "agent.runtimeUnavailable": "当前后端服务暂不支持智能体运行参数配置（可能为旧版本），请升级后端后重试。",
+  "agent.runtimeInvalidNumber": "请输入有效数字，或留空跟随默认值。",
   "agent.outputReasoning": "输出推理摘要",
   "agent.outputReasoningHelp": "所选模型支持时，请求输出推理摘要。",
   "agent.responseLanguage": "AI 响应语言",
@@ -252,6 +269,8 @@ export const zhCN: Record<MessageKey, string> = {
   "models.modelRequired": "请填写模型 ID 和显示名称",
   "models.modelDeleted": "模型已删除",
   "models.syncedCount": "已同步 {count} 个新模型",
+  "models.updatedCount": "已为 {count} 个模型补全目录元数据",
+  "models.syncedWithUpdates": "已同步 {added} 个新模型，并为 {updated} 个模型补全目录元数据",
   "models.catalogCurrent": "模型目录已是最新",
   "models.discoveryFailed": "发现模型失败",
   "models.loadFailed": "模型配置加载失败",

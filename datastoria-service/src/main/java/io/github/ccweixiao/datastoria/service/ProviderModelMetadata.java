@@ -39,7 +39,7 @@ final class ProviderModelMetadata {
       context = 204_800;
     }
     return new DiscoveredModelResponse(
-        id, displayName(node, id), providerKey, tier, reasoning, image, context, output);
+        id, displayName(node, id), providerKey, tier, reasoning, image, false, context, output);
   }
 
   static String id(JsonNode node) {
