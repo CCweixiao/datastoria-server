@@ -53,4 +53,48 @@ class RepositoryAgentToolsTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("symlink escapes");
   }
+
+  @Test
+  void materializationFailureSurfacesRemediationForTheConversation() throws Exception {
+    RepositorySource failed =
+        RepositorySource.of(
+            root.resolve("never-cloned"),
+            "https://example.test/repo.git",
+            (remote, target) -> {
+              throw new IllegalStateException("connect timed out");
+            });
+    RepositoryAgentTools tools =
+        new RepositoryAgentTools(failed, new ObjectMapper(), AgentToolExecutionPolicy.untracked());
+
+    JsonNode search = new ObjectMapper().readTree(tools.searchFile("anything", null, null).block());
+    assertThat(search.path("error").asText()).contains("connect timed out");
+    assertThat(search.path("remediation").asText()).contains("git clone --depth 1");
+    assertThat(search.path("guidance").asText()).contains("user");
+  }
+
+  @Test
+  void searchSkipsNonSourceSuffixes() throws Exception {
+    Files.createDirectories(root.resolve("src"));
+    Files.writeString(root.resolve("src/needle.bin"), "importantvalue\n");
+    Files.writeString(root.resolve("src/real.ts"), "importantvalue\n");
+    RepositoryAgentTools tools = new RepositoryAgentTools(root);
+
+    JsonNode search =
+        new ObjectMapper().readTree(tools.searchFile("importantvalue", null, null).block());
+    assertThat(search.path("matches").size()).isEqualTo(1);
+    assertThat(search.path("matches").path(0).path("path").asText()).isEqualTo("src/real.ts");
+  }
+
+  @Test
+  void unconfiguredRepositoryReturnsStructuredError() {
+    RepositoryAgentTools tools = new RepositoryAgentTools((Path) null);
+
+    JsonNode search;
+    try {
+      search = new ObjectMapper().readTree(tools.searchFile("query", null, null).block());
+    } catch (java.io.IOException error) {
+      throw new AssertionError(error);
+    }
+    assertThat(search.path("error").asText()).contains("not configured");
+  }
 }

@@ -53,18 +53,31 @@ public class RepositoryBrowseService {
           ".toml",
           ".gradle");
 
-  private final Path root;
+  private final String configuredRoot;
 
+  /**
+   * The root may legitimately not exist yet at startup (the agent tools shallow-clone it on first
+   * use), so resolution is deferred to each request instead of failing bean creation.
+   */
   public RepositoryBrowseService(
       @Value("${datastoria.agent.repository-root:${user.dir}}") String repositoryRoot) {
+    this.configuredRoot = repositoryRoot;
+  }
+
+  private Path root() {
     try {
-      this.root = Path.of(repositoryRoot).toRealPath();
+      Path real = Path.of(configuredRoot).toRealPath();
+      if (!Files.isDirectory(real) || !Files.isReadable(real)) {
+        throw new NotFoundException("Repository", configuredRoot);
+      }
+      return real;
     } catch (IOException e) {
-      throw new IllegalStateException("Configured repository root is unavailable");
+      throw new NotFoundException("Repository", configuredRoot);
     }
   }
 
   public List<String> listFiles() throws IOException {
+    Path root = root();
     try (var files = Files.walk(root)) {
       return files
           .filter(Files::isRegularFile)
@@ -89,7 +102,8 @@ public class RepositoryBrowseService {
 
   public FileView read(String relativePath, Integer requestedStart, Integer requestedEnd)
       throws IOException {
-    Path file = resolve(relativePath);
+    Path root = root();
+    Path file = resolve(root, relativePath);
     if (Files.size(file) > MAX_SOURCE_FILE_BYTES) {
       throw PlainTextException.badRequest(ApiErrorCode.REPOSITORY_FILE_TOO_LARGE);
     }
@@ -156,7 +170,7 @@ public class RepositoryBrowseService {
     return appendedBytes;
   }
 
-  private Path resolve(String relativePath) throws IOException {
+  private Path resolve(Path root, String relativePath) throws IOException {
     if (relativePath == null || relativePath.isBlank() || Path.of(relativePath).isAbsolute()) {
       throw PlainTextException.badRequest(ApiErrorCode.REPOSITORY_PATH_REQUIRED);
     }

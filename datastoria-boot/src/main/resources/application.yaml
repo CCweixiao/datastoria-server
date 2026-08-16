@@ -38,6 +38,12 @@ info:
     description: Spring Boot backend for DataStoria
 
 datastoria:
+  agent:
+    # Source repository behind search_file/read_file and the UI code viewer. When the directory
+    # does not exist, the first tool use shallow-clones repository-remote into it (10-minute
+    # budget); set DATASTORIA_AGENT_REPOSITORY_ROOT to point at an existing checkout instead.
+    repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}/data/code-repos/clickhouse}
+    repository-remote: ${DATASTORIA_AGENT_REPOSITORY_REMOTE:https://github.com/ClickHouse/ClickHouse.git}
   clickhouse:
     metadata-cache:
       ttl: ${DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL:PT5M}

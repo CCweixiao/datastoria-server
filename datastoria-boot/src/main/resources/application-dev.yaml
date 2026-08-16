@@ -10,7 +10,8 @@ datastoria:
   # decrypting. Pre-rotation dev data is covered by master-key-legacy in application.yaml.
   master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
   agent:
-    repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
+    # Dev keeps the lazily cloned source checkout out of the working tree.
+    repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:/tmp/datastoria-code-repos/clickhouse}
   security:
     default-tenant: default
     jwt:
