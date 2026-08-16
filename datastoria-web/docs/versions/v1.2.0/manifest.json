@@ -1,0 +1,390 @@
+{
+  "version": "v1.2.0",
+  "date": "2026-08-16",
+  "sidebar": {
+    "en": [
+      {
+        "text": "Getting Started",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "Introduction",
+            "link": "01-getting-started/introduction"
+          },
+          {
+            "text": "Installation & Setup",
+            "link": "01-getting-started/installation"
+          },
+          {
+            "text": "First Connection",
+            "link": "01-getting-started/first-connection"
+          }
+        ]
+      },
+      {
+        "text": "AI-Powered Intelligence",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "AI Model Configuration",
+            "link": "02-ai-features/ai-model-configuration"
+          },
+          {
+            "text": "Natural Language Data Exploration",
+            "link": "02-ai-features/natural-language-sql"
+          },
+          {
+            "text": "Query Optimization",
+            "link": "02-ai-features/query-optimization"
+          },
+          {
+            "text": "Intelligent Visualization",
+            "link": "02-ai-features/intelligent-visualization"
+          },
+          {
+            "text": "Ask AI for Help",
+            "link": "02-ai-features/ask-ai-for-help"
+          },
+          {
+            "text": "Slash Commands",
+            "link": "02-ai-features/slash-commands"
+          },
+          {
+            "text": "Agent Skills",
+            "link": "02-ai-features/skills"
+          },
+          {
+            "text": "Agent Runtime Settings",
+            "link": "02-ai-features/agent-runtime-settings"
+          },
+          {
+            "text": "Cluster Health Advisor",
+            "link": "02-ai-features/cluster-health-advisor"
+          }
+        ]
+      },
+      {
+        "text": "Query Experience",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "SQL Editor",
+            "link": "03-query-experience/sql-editor"
+          },
+          {
+            "text": "Query Execution",
+            "link": "03-query-experience/query-execution"
+          },
+          {
+            "text": "Query Explain",
+            "link": "03-query-experience/query-explain"
+          },
+          {
+            "text": "Query Log Inspector",
+            "link": "03-query-experience/query-log-inspector"
+          },
+          {
+            "text": "SQL Snippets",
+            "link": "03-query-experience/sql-snippets"
+          },
+          {
+            "text": "Error Diagnostics",
+            "link": "03-query-experience/error-diagnostics"
+          }
+        ]
+      },
+      {
+        "text": "Database Management",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "Schema Explorer",
+            "link": "04-cluster-management/schema-explorer"
+          },
+          {
+            "text": "Database & Table Views",
+            "collapsed": false,
+            "items": [
+              {
+                "text": "Database View",
+                "link": "04-cluster-management/database-view"
+              },
+              {
+                "text": "Table View",
+                "link": "04-cluster-management/table-view"
+              },
+              {
+                "text": "Dependency View",
+                "link": "04-cluster-management/dependency-view"
+              }
+            ]
+          },
+          {
+            "text": "System Log Introspection",
+            "collapsed": false,
+            "items": [
+              {
+                "text": "Overview",
+                "link": "04-cluster-management/system-log-introspection"
+              },
+              {
+                "text": "system.ddl_distribution_queue",
+                "link": "04-cluster-management/system-ddl-distributed-queue"
+              },
+              {
+                "text": "system.opentelemetry_span_log",
+                "link": "04-cluster-management/opentelemetry-span-log"
+              },
+              {
+                "text": "system.part_log",
+                "link": "04-cluster-management/system-part-log"
+              },
+              {
+                "text": "system.query_log",
+                "link": "04-cluster-management/system-query-log"
+              },
+              {
+                "text": "system.query_views_log",
+                "link": "04-cluster-management/system-query-views-log"
+              },
+              {
+                "text": "system.processes",
+                "link": "04-cluster-management/system-processes"
+              },
+              {
+                "text": "system.zookeeper",
+                "link": "04-cluster-management/system-zookeeper"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "Monitoring & Dashboards",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "Node Dashboard",
+            "link": "05-monitoring-dashboards/node-dashboard"
+          },
+          {
+            "text": "Cluster Dashboard",
+            "link": "05-monitoring-dashboards/cluster-dashboard"
+          }
+        ]
+      },
+      {
+        "text": "Security & Privacy",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "Privacy Features",
+            "link": "06-security-privacy/privacy-features"
+          }
+        ]
+      },
+      {
+        "text": "Admin Console",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "Admin Console Manual",
+            "link": "07-admin-console/admin-console"
+          }
+        ]
+      }
+    ],
+    "zh": [
+      {
+        "text": "快速开始",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "产品介绍",
+            "link": "01-getting-started/introduction"
+          },
+          {
+            "text": "安装与配置",
+            "link": "01-getting-started/installation"
+          },
+          {
+            "text": "首次连接",
+            "link": "01-getting-started/first-connection"
+          }
+        ]
+      },
+      {
+        "text": "AI 智能功能",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "AI 模型配置",
+            "link": "02-ai-features/ai-model-configuration"
+          },
+          {
+            "text": "自然语言数据探索",
+            "link": "02-ai-features/natural-language-sql"
+          },
+          {
+            "text": "查询优化",
+            "link": "02-ai-features/query-optimization"
+          },
+          {
+            "text": "智能可视化",
+            "link": "02-ai-features/intelligent-visualization"
+          },
+          {
+            "text": "AI 助手求助",
+            "link": "02-ai-features/ask-ai-for-help"
+          },
+          {
+            "text": "斜杠命令",
+            "link": "02-ai-features/slash-commands"
+          },
+          {
+            "text": "Agent 技能",
+            "link": "02-ai-features/skills"
+          },
+          {
+            "text": "智能体运行参数",
+            "link": "02-ai-features/agent-runtime-settings"
+          },
+          {
+            "text": "集群健康顾问",
+            "link": "02-ai-features/cluster-health-advisor"
+          }
+        ]
+      },
+      {
+        "text": "查询体验",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "SQL 编辑器",
+            "link": "03-query-experience/sql-editor"
+          },
+          {
+            "text": "查询执行",
+            "link": "03-query-experience/query-execution"
+          },
+          {
+            "text": "执行计划分析",
+            "link": "03-query-experience/query-explain"
+          },
+          {
+            "text": "查询日志检查器",
+            "link": "03-query-experience/query-log-inspector"
+          },
+          {
+            "text": "SQL 代码片段",
+            "link": "03-query-experience/sql-snippets"
+          },
+          {
+            "text": "错误诊断",
+            "link": "03-query-experience/error-diagnostics"
+          }
+        ]
+      },
+      {
+        "text": "数据库管理",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "模式浏览器",
+            "link": "04-cluster-management/schema-explorer"
+          },
+          {
+            "text": "数据库与表视图",
+            "collapsed": false,
+            "items": [
+              {
+                "text": "数据库视图",
+                "link": "04-cluster-management/database-view"
+              },
+              {
+                "text": "表视图",
+                "link": "04-cluster-management/table-view"
+              },
+              {
+                "text": "依赖视图",
+                "link": "04-cluster-management/dependency-view"
+              }
+            ]
+          },
+          {
+            "text": "系统日志内省",
+            "collapsed": false,
+            "items": [
+              {
+                "text": "概述",
+                "link": "04-cluster-management/system-log-introspection"
+              },
+              {
+                "text": "system.ddl_distribution_queue",
+                "link": "04-cluster-management/system-ddl-distributed-queue"
+              },
+              {
+                "text": "system.opentelemetry_span_log",
+                "link": "04-cluster-management/opentelemetry-span-log"
+              },
+              {
+                "text": "system.part_log",
+                "link": "04-cluster-management/system-part-log"
+              },
+              {
+                "text": "system.query_log",
+                "link": "04-cluster-management/system-query-log"
+              },
+              {
+                "text": "system.query_views_log",
+                "link": "04-cluster-management/system-query-views-log"
+              },
+              {
+                "text": "system.processes",
+                "link": "04-cluster-management/system-processes"
+              },
+              {
+                "text": "system.zookeeper",
+                "link": "04-cluster-management/system-zookeeper"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "text": "监控与仪表盘",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "节点仪表盘",
+            "link": "05-monitoring-dashboards/node-dashboard"
+          },
+          {
+            "text": "集群仪表盘",
+            "link": "05-monitoring-dashboards/cluster-dashboard"
+          }
+        ]
+      },
+      {
+        "text": "安全与隐私",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "隐私特性",
+            "link": "06-security-privacy/privacy-features"
+          }
+        ]
+      },
+      {
+        "text": "管理控制台",
+        "collapsed": false,
+        "items": [
+          {
+            "text": "管理平台操作手册",
+            "link": "07-admin-console/admin-console"
+          }
+        ]
+      }
+    ]
+  }
+}
