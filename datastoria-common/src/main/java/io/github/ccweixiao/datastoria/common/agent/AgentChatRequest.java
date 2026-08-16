@@ -12,10 +12,12 @@ import com.fasterxml.jackson.databind.JsonNode;
  * extracted from {@code text} parts), {@code modelConfigId} or {@code model.provider} +{@code
  * model.modelId} (server resolves the tenant model config), {@code agentId} (optional; resolves the
  * published agent revision), {@code clientRequestId}/{@code Idempotency-Key} header (idempotency).
- * {@code agentContext} controls response language and reasoning at the server-owned model boundary.
- * Safe diagnostic fields from {@code context} are added to the server-owned system prompt. {@code
- * generateTitle} controls the independent model title call; {@code ephemeral} creates a temporary
- * session FK anchor that is removed when the one-off stream closes.
+ * {@code agentContext} controls response language, reasoning and the iteration-bound override at
+ * the server-owned model boundary ({@code maxIters} may only lower the loop bound within the {@code
+ * datastoria.agent.max-iters} ceiling). Safe diagnostic fields from {@code context} are added to
+ * the server-owned system prompt. {@code generateTitle} controls the independent model title call;
+ * {@code ephemeral} creates a temporary session FK anchor that is removed when the one-off stream
+ * closes.
  *
  * <p><b>Forbidden</b> (rejected before this record is built): {@code model.apiKey}, {@code
  * connection.password}, any top-level {@code apiKey}. Legacy client-side {@code continuation:true}

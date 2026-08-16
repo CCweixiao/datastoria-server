@@ -4,6 +4,12 @@ package io.github.ccweixiao.datastoria.agent.runtime;
 public record AgentRuntimeConfig(
     String systemPrompt, int maxIters, String reasoningEffort, boolean outputReasoning) {
 
+  /**
+   * Fallback ReAct loop bound when no server ceiling is injected. The effective ceiling comes from
+   * {@code datastoria.agent.max-iters} (env {@code DATASTORIA_AGENT_MAX_ITERS}).
+   */
+  public static final int DEFAULT_MAX_ITERS = 25;
+
   public AgentRuntimeConfig(String systemPrompt, int maxIters) {
     this(systemPrompt, maxIters, null, true);
   }
@@ -14,14 +20,23 @@ public record AgentRuntimeConfig(
     }
   }
 
-  /** P4 minimal config: a system prompt and the default loop bound of 3. */
+  /** Minimal config: a system prompt and the default loop bound. */
   public static AgentRuntimeConfig minimal(String systemPrompt) {
-    return new AgentRuntimeConfig(systemPrompt == null ? "" : systemPrompt, 3, null, true);
+    return minimal(systemPrompt, DEFAULT_MAX_ITERS);
+  }
+
+  /** Minimal config with the server-configured loop bound. */
+  public static AgentRuntimeConfig minimal(String systemPrompt, int maxIters) {
+    return new AgentRuntimeConfig(systemPrompt == null ? "" : systemPrompt, maxIters, null, true);
   }
 
   public AgentRuntimeConfig withRequestOptions(
       String requestSystemPrompt, String requestReasoningEffort, boolean requestOutputReasoning) {
     return new AgentRuntimeConfig(
         requestSystemPrompt, maxIters, requestReasoningEffort, requestOutputReasoning);
+  }
+
+  public AgentRuntimeConfig withMaxIters(int bound) {
+    return new AgentRuntimeConfig(systemPrompt, bound, reasoningEffort, outputReasoning);
   }
 }

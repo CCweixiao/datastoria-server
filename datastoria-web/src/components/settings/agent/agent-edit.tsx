@@ -1,5 +1,6 @@
 import {
   AgentConfigurationManager,
+  AGENT_MAX_ITERS_INPUT_LIMIT,
   AI_RESPONSE_LANGUAGE_OPTIONS,
   DEFAULT_AUTO_EXPLAIN_BLACKLIST,
   normalizeAIResponseLanguage,
@@ -23,6 +24,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -209,6 +211,17 @@ export function AgentEdit() {
     AgentConfigurationManager.setConfiguration(newConfig);
   };
 
+  const handleMaxItersChange = (value: string) => {
+    const trimmed = value.trim();
+    const parsed = trimmed === "" ? undefined : Number.parseInt(trimmed, 10);
+    const newConfig = {
+      ...configuration,
+      maxIters: Number.isFinite(parsed) ? parsed : undefined,
+    };
+    setConfiguration(newConfig);
+    AgentConfigurationManager.setConfiguration(newConfig);
+  };
+
   const handleOutputReasoningChange = (checked: boolean) => {
     const newConfig = { ...configuration, outputReasoning: checked };
     setConfiguration(newConfig);
@@ -309,6 +322,28 @@ export function AgentEdit() {
             </TableCell>
             <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
               {t("agent.contextPruningHelp")}
+            </TableCell>
+          </TableRow>
+
+          <TableRow className="h-12 hover:bg-transparent">
+            <TableCell className="px-0 pl-4 py-1 align-middle">
+              <Label>{t("agent.maxIters")}</Label>
+            </TableCell>
+            <TableCell className="px-0 py-1 align-middle">
+              <div className="flex h-10 items-center">
+                <Input
+                  type="number"
+                  min={1}
+                  max={AGENT_MAX_ITERS_INPUT_LIMIT}
+                  value={configuration.maxIters ?? ""}
+                  onChange={(event) => handleMaxItersChange(event.target.value)}
+                  placeholder={t("agent.maxItersPlaceholder")}
+                  className="h-9 w-[120px]"
+                />
+              </div>
+            </TableCell>
+            <TableCell className="px-0 py-1 align-middle text-sm text-muted-foreground">
+              {t("agent.maxItersHelp")}
             </TableCell>
           </TableRow>
 

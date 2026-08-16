@@ -108,6 +108,7 @@ tighten them, never loosen them. Admin queries are exempt:
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL` | Connection metadata cache TTL (ISO-8601 duration) | `PT5M` |
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE` | Max cached metadata entries | `1000` |
 | `DATASTORIA_AGENT_REPOSITORY_ROOT` | Agent runtime repository root | process working directory |
+| `DATASTORIA_AGENT_MAX_ITERS` | Upper bound on the agent reasoning/tool loop per message (Settings → AI → Agent may only lower the bound within this ceiling) | `25` |
 
 ### Required in prod
 

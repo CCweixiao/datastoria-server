@@ -155,6 +155,10 @@ export const zhCN: Record<MessageKey, string> = {
   "agent.addSelected": "添加所选项",
   "agent.contextPruning": "上下文裁剪",
   "agent.contextPruningHelp": "从历史记录中精准裁剪 SQL 校验内容以节省 Token。",
+  "agent.maxIters": "最大迭代轮数",
+  "agent.maxItersPlaceholder": "跟随服务端默认",
+  "agent.maxItersHelp":
+    "单条消息内智能体“推理-工具调用”循环的轮数上限。留空跟随服务端默认值（DATASTORIA_AGENT_MAX_ITERS）；超出服务端上限的值会被自动收紧。",
   "agent.outputReasoning": "输出推理摘要",
   "agent.outputReasoningHelp": "所选模型支持时，请求输出推理摘要。",
   "agent.responseLanguage": "AI 响应语言",

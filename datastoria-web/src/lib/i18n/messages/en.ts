@@ -164,6 +164,10 @@ export const en = {
   "agent.contextPruning": "Context Pruning",
   "agent.contextPruningHelp":
     "Enable surgical pruning of SQL validations from history to save tokens.",
+  "agent.maxIters": "Max Iterations",
+  "agent.maxItersPlaceholder": "Server default",
+  "agent.maxItersHelp":
+    "Upper bound on the agent's reasoning/tool loop per message. Empty follows the server default (DATASTORIA_AGENT_MAX_ITERS); values above the server ceiling are clamped.",
   "agent.outputReasoning": "Output Reasoning",
   "agent.outputReasoningHelp":
     "Request reasoning summaries when the selected model supports reasoning output.",

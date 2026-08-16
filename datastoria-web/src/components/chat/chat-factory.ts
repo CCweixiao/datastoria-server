@@ -71,6 +71,7 @@ type SendMessagesRequestPayloadArgs = {
   pruneValidateSql: boolean;
   outputReasoning?: boolean;
   reasoningLevel?: AgentContext["reasoningLevel"];
+  maxIters?: number;
   agentContext?: Partial<AgentContext>;
   chatPersistenceMode: "local" | "remote";
 };
@@ -138,6 +139,7 @@ export function buildSendMessagesRequestPayload({
   pruneValidateSql,
   outputReasoning = true,
   reasoningLevel,
+  maxIters,
   agentContext,
   chatPersistenceMode,
 }: SendMessagesRequestPayloadArgs): Record<string, unknown> {
@@ -155,6 +157,7 @@ export function buildSendMessagesRequestPayload({
         pruneValidateSql,
         outputReasoning,
         reasoningLevel,
+        ...(maxIters !== undefined ? { maxIters } : {}),
       },
       ...(requestContext ? { context: requestContext } : {}),
       ...(currentModel?.configId ? { modelConfigId: currentModel.configId } : {}),
@@ -171,6 +174,7 @@ export function buildSendMessagesRequestPayload({
       pruneValidateSql,
       outputReasoning,
       reasoningLevel,
+      ...(maxIters !== undefined ? { maxIters } : {}),
     },
     generateTitle,
     ...(requestContext ? { context: requestContext } : {}),
@@ -423,6 +427,7 @@ export class ChatFactory {
         pruneValidateSql: agentConfiguration.pruneValidateSql ?? true,
         outputReasoning: agentConfiguration.outputReasoning ?? true,
         reasoningLevel: agentConfiguration.reasoningLevel,
+        maxIters: agentConfiguration.maxIters,
         agentContext,
         chatPersistenceMode: "remote",
       });

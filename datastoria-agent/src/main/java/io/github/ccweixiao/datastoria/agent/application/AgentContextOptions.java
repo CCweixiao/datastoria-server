@@ -19,19 +19,36 @@ final class AgentContextOptions {
 
   private AgentContextOptions() {}
 
-  static AgentRuntimeConfig apply(AgentRuntimeConfig config, JsonNode context) {
+  /**
+   * Applies whitelisted request hints. {@code maxIters} may only lower the loop bound within the
+   * server-configured ceiling; anything invalid keeps the configured default.
+   */
+  static AgentRuntimeConfig apply(AgentRuntimeConfig config, JsonNode context, int serverMaxIters) {
     if (context == null || !context.isObject()) {
       return config;
     }
     String language = normalizedLanguage(context.path("responseLanguage").asText(null));
     String reasoning = context.path("reasoningLevel").asText(null);
-    if (!REASONING_LEVELS.contains(reasoning)) {
+    // Set.of() rejects null in contains(); a request without reasoningLevel keeps the default.
+    if (reasoning == null || !REASONING_LEVELS.contains(reasoning)) {
       reasoning = null;
     }
     boolean outputReasoning =
         !context.has("outputReasoning") || context.path("outputReasoning").asBoolean(true);
-    return config.withRequestOptions(
-        appendLanguagePolicy(config.systemPrompt(), language), reasoning, outputReasoning);
+    return config
+        .withRequestOptions(
+            appendLanguagePolicy(config.systemPrompt(), language), reasoning, outputReasoning)
+        .withMaxIters(resolvedMaxIters(config, context, serverMaxIters));
+  }
+
+  private static int resolvedMaxIters(
+      AgentRuntimeConfig config, JsonNode context, int serverMaxIters) {
+    int ceiling = Math.max(1, serverMaxIters);
+    JsonNode requested = context.path("maxIters");
+    if (requested.isIntegralNumber() && requested.canConvertToInt() && requested.asInt() >= 1) {
+      return Math.min(requested.asInt(), ceiling);
+    }
+    return Math.min(config.maxIters(), ceiling);
   }
 
   private static String normalizedLanguage(String value) {

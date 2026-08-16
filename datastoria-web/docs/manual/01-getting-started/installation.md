@@ -95,6 +95,7 @@ ClickHouse 连接密码和 AI 供应商 API key 使用 AES-256 信封加密存�
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_TTL` | 连接元数据缓存 TTL（ISO-8601 时长） | `PT5M` |
 | `DATASTORIA_CLICKHOUSE_METADATA_CACHE_MAXIMUM_SIZE` | 元数据缓存最大条目数 | `1000` |
 | `DATASTORIA_AGENT_REPOSITORY_ROOT` | Agent 运行时仓库根目录 | 进程工作目录 |
+| `DATASTORIA_AGENT_MAX_ITERS` | Agent 单条消息内"推理-工具调用"循环轮数上限（设置 → AI → 智能体里的配置只能在该上限内调低） | `25` |
 
 ### prod 必填清单
 
