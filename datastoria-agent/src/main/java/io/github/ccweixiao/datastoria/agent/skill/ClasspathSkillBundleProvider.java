@@ -8,14 +8,16 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
@@ -24,27 +26,18 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
- * Loads the version-controlled {@code classpath:/skills} baseline with strict path, size, UTF-8 and
- * frontmatter validation. Runtime Agents never read these files directly; the provisioner imports
- * the validated bundles into the active profile database.
+ * Loads the version-controlled {@code classpath:/skills} tree with strict path, size, UTF-8 and
+ * frontmatter validation. Bundles are discovered, not enumerated: any directory containing a {@code
+ * SKILL.md} under {@code skills/} becomes a Skill, so adding one is a file-only change.
  */
 @Component
-public class ClasspathSkillBundleLoader {
+public class ClasspathSkillBundleProvider implements SkillBundleProvider {
+
+  private static final Logger log = LoggerFactory.getLogger(ClasspathSkillBundleProvider.class);
 
   static final int MAX_FILE_BYTES = 1024 * 1024;
   static final int MAX_BUNDLE_BYTES = 5 * 1024 * 1024;
 
-  private static final List<String> BUILTIN_IDS =
-      List.of(
-          "clickhouse",
-          "clickhouse-system-queries",
-          "diagnose-clickhouse-clusters",
-          "diagnose-clickhouse-errors",
-          "optimize-clickhouse-sql",
-          "source-code-inspection",
-          "sql-expert",
-          "visualization",
-          "vizlayer");
   private static final Pattern FRONTMATTER =
       Pattern.compile("\\A---[ \\t]*\\R([\\s\\S]*?)\\R---[ \\t]*(?:\\R|\\z)");
   private static final Pattern SAFE_ID = Pattern.compile("[a-z][a-z0-9_-]{0,127}");
@@ -53,8 +46,13 @@ public class ClasspathSkillBundleLoader {
       new PathMatchingResourcePatternResolver();
   private final Yaml yaml = new Yaml(new SafeConstructor(loaderOptions()));
 
-  public List<SkillBundle> loadAll() {
-    return BUILTIN_IDS.stream().map(this::load).toList();
+  @Override
+  public List<SkillBundle> load() {
+    List<SkillBundle> bundles = new ArrayList<>();
+    for (String id : discoverIds()) {
+      bundles.add(load(id));
+    }
+    return List.copyOf(bundles);
   }
 
   SkillBundle load(String id) {
@@ -71,18 +69,61 @@ public class ClasspathSkillBundleLoader {
     Map<String, String> metadata = stringMap(frontmatter.get("metadata"), id);
     String version = metadata.get("version");
     List<String> requiredTools = requiredTools(frontmatter, metadata, id);
-    Map<String, String> resources = new LinkedHashMap<>();
+    Map<String, String> resources = new TreeMap<>();
     files.forEach((path, bytes) -> resources.put(path, decode(bytes, id + "/" + path)));
-    return new SkillBundle(
+    SkillBundle bundle =
+        new SkillBundle(
+            id,
+            name,
+            description,
+            version,
+            skillMarkdown,
+            Map.copyOf(metadata),
+            requiredTools,
+            Map.copyOf(resources),
+            checksum(skillBytes, files));
+    log.info(
+        "Loaded skill bundle '{}' (name: '{}', version: {}, resources: {}, required tools: {})",
         id,
         name,
-        description,
-        version,
-        skillMarkdown,
-        Map.copyOf(metadata),
-        requiredTools,
-        Map.copyOf(resources),
-        checksum(skillBytes, files));
+        version == null ? "-" : version,
+        resources.size(),
+        requiredTools.isEmpty() ? "none" : requiredTools);
+    log.debug("Skill bundle '{}' checksum: {}", id, bundle.checksum());
+    return bundle;
+  }
+
+  /**
+   * Skill ids are the {@code skills/} subdirectories that contain a {@code SKILL.md}, discovered
+   * via the resolver so it also works inside a packaged (nested) jar.
+   */
+  private Set<String> discoverIds() {
+    Set<String> ids = new TreeSet<>();
+    try {
+      for (Resource resource : resolver.getResources("classpath*:skills/*/SKILL.md")) {
+        if (!resource.isReadable()) {
+          continue;
+        }
+        String external = resource.getURL().toExternalForm();
+        int start = external.lastIndexOf("skills/");
+        int end = external.lastIndexOf("/SKILL.md");
+        if (start < 0 || end <= start) {
+          throw new IllegalStateException("Unable to resolve Skill id from: " + external);
+        }
+        String id = external.substring(start + "skills/".length(), end);
+        if (id.contains("/")) {
+          throw new IllegalStateException("Nested Skill directories are not supported: " + id);
+        }
+        ids.add(id);
+      }
+    } catch (IOException error) {
+      throw new IllegalStateException("Unable to discover Skill bundles on the classpath", error);
+    }
+    if (ids.isEmpty()) {
+      throw new IllegalStateException("No Skill bundles found under classpath:skills/");
+    }
+    log.info("Discovered {} skill bundle(s) under classpath:skills/: {}", ids.size(), ids);
+    return ids;
   }
 
   private TreeMap<String, byte[]> discover(String id) {
@@ -110,6 +151,7 @@ public class ClasspathSkillBundleLoader {
           throw new IllegalStateException("Skill bundle exceeds 5 MiB: " + id);
         }
         if (files.put(path, content) != null) {
+          // The same path reachable from two classpath roots is a packaging error, not a merge.
           throw new IllegalStateException("Duplicate Skill resource: " + id + "/" + path);
         }
       }
@@ -152,7 +194,7 @@ public class ClasspathSkillBundleLoader {
     if (!(value instanceof Map<?, ?> raw)) {
       throw new IllegalStateException("Skill metadata must be a mapping: " + id);
     }
-    Map<String, String> result = new LinkedHashMap<>();
+    Map<String, String> result = new TreeMap<>();
     raw.forEach(
         (key, item) -> {
           if (!(key instanceof String textKey)
@@ -214,7 +256,7 @@ public class ClasspathSkillBundleLoader {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       updateDigest(digest, "SKILL.md", skillMarkdown);
       resources.forEach((path, content) -> updateDigest(digest, path, content));
-      return HexFormat.of().formatHex(digest.digest());
+      return java.util.HexFormat.of().formatHex(digest.digest());
     } catch (NoSuchAlgorithmException impossible) {
       throw new IllegalStateException("SHA-256 is unavailable", impossible);
     }

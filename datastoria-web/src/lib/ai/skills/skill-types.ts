@@ -4,7 +4,7 @@ export interface SkillMetadata {
   requiredTools?: string[];
 }
 
-export type SkillSource = "disk" | "database";
+export type SkillSource = "builtin";
 export type SkillStatus = "available" | "disabled" | "invalid";
 export type SkillState = "draft" | "published";
 export type SkillScope = "global" | "self";

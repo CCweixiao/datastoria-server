@@ -3,8 +3,6 @@ import type { SkillCatalogItem } from "./skill-types";
 export type { SkillCatalogItem };
 
 export interface SkillDetailResponse extends SkillCatalogItem {
-  /** Server-authorized edit capability for the current identity. */
-  canEdit: boolean;
   /**
    * Full SKILL.md content (raw markdown, including frontmatter).
    * The frontend toggle decides whether to render it or show raw.

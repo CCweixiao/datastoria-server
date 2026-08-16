@@ -399,38 +399,6 @@ CREATE TABLE ds_clickhouse_connection (
         (tenant_id, owner_user_id, enabled, deleted_at)
 );
 
--- Source: V8__agent_skill.sql
-CREATE TABLE ds_agent_skill (
-    id              VARCHAR(255) NOT NULL,
-    tenant_id       VARCHAR(64) NOT NULL,
-    owner_user_id   VARCHAR(128) NOT NULL,
-    content         LONGTEXT NOT NULL,
-    state           ENUM('draft','published') NOT NULL,
-    scope           ENUM('global','self') NOT NULL,
-    version         VARCHAR(128),
-    revision        BIGINT NOT NULL DEFAULT 0,
-    created_at      DATETIME(6) NOT NULL,
-    updated_at      DATETIME(6) NOT NULL,
-    deleted_at      DATETIME(6),
-    PRIMARY KEY (tenant_id, id),
-    KEY idx_agent_skill_visibility
-        (tenant_id, owner_user_id, state, scope, deleted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Source: V8__agent_skill.sql
-CREATE TABLE ds_agent_skill_resource (
-    tenant_id       VARCHAR(64) NOT NULL,
-    skill_id        VARCHAR(255) NOT NULL,
-    resource_path   VARCHAR(440) NOT NULL,
-    content         LONGTEXT NOT NULL,
-    created_at      DATETIME(6) NOT NULL,
-    updated_at      DATETIME(6) NOT NULL,
-    PRIMARY KEY (tenant_id, skill_id, resource_path),
-    CONSTRAINT fk_agent_skill_resource_skill
-        FOREIGN KEY (tenant_id, skill_id) REFERENCES ds_agent_skill(tenant_id, id)
-        ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Source: V9__user_state.sql
 CREATE TABLE ds_user_state (
     tenant_id       VARCHAR(128) NOT NULL,
@@ -456,71 +424,6 @@ CREATE TABLE ds_rca_template (
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
-
--- Source: V11__builtin_skill_bundle_metadata.sql
-ALTER TABLE ds_agent_skill
-    ADD COLUMN bundle_checksum CHAR(64),
-    ADD COLUMN builtin BOOLEAN NOT NULL DEFAULT FALSE;
-
--- Source: V12__immutable_skill_revision.sql
-ALTER TABLE ds_agent_skill
-    ADD COLUMN published_revision BIGINT,
-    ADD COLUMN draft_revision BIGINT;
-
--- Source: V12__immutable_skill_revision.sql
-CREATE TABLE ds_skill_revision (
-    tenant_id           VARCHAR(64) NOT NULL,
-    skill_id            VARCHAR(255) NOT NULL,
-    revision            BIGINT NOT NULL,
-    version             VARCHAR(128),
-    name                VARCHAR(255) NOT NULL,
-    description         TEXT NOT NULL,
-    summary             TEXT NOT NULL,
-    skill_md            LONGTEXT NOT NULL,
-    metadata_json       JSON NOT NULL,
-    required_tools_json JSON NOT NULL,
-    content_checksum    CHAR(64) NOT NULL,
-    review_status       ENUM('pending','passed','failed','not_required') NOT NULL,
-    created_by          VARCHAR(128) NOT NULL,
-    created_at          DATETIME(6) NOT NULL,
-    PRIMARY KEY (tenant_id, skill_id, revision),
-    CONSTRAINT fk_skill_revision_skill
-        FOREIGN KEY (tenant_id, skill_id) REFERENCES ds_agent_skill(tenant_id, id)
-        ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Source: V12__immutable_skill_revision.sql
-CREATE TABLE ds_skill_resource (
-    tenant_id       VARCHAR(64) NOT NULL,
-    skill_id        VARCHAR(255) NOT NULL,
-    skill_revision  BIGINT NOT NULL,
-    resource_path   VARCHAR(440) NOT NULL,
-    media_type      VARCHAR(255) NOT NULL,
-    content         LONGBLOB NOT NULL,
-    size_bytes      BIGINT NOT NULL,
-    checksum        CHAR(64) NOT NULL,
-    PRIMARY KEY (tenant_id, skill_id, skill_revision, resource_path),
-    CONSTRAINT fk_skill_resource_revision
-        FOREIGN KEY (tenant_id, skill_id, skill_revision)
-        REFERENCES ds_skill_revision(tenant_id, skill_id, revision) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Source: V12__immutable_skill_revision.sql
-CREATE TABLE ds_agent_run_skill (
-    tenant_id        VARCHAR(64) NOT NULL,
-    run_id           VARCHAR(64) NOT NULL,
-    skill_id         VARCHAR(255) NOT NULL,
-    skill_revision   BIGINT NOT NULL,
-    content_checksum CHAR(64) NOT NULL,
-    PRIMARY KEY (tenant_id, run_id, skill_id),
-    KEY idx_agent_run_skill_revision (tenant_id, skill_id, skill_revision),
-    CONSTRAINT fk_agent_run_skill_run
-        FOREIGN KEY (tenant_id, run_id) REFERENCES ds_agent_run(tenant_id, id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_agent_run_skill_revision
-        FOREIGN KEY (tenant_id, skill_id, skill_revision)
-        REFERENCES ds_skill_revision(tenant_id, skill_id, revision)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Source: V13__agent_pending_action.sql
 CREATE TABLE ds_agent_pending_action (

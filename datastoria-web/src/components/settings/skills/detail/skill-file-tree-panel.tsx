@@ -8,21 +8,13 @@ import type { DirNode } from "./skill-detail-tree";
 import { SkillFileTreeNode } from "./skill-file-tree-node";
 
 export const SkillFileTreePanel = memo(function SkillFileTreePanel({
-  allowEditSkill,
   selectedFile,
   dirTree,
-  draftPaths,
-  deletedPaths,
-  onNewFile,
   onSkillMdClick,
   onFileClick,
 }: {
-  allowEditSkill: boolean;
   selectedFile: string | null;
   dirTree: DirNode[];
-  draftPaths: Set<string>;
-  deletedPaths: Set<string>;
-  onNewFile: (folderPath: string) => void;
   onSkillMdClick: () => void;
   onFileClick: (path: string) => void;
 }) {
@@ -56,11 +48,7 @@ export const SkillFileTreePanel = memo(function SkillFileTreePanel({
                 node={node}
                 depth={0}
                 selectedPath={selectedFile}
-                draftPaths={draftPaths}
-                deletedPaths={deletedPaths}
-                allowEditSkill={allowEditSkill}
                 onFileClick={onFileClick}
-                onNewFile={onNewFile}
               />
             ))
           )}

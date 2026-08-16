@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SkillsCard } from "./skills-card";
 import { SkillsDetailView } from "./skills-detail-view";
 
-export function SkillsEdit({ initialSkillId }: { initialSkillId?: string }) {
+export function SkillsBrowse({ initialSkillId }: { initialSkillId?: string }) {
   const { t } = useUiPreferences();
   const [skills, setSkills] = useState<SkillCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);

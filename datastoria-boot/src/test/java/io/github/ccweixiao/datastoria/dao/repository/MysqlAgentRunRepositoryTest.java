@@ -18,10 +18,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 
-import io.github.ccweixiao.datastoria.agent.application.AgentRunCreationService;
 import io.github.ccweixiao.datastoria.boot.TestDbHelper;
 import io.github.ccweixiao.datastoria.common.agent.AgentRun;
-import io.github.ccweixiao.datastoria.common.agent.AgentRunSkillPin;
 import io.github.ccweixiao.datastoria.common.agent.AgentRunStatus;
 import io.github.ccweixiao.datastoria.common.agent.IllegalRunTransitionException;
 import io.github.ccweixiao.datastoria.common.agent.RunFailureCode;
@@ -43,7 +41,6 @@ class MysqlAgentRunRepositoryTest {
   private static final Instant NOW = Instant.parse("2026-07-25T09:00:00Z");
 
   @Autowired AgentRunRepository repo;
-  @Autowired AgentRunCreationService runCreationService;
   @Autowired JdbcClient jdbc;
   @Autowired TestDbHelper dbHelper;
 
@@ -62,22 +59,6 @@ class MysqlAgentRunRepositoryTest {
     assertThat(found.userId()).isEqualTo(USER);
     assertThat(found.revision()).isZero();
     assertThat(found.createdAt()).isNotNull();
-  }
-
-  @Test
-  void runAndSkillPinsAreCreatedAtomically() {
-    AgentRun run = newRunningRun("run_atomic");
-
-    assertThatThrownBy(
-            () ->
-                runCreationService.create(
-                    run,
-                    java.util.List.of(
-                        new AgentRunSkillPin(
-                            TENANT, run.id(), "missing-skill", 0, "0".repeat(64)))))
-        .isInstanceOf(RuntimeException.class);
-
-    assertThat(repo.find(TENANT, run.id())).isEmpty();
   }
 
   @Test

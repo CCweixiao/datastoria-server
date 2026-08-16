@@ -63,7 +63,6 @@ import io.github.ccweixiao.datastoria.common.identity.Identity;
 import io.github.ccweixiao.datastoria.dao.repository.AgentEventRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AgentPendingActionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AgentRunRepository;
-import io.github.ccweixiao.datastoria.dao.repository.AgentRunSkillRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ChatMessageRepository;
 
 import reactor.core.publisher.Flux;
@@ -88,7 +87,6 @@ class AiAgentControllerTest {
   @Autowired ChatRunService chatRunService;
   @Autowired FakeModelAdapterProvider fakeProvider;
   @Autowired AgentRunRepository runRepository;
-  @Autowired AgentRunSkillRepository runSkillRepository;
   @Autowired AgentPendingActionRepository pendingActions;
   @Autowired AgentEventRepository agentEvents;
   @Autowired AgentStateStore stateStore;
@@ -447,73 +445,18 @@ class AiAgentControllerTest {
   }
 
   @Test
-  void runPinsSelectedSkillRevisionAndChecksum() {
-    webTestClient
-        .post()
-        .uri("/api/ai/skills")
-        .header("x-datastoria-user-email", USER)
-        .contentType(MediaType.APPLICATION_JSON)
-        .bodyValue(
-            """
-            {
-              "id": "run-test",
-              "content": "---\\nname: run-test\\ndescription: Run test\\n---\\nUse evidence.",
-              "scope": "self",
-              "state": "published"
-            }
-            """)
-        .exchange()
-        .expectStatus()
-        .isCreated();
-    postStream(streamBody("sess-1", "mdl-1", "hello"), "idem-skill-pins");
-
-    AgentRun run = runRepository.findBySession(TENANT, "sess-1").get(0);
-    var pins = runSkillRepository.findByRun(TENANT, run.id());
-
-    assertThat(pins)
-        .filteredOn(pin -> "run-test".equals(pin.skillId()))
-        .singleElement()
-        .satisfies(
-            pin -> {
-              assertThat(pin.skillRevision()).isZero();
-              assertThat(pin.contentChecksum()).matches("[0-9a-f]{64}");
-            });
-  }
-
-  @Test
-  void mockModelLoadsDatabaseSkillResourceThroughAgentScope() {
-    webTestClient
-        .post()
-        .uri("/api/ai/skills")
-        .header("x-datastoria-user-email", USER)
-        .contentType(MediaType.APPLICATION_JSON)
-        .bodyValue(
-            """
-            {
-              "id": "e2e-skill",
-              "content": "---\\nname: e2e-skill\\ndescription: E2E Skill\\n---\\nDatabase skill body.",
-              "scope": "self",
-              "state": "published",
-              "resources": [
-                {"path":"references/evidence.md","content":"DATABASE_RESOURCE_MARKER"}
-              ]
-            }
-            """)
-        .exchange()
-        .expectStatus()
-        .isCreated();
+  void mockModelLoadsBuiltinSkillResourceThroughAgentScope() {
     SkillLoadingModel model = new SkillLoadingModel();
     fakeProvider.setModel(model);
 
     String sse =
-        postStream(streamBody("sess-1", "mdl-1", "load the e2e skill evidence"), "idem-skill-e2e");
+        postStream(
+            streamBody("sess-1", "mdl-1", "load the clickhouse best practices evidence"),
+            "idem-skill-e2e");
 
     assertThat(sse).contains("skill loaded");
     assertThat(model.skillWasAdvertised()).isTrue();
-    assertThat(model.loadedResource()).contains("DATABASE_RESOURCE_MARKER");
-    AgentRun run = runRepository.findByIdempotencyKey(TENANT, USER, "idem-skill-e2e").orElseThrow();
-    assertThat(runSkillRepository.findByRun(TENANT, run.id()))
-        .anySatisfy(pin -> assertThat(pin.skillId()).isEqualTo("e2e-skill"));
+    assertThat(model.loadedResource()).contains("ClickHouse Best Practices");
   }
 
   @Test
@@ -1218,10 +1161,8 @@ class AiAgentControllerTest {
             ToolUseBlock.builder()
                 .id("load-e2e-resource")
                 .name("load_skill_through_path")
-                .input(
-                    java.util.Map.of("skillId", runtimeSkillId, "path", "references/evidence.md"))
-                .content(
-                    "{\"skillId\":\"" + runtimeSkillId + "\",\"path\":\"references/evidence.md\"}")
+                .input(java.util.Map.of("skillId", runtimeSkillId, "path", "README.md"))
+                .content("{\"skillId\":\"" + runtimeSkillId + "\",\"path\":\"README.md\"}")
                 .state(ToolCallState.FINISHED)
                 .build();
         return Flux.just(
@@ -1286,12 +1227,13 @@ class AiAgentControllerTest {
         }
         for (Object id : ids) {
           String value = String.valueOf(id);
-          if (value.startsWith("e2e-skill")) {
+          // AgentScope qualifies advertised skill ids as "<name>_<source>".
+          if (value.startsWith("clickhouse-best-practices_")) {
             return value;
           }
         }
       }
-      throw new IllegalStateException("E2E Skill was not advertised by AgentScope");
+      throw new IllegalStateException("builtin Skill was not advertised by AgentScope");
     }
   }
 

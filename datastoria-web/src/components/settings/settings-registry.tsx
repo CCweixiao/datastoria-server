@@ -1,7 +1,7 @@
 import { AgentEdit } from "@/components/settings/agent/agent-edit";
 import { ModelsEdit } from "@/components/settings/models/models-edit";
 import { QueryContextEdit } from "@/components/settings/query-context/query-context-edit";
-import { SkillsEdit } from "@/components/settings/skills/skills-edit";
+import { SkillsBrowse } from "@/components/settings/skills/skills-browse";
 import { UiEdit } from "@/components/settings/ui/ui-edit";
 import type { MessageKey } from "@/lib/i18n/messages/en";
 
@@ -37,6 +37,6 @@ export const SETTINGS_REGISTRY: Record<SettingsSection, SettingsPageConfig> = {
   skills: {
     titleKey: "settings.skills.title",
     descriptionKey: "settings.skills.description",
-    component: SkillsEdit,
+    component: SkillsBrowse,
   },
 };

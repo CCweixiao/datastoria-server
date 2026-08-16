@@ -125,8 +125,9 @@ a new session or select the connection explicitly so the AI does not query the w
 
 ## 7. Skills and Agents
 
-**Settings → Skills** lists built-in and custom skills. Administrators can create, edit, inspect
-resources and enable or disable skills; slash commands come from enabled skills.
+**Settings → Skills** is a read-only browser for the built-in skill catalog (each SKILL.md and all
+of its resource files). Skills ship with the release and cannot be edited or added from the UI;
+slash commands come from the skills that are currently available.
 
 Agent management consists of Agent Definitions and immutable Revisions. After editing, create a
 Revision first, then publish; deactivation only blocks new runs and must not break already

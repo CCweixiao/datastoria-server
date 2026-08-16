@@ -36,7 +36,7 @@ tags:
   - name: models
     description: Model catalog and OAuth token proxy
   - name: skills
-    description: Skill catalog, detail, resource and review
+    description: Read-only built-in skill catalog, detail and resource
   - name: rca
     description: RCA templates
   - name: connections
@@ -604,54 +604,21 @@ paths:
     get:
       tags: [skills]
       operationId: listSkills
-      summary: Effective skill catalog (A20)
+      summary: Built-in skill catalog (A20)
       x-datastoria-id: A20
       x-datastoria-status: active
       x-datastoria-target: P5/P9
       parameters:
         - $ref: '#/components/parameters/UserEmail'
-        - name: includeDraft
-          in: query
-          description: Effective only for editors.
-          schema: { type: string, enum: ['true', '1'] }
       responses:
         '200':
-          description: Skill catalog (System-authored excluded).
+          description: Read-only catalog of the classpath skill bundles shipped with the jar.
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/SkillCatalogItem' }
         '500': { $ref: '#/components/responses/JsonError' }
-    post:
-      tags: [skills]
-      operationId: createSkill
-      summary: Create skill bundle (A21)
-      x-datastoria-id: A21
-      x-datastoria-status: active
-      x-datastoria-target: P9
-      x-datastoria-auth: Authenticated + edit permission.
-      parameters:
-        - $ref: '#/components/parameters/UserEmail'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/UpsertSkillBundleInput' }
-      responses:
-        '201':
-          description: Created.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-        '400': { $ref: '#/components/responses/PlainTextError' }
-        '401': { $ref: '#/components/responses/PlainTextError' }
-        '403': { $ref: '#/components/responses/PlainTextError' }
-        '500': { $ref: '#/components/responses/JsonError' }
-
   /api/ai/skills/{id}:
     parameters:
       - $ref: '#/components/parameters/SkillId'
@@ -663,10 +630,6 @@ paths:
       x-datastoria-id: A22
       x-datastoria-status: active
       x-datastoria-target: P5
-      parameters:
-        - name: includeDraft
-          in: query
-          schema: { type: string, enum: ['true', '1'] }
       responses:
         '200':
           description: Skill detail.
@@ -674,52 +637,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SkillDetail' }
         '400': { $ref: '#/components/responses/PlainTextError' }
-        '404': { $ref: '#/components/responses/PlainTextError' }
-    patch:
-      tags: [skills]
-      operationId: updateSkill
-      summary: Save/publish skill or resources (A23)
-      x-datastoria-id: A23
-      x-datastoria-status: active
-      x-datastoria-target: P9
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/UpsertSkillBundleInput' }
-      responses:
-        '200':
-          description: Updated.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-        '400': { $ref: '#/components/responses/PlainTextError' }
-        '401': { $ref: '#/components/responses/PlainTextError' }
-        '403': { $ref: '#/components/responses/PlainTextError' }
-        '500': { $ref: '#/components/responses/JsonError' }
-    delete:
-      tags: [skills]
-      operationId: deleteSkill
-      summary: Delete DB skill (A24)
-      x-datastoria-id: A24
-      x-datastoria-status: active
-      x-datastoria-target: P9
-      responses:
-        '200':
-          description: Deleted.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-        '400':
-          description: Disk-backed skills cannot be deleted.
-        '401': { $ref: '#/components/responses/PlainTextError' }
-        '403': { $ref: '#/components/responses/PlainTextError' }
         '404': { $ref: '#/components/responses/PlainTextError' }
 
   /api/ai/skills/{id}/resource:
@@ -739,9 +656,6 @@ paths:
           required: true
           schema: { type: string }
           description: Canonical relative POSIX path; path traversal rejected.
-        - name: includeDraft
-          in: query
-          schema: { type: string, enum: ['true', '1'] }
       responses:
         '200':
           description: Resource detail.
@@ -750,32 +664,6 @@ paths:
               schema: { $ref: '#/components/schemas/SkillResourceDetail' }
         '400': { $ref: '#/components/responses/PlainTextError' }
         '404': { $ref: '#/components/responses/PlainTextError' }
-
-  /api/ai/skills/actions/review:
-    post:
-      tags: [skills]
-      operationId: reviewSkill
-      summary: LLM review of a skill file (A26)
-      x-datastoria-id: A26
-      x-datastoria-status: active
-      x-datastoria-target: P9
-      x-datastoria-auth: Authenticated + edit permission.
-      parameters:
-        - $ref: '#/components/parameters/UserEmail'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/SkillReviewRequest' }
-      responses:
-        '200':
-          description: Review findings.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/SkillReviewResponse' }
-        '400': { $ref: '#/components/responses/PlainTextError' }
-        '401': { $ref: '#/components/responses/PlainTextError' }
-        '403': { $ref: '#/components/responses/PlainTextError' }
 
   # -------------------------------------------------------------- A27 rca
   /api/ai/rca/templates:
@@ -1082,8 +970,8 @@ components:
         id: { type: string }
         name: { type: string }
         description: { type: string }
-        source: { type: string, enum: [disk, db] }
-        status: { type: string, enum: [draft, published] }
+        source: { type: string, enum: [builtin] }
+        status: { type: string, enum: [available, disabled] }
         state: { type: string }
         scope: { type: string, enum: [global, self] }
         version: { type: [string, 'null'] }
@@ -1108,61 +996,3 @@ components:
       type: object
       additionalProperties: true
 
-    UpsertSkillBundleInput:
-      type: object
-      required: [id, content]
-      properties:
-        id: { type: string }
-        content: { type: string }
-        scope: { type: string, enum: [global, self] }
-        version: { type: [string, 'null'] }
-        resources:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              content: { type: string }
-        deletedResourcePaths: { type: array, items: { type: string } }
-        state: { type: string, enum: [draft, published] }
-        action: { type: string, enum: [publish] }
-
-    SkillReviewRequest:
-      type: object
-      required: [scope, skillId, target]
-      properties:
-        scope: { type: string, enum: [file, bundle] }
-        skillId: { type: string, minLength: 1 }
-        model:
-          type: object
-          properties:
-            provider: { type: string }
-            modelId: { type: string }
-            apiKey: { type: string, description: REJECTED by Java target. }
-        target:
-          type: object
-          required: [primaryPath, files]
-          properties:
-            primaryPath: { type: string }
-            files:
-              type: array
-              minItems: 1
-              items:
-                type: object
-                properties:
-                  path: { type: string }
-                  content: { type: string }
-
-    SkillReviewResponse:
-      type: object
-      required: [findings, proposals]
-      properties:
-        findings: { type: string, minLength: 1 }
-        proposals:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              reason: { type: string }
-              updatedContent: { type: string }

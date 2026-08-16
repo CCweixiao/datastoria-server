@@ -6,13 +6,14 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-class ClasspathSkillBundleLoaderTest {
+class ClasspathSkillBundleProviderTest {
 
-  private final ClasspathSkillBundleLoader loader = new ClasspathSkillBundleLoader();
+  private final ClasspathSkillBundleProvider provider = new ClasspathSkillBundleProvider();
+  private final SkillCatalog catalog = new SkillCatalog(List.of(provider));
 
   @Test
-  void scansAndValidatesAllNineBuiltinBundles() {
-    List<SkillBundle> bundles = loader.loadAll();
+  void discoversAndValidatesAllBuiltinBundles() {
+    List<SkillBundle> bundles = catalog.list();
 
     assertThat(bundles)
         .extracting(SkillBundle::id)
@@ -27,19 +28,12 @@ class ClasspathSkillBundleLoaderTest {
             "visualization",
             "vizlayer");
     assertThat(bundles).allSatisfy(bundle -> assertThat(bundle.checksum()).hasSize(64));
-    assertThat(
-            bundles.stream()
-                .filter(bundle -> bundle.id().equals("source-code-inspection"))
-                .findFirst()
-                .orElseThrow()
-                .requiredTools())
+    assertThat(catalog.find("source-code-inspection").orElseThrow().requiredTools())
         .containsExactly("search_file", "read_file");
-    assertThat(
-            bundles.stream()
-                .filter(bundle -> bundle.id().equals("clickhouse"))
-                .findFirst()
-                .orElseThrow()
-                .resources())
+    assertThat(catalog.find("clickhouse").orElseThrow().resources())
         .containsKey("rules/schema-pk-plan-before-creation.md");
+    assertThat(catalog.findResource("clickhouse", "rules/schema-pk-plan-before-creation.md"))
+        .isPresent();
+    assertThat(catalog.find("does-not-exist")).isEmpty();
   }
 }

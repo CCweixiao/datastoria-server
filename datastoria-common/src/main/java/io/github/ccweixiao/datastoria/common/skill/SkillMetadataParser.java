@@ -11,7 +11,12 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
-/** Safely parses the catalog fields shared by seeded and database-authored Skill markdown. */
+/**
+ * Safely parses the catalog fields shared by seeded and database-authored Skill markdown.
+ *
+ * <p>SnakeYAML {@link Yaml} instances are not thread-safe, and concurrent run preparations parse
+ * several skills at once, so each thread uses its own parser.
+ */
 @Component
 public class SkillMetadataParser {
 
@@ -19,7 +24,8 @@ public class SkillMetadataParser {
   private static final Pattern FRONTMATTER =
       Pattern.compile("\\A---[ \\t]*\\R([\\s\\S]*?)\\R---[ \\t]*(?:\\R|\\z)");
 
-  private final Yaml yaml = new Yaml(new SafeConstructor(loaderOptions()));
+  private final ThreadLocal<Yaml> yaml =
+      ThreadLocal.withInitial(() -> new Yaml(new SafeConstructor(loaderOptions())));
 
   public ParsedSkillMetadata parse(String content, String fallbackName) {
     if (content == null || content.length() > MAX_SKILL_MARKDOWN_CHARS) {
@@ -31,7 +37,7 @@ public class SkillMetadataParser {
     }
     Object parsed;
     try {
-      parsed = yaml.load(frontmatter.group(1));
+      parsed = yaml.get().load(frontmatter.group(1));
     } catch (RuntimeException error) {
       throw new IllegalArgumentException("Skill frontmatter is invalid YAML", error);
     }

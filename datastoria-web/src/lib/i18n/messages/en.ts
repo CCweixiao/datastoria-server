@@ -193,11 +193,8 @@ export const en = {
   "queryContext.toStart": "to get started.",
   "skills.loadFailed": "Failed to load skills",
   "skills.empty": "No skills found.",
-  "skills.fileName": "File name",
   "skills.files": "Files",
   "skills.noAdditionalFiles": "No additional files",
-  "skills.reviewFindings": "Review Findings",
-  "skills.dismissReview": "Dismiss review findings",
   "models.title": "Models and Providers",
   "models.securityHelp":
     "API keys are encrypted by the Java backend. New environments do not create providers or models automatically.",

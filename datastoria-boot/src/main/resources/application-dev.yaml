@@ -11,8 +11,6 @@ datastoria:
   master-key: U8QvzqihXv/MuBOZ4ZFRz7MYpBlUnLQwKiabuH4mG38=
   agent:
     repository-root: ${DATASTORIA_AGENT_REPOSITORY_ROOT:${user.dir}}
-  skills:
-    seed-enabled: true
   security:
     default-tenant: default
     jwt:

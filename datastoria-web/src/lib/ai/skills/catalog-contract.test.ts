@@ -9,10 +9,10 @@ describe("Java and frontend Skill catalog contract", () => {
     const skill = JSON.parse(readFileSync(fixturePath, "utf8")) as SkillDetailResponse;
 
     expect(skill).toMatchObject({
-      source: "database",
+      source: "builtin",
       status: "available",
       state: "published",
-      scope: "self",
+      scope: "global",
       url: "https://example.com/catalog-contract",
       requiredTools: ["execute_sql"],
       resourcePaths: ["references/rules.md"],
@@ -20,5 +20,7 @@ describe("Java and frontend Skill catalog contract", () => {
     expect(skill.name).toBe("catalog-contract");
     expect(skill.description).toBe("Shared catalog contract");
     expect(skill.showInSqlEditorQuickAction).toBe(true);
+    // Read-only catalog: the server no longer authorizes edits, so no canEdit field exists.
+    expect("canEdit" in skill).toBe(false);
   });
 });

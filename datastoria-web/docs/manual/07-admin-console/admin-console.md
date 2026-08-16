@@ -112,8 +112,8 @@ AI 解释错误时，系统会把必要的错误上下文发送给已配置模�
 
 ## 7. Skill 与 Agent
 
-**Settings → Skills** 展示内置和自定义 Skill。管理员可以创建、编辑、查看资源并启停 Skill；
-Slash Command 来自已启用 Skill。
+**Settings → Skills** 以只读方式浏览随服务内置的 Skill 目录（含 SKILL.md 与全部资源文件）。
+Skill 随发行包发布、不接受界面编辑或新增；Slash Command 来自当前可用的 Skill。
 
 Agent 管理由 Agent Definition 和不可变 Revision 组成。修改后先创建 Revision，再发布；停用
 只阻止新运行，不应破坏已经持久化的历史 Run。

@@ -2,21 +2,23 @@ package io.github.ccweixiao.datastoria.agent.skill;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies the Java classpath is the complete, self-contained installation source for AgentScope
- * Skill bundles. The frontend deliberately has no Skill source tree or execution catalog.
+ * Verifies the Java classpath is the complete, self-contained source for AgentScope Skill bundles.
+ * The frontend deliberately has no Skill source tree or execution catalog.
  */
 class SkillCatalogSemanticDiffTest {
 
-  private final ClasspathSkillBundleLoader loader = new ClasspathSkillBundleLoader();
+  private final SkillCatalog catalog =
+      new SkillCatalog(List.of(new ClasspathSkillBundleProvider()));
 
   @Test
   void javaClasspathContainsCompleteBuiltinCatalog() {
-    var bundles = loader.loadAll();
+    var bundles = catalog.list();
 
     assertThat(bundles)
         .extracting(SkillBundle::id)

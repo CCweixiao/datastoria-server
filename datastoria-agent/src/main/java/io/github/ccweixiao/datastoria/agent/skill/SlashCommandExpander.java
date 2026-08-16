@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
-import io.github.ccweixiao.datastoria.common.domain.AgentSkill;
 import io.github.ccweixiao.datastoria.common.skill.SkillMetadataParser;
 import io.github.ccweixiao.datastoria.common.skill.SkillMetadataParser.ParsedSkillMetadata;
 
@@ -26,7 +25,7 @@ public class SlashCommandExpander {
     this.metadataParser = metadataParser;
   }
 
-  public String expand(String text, List<AgentSkill> availableSkills) {
+  public String expand(String text, List<SkillBundle> availableSkills) {
     Matcher match = COMMAND.matcher(text.trim());
     if (!match.matches()) {
       return text;
@@ -47,7 +46,7 @@ public class SlashCommandExpander {
     return "Use the `" + command.name() + "` skill for this request: " + arguments;
   }
 
-  public ParsedSkillMetadata metadata(AgentSkill skill) {
-    return metadataParser.parse(skill.content(), skill.id());
+  public ParsedSkillMetadata metadata(SkillBundle skill) {
+    return metadataParser.parse(skill.skillMarkdown(), skill.id());
   }
 }

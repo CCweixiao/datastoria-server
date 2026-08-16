@@ -2,12 +2,11 @@ package io.github.ccweixiao.datastoria.agent.skill;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.ccweixiao.datastoria.common.domain.AgentSkill;
 import io.github.ccweixiao.datastoria.common.skill.SkillMetadataParser;
 
 class SlashCommandExpanderTest {
@@ -16,7 +15,7 @@ class SlashCommandExpanderTest {
 
   @Test
   void expandsEnabledSkillCommandAndPreservesUnknownCommand() {
-    AgentSkill enabled = skill("bundle-id", "command-name", false);
+    SkillBundle enabled = skill("bundle-id", "command-name", false);
 
     assertThat(expander.expand("/command-name inspect this", List.of(enabled)))
         .isEqualTo("Use the `command-name` skill for this request: inspect this");
@@ -26,14 +25,14 @@ class SlashCommandExpanderTest {
 
   @Test
   void doesNotExpandDisabledSlashCommand() {
-    AgentSkill disabled = skill("hidden", "hidden", true);
+    SkillBundle disabled = skill("hidden", "hidden", true);
 
     assertThat(expander.expand("/hidden inspect this", List.of(disabled)))
         .isEqualTo("/hidden inspect this");
   }
 
-  private static AgentSkill skill(String id, String name, boolean disabled) {
-    String content =
+  private static SkillBundle skill(String id, String name, boolean disabled) {
+    String markdown =
         """
         ---
         name: %s
@@ -44,19 +43,7 @@ class SlashCommandExpanderTest {
         # Test
         """
             .formatted(name, disabled);
-    return new AgentSkill(
-        id,
-        "tenant",
-        "user",
-        content,
-        "published",
-        "tenant",
-        "1",
-        "sum",
-        false,
-        1,
-        Instant.EPOCH,
-        Instant.EPOCH,
-        null);
+    return new SkillBundle(
+        id, name, "test", "1", markdown, Map.of(), List.of(), Map.of(), "checksum");
   }
 }

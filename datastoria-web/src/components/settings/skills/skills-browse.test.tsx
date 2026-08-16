@@ -5,7 +5,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SkillsEdit } from "./skills-edit";
+import { SkillsBrowse } from "./skills-browse";
 
 vi.mock("./skills-card", () => ({
   SkillsCard: ({ skill, onClick }: { skill: { name: string }; onClick: () => void }) => (
@@ -21,7 +21,7 @@ vi.mock("./skills-detail-view", () => ({
   ),
 }));
 
-describe("SkillsEdit", () => {
+describe("SkillsBrowse", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -52,7 +52,7 @@ describe("SkillsEdit", () => {
 
   it("opens the requested skill detail immediately when initialSkillId is provided", async () => {
     await act(async () => {
-      root.render(<SkillsEdit initialSkillId="review" />);
+      root.render(<SkillsBrowse initialSkillId="review" />);
     });
 
     expect(container.querySelector("[data-testid='skill-detail-view']")?.textContent).toBe(
@@ -64,11 +64,10 @@ describe("SkillsEdit", () => {
     const fetchMock = vi.mocked(fetch);
 
     await act(async () => {
-      root.render(<SkillsEdit />);
+      root.render(<SkillsBrowse />);
     });
 
     const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));
     expect(calledUrls.some((url) => url.includes("/api/ai/skills"))).toBe(true);
-    expect(calledUrls.some((url) => url.includes("/api/ai/skills?includeDraft=1"))).toBe(false);
   });
 });

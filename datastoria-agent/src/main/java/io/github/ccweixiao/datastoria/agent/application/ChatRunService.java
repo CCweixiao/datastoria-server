@@ -23,14 +23,14 @@ import io.github.ccweixiao.datastoria.agent.runtime.ModelTitleGenerator;
 import io.github.ccweixiao.datastoria.agent.runtime.QuestionResumeRequest;
 import io.github.ccweixiao.datastoria.agent.runtime.RepositoryAgentTools;
 import io.github.ccweixiao.datastoria.agent.runtime.SqlWorkflowAgentTools;
-import io.github.ccweixiao.datastoria.agent.skill.BuiltinSkillProvisioner;
+import io.github.ccweixiao.datastoria.agent.skill.SkillBundle;
+import io.github.ccweixiao.datastoria.agent.skill.SkillCatalog;
 import io.github.ccweixiao.datastoria.agent.skill.SkillToolAvailability;
 import io.github.ccweixiao.datastoria.agent.skill.SlashCommandExpander;
 import io.github.ccweixiao.datastoria.common.agent.AgentChatRequest;
 import io.github.ccweixiao.datastoria.common.agent.AgentPendingAction;
 import io.github.ccweixiao.datastoria.common.agent.AgentRun;
 import io.github.ccweixiao.datastoria.common.agent.AgentRunEvent;
-import io.github.ccweixiao.datastoria.common.agent.AgentRunSkillPin;
 import io.github.ccweixiao.datastoria.common.agent.AgentRunStatus;
 import io.github.ccweixiao.datastoria.common.agent.CheckpointType;
 import io.github.ccweixiao.datastoria.common.agent.PendingActionCheckpoint;
@@ -55,8 +55,6 @@ import io.github.ccweixiao.datastoria.dao.repository.AgentDefinitionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AgentPendingActionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AgentRevisionRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AgentRunRepository;
-import io.github.ccweixiao.datastoria.dao.repository.AgentRunSkillRepository;
-import io.github.ccweixiao.datastoria.dao.repository.AgentSkillRepository;
 import io.github.ccweixiao.datastoria.dao.repository.AuditLogRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ChatMessageRepository;
 import io.github.ccweixiao.datastoria.dao.repository.ChatSessionRepository;
@@ -115,18 +113,15 @@ public class ChatRunService {
   static final String BUILTIN_DEFAULT_REVISION = "builtin-default";
 
   private final AgentRunService agentRunService;
-  private final AgentRunCreationService runCreationService;
   private final AgentRunRepository runRepository;
-  private final AgentRunSkillRepository runSkillRepository;
   private final AgentPendingActionRepository pendingActionRepository;
   private final ChatSessionRepository sessionRepository;
   private final ChatMessageRepository messageRepository;
   private final ModelRepository modelRepository;
   private final AgentDefinitionRepository agentDefinitionRepository;
   private final AgentRevisionRepository agentRevisionRepository;
-  private final AgentSkillRepository skillRepository;
+  private final SkillCatalog skillCatalog;
   private final AuditLogRepository auditLogRepository;
-  private final BuiltinSkillProvisioner builtinSkillProvisioner;
   private final SkillToolAvailability skillToolAvailability;
   private final SlashCommandExpander slashCommandExpander;
   private final ClickHouseConnectionService clickHouseConnectionService;
@@ -144,18 +139,15 @@ public class ChatRunService {
 
   public ChatRunService(
       AgentRunService agentRunService,
-      AgentRunCreationService runCreationService,
       AgentRunRepository runRepository,
-      AgentRunSkillRepository runSkillRepository,
       AgentPendingActionRepository pendingActionRepository,
       ChatSessionRepository sessionRepository,
       ChatMessageRepository messageRepository,
       ModelRepository modelRepository,
       AgentDefinitionRepository agentDefinitionRepository,
       AgentRevisionRepository agentRevisionRepository,
-      AgentSkillRepository skillRepository,
+      SkillCatalog skillCatalog,
       AuditLogRepository auditLogRepository,
-      BuiltinSkillProvisioner builtinSkillProvisioner,
       SkillToolAvailability skillToolAvailability,
       SlashCommandExpander slashCommandExpander,
       ClickHouseConnectionService clickHouseConnectionService,
@@ -169,18 +161,15 @@ public class ChatRunService {
       @Value("${datastoria.agent.repository-root:${user.dir}}") String repositoryRoot,
       @Qualifier(JdbcSchedulerConfig.JDBC_SCHEDULER) Scheduler jdbcScheduler) {
     this.agentRunService = agentRunService;
-    this.runCreationService = runCreationService;
     this.runRepository = runRepository;
-    this.runSkillRepository = runSkillRepository;
     this.pendingActionRepository = pendingActionRepository;
     this.sessionRepository = sessionRepository;
     this.messageRepository = messageRepository;
     this.modelRepository = modelRepository;
     this.agentDefinitionRepository = agentDefinitionRepository;
     this.agentRevisionRepository = agentRevisionRepository;
-    this.skillRepository = skillRepository;
+    this.skillCatalog = skillCatalog;
     this.auditLogRepository = auditLogRepository;
-    this.builtinSkillProvisioner = builtinSkillProvisioner;
     this.skillToolAvailability = skillToolAvailability;
     this.slashCommandExpander = slashCommandExpander;
     this.clickHouseConnectionService = clickHouseConnectionService;
@@ -451,19 +440,14 @@ public class ChatRunService {
     return safe.toString();
   }
 
+  /**
+   * Rebuilds run capabilities on resume. Skills are immutable per deployment (they ship in the
+   * jar), so re-resolving the catalog yields exactly what the run started with — no revision pins
+   * needed.
+   */
   private AgentRunCapabilities resolvePinnedCapabilities(
       Identity identity, AgentRun run, RunContext context, ModelAdapter adapter) {
-    java.util.List<io.github.ccweixiao.datastoria.common.domain.AgentSkill> selectedSkills =
-        runSkillRepository.findByRun(run.tenantId(), run.id()).stream()
-            .map(
-                pin ->
-                    skillRepository
-                        .findRevision(
-                            run.tenantId(), identity.userId(), pin.skillId(), pin.skillRevision())
-                        .filter(skill -> pin.contentChecksum().equals(skill.bundleChecksum()))
-                        .orElseThrow(
-                            () -> new NotFoundException("AgentSkillRevision", pin.skillId())))
-            .toList();
+    java.util.List<SkillBundle> selectedSkills = availableSkills();
     java.util.List<io.agentscope.core.skill.AgentSkill> skills = toRuntimeSkills(selectedSkills);
     AgentToolExecutionPolicy toolPolicy =
         AgentToolExecutionPolicy.tracked(
@@ -641,7 +625,7 @@ public class ChatRunService {
     ResolvedCapabilities resolvedCapabilities =
         resolveCapabilities(req, identity, runId, context, adapter);
     try {
-      runCreationService.create(run, resolvedCapabilities.skillPins());
+      runRepository.create(run);
     } catch (RuntimeException conflict) {
       // The UNIQUE(tenant,user,idempotency_key) constraint is the atomic arbiter for a concurrent
       // duplicate; lookup-then-create alone would race. Re-resolve and reject the loser.
@@ -673,23 +657,7 @@ public class ChatRunService {
       String runId,
       io.github.ccweixiao.datastoria.common.agent.RunContext context,
       ModelAdapter adapter) {
-    builtinSkillProvisioner.provision(identity.tenantId());
-    java.util.List<io.github.ccweixiao.datastoria.common.domain.AgentSkill> selectedSkills =
-        skillRepository.findVisible(identity.tenantId(), identity.userId(), false).stream()
-            .filter(skill -> skillToolAvailability.isAvailable(skill.content(), skill.id()))
-            .toList();
-    java.util.List<io.agentscope.core.skill.AgentSkill> skills = toRuntimeSkills(selectedSkills);
-    java.util.List<AgentRunSkillPin> pins =
-        selectedSkills.stream()
-            .map(
-                skill ->
-                    new AgentRunSkillPin(
-                        identity.tenantId(),
-                        runId,
-                        skill.id(),
-                        skill.revision(),
-                        skill.bundleChecksum()))
-            .toList();
+    java.util.List<SkillBundle> selectedSkills = availableSkills();
     AgentToolExecutionPolicy toolPolicy =
         AgentToolExecutionPolicy.tracked(
             auditLogRepository, jdbcScheduler, identity, runId, req.connectionId());
@@ -705,39 +673,36 @@ public class ChatRunService {
         repositoryRoot == null || repositoryRoot.isBlank() ? null : Path.of(repositoryRoot);
     return new ResolvedCapabilities(
         new AgentRunCapabilities(
-            skills,
+            toRuntimeSkills(selectedSkills),
             java.util.List.of(
                 clickHouseTools,
                 new SqlWorkflowAgentTools(
                     adapter.modelFor(context), clickHouseTools, mapper, toolPolicy),
                 new RepositoryAgentTools(configuredRoot, mapper, toolPolicy),
                 new HumanInteractionAgentTools())),
-        pins,
         selectedSkills);
   }
 
+  /** Catalog bundles whose required tools this deployment can actually serve. */
+  private java.util.List<SkillBundle> availableSkills() {
+    return skillCatalog.list().stream()
+        .filter(skill -> skillToolAvailability.isAvailable(skill.skillMarkdown(), skill.id()))
+        .toList();
+  }
+
   private java.util.List<io.agentscope.core.skill.AgentSkill> toRuntimeSkills(
-      java.util.List<io.github.ccweixiao.datastoria.common.domain.AgentSkill> selectedSkills) {
+      java.util.List<SkillBundle> selectedSkills) {
     return selectedSkills.stream()
         .map(
             skill -> {
               io.github.ccweixiao.datastoria.common.skill.SkillMetadataParser.ParsedSkillMetadata
                   metadata = slashCommandExpander.metadata(skill);
-              java.util.Map<String, String> resources =
-                  skillRepository
-                      .findResources(skill.tenantId(), skill.id(), skill.revision())
-                      .stream()
-                      .collect(
-                          java.util.stream.Collectors.toMap(
-                              io.github.ccweixiao.datastoria.common.domain.AgentSkillResource::path,
-                              io.github.ccweixiao.datastoria.common.domain.AgentSkillResource
-                                  ::content));
               return io.agentscope.core.skill.AgentSkill.builder()
                   .name(metadata.name())
                   .description(metadata.description())
-                  .skillContent(skill.content())
-                  .resources(resources)
-                  .source("datastoria-database")
+                  .skillContent(skill.skillMarkdown())
+                  .resources(skill.resources())
+                  .source("datastoria-builtin")
                   .build();
             })
         .toList();
@@ -1005,7 +970,5 @@ public class ChatRunService {
   private record TitleRequest(ModelAdapter adapter, RunContext context) {}
 
   private record ResolvedCapabilities(
-      AgentRunCapabilities capabilities,
-      java.util.List<AgentRunSkillPin> skillPins,
-      java.util.List<io.github.ccweixiao.datastoria.common.domain.AgentSkill> selectedSkills) {}
+      AgentRunCapabilities capabilities, java.util.List<SkillBundle> selectedSkills) {}
 }

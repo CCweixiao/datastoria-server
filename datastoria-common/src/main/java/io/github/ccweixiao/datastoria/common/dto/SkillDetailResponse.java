@@ -18,6 +18,5 @@ public record SkillDetailResponse(
     boolean disableSlashCommand,
     boolean showInSqlEditorQuickAction,
     List<String> requiredTools,
-    boolean canEdit,
     String content,
     List<String> resourcePaths) {}

@@ -1,29 +1,19 @@
 "use client";
 
-import type { ModelSelection } from "@/components/chat/input/model-selector-impl";
-import FloatingProgressBar from "@/components/shared/floating-progress-bar";
-import { useTheme } from "@/components/shared/theme-provider";
 import { ThemedSyntaxHighlighter } from "@/components/shared/themed-syntax-highlighter";
-import { Dialog as SharedDialog } from "@/components/shared/use-dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import { useModelConfig } from "@/hooks/use-model-config";
 import type { SkillDetailResponse, SkillResourceResponse } from "@/lib/ai/skills/skill-provider";
-import type { SkillReviewResponse } from "@/lib/ai/skills/skill-review";
 import { backendApiFetch, backendApiHeaders, backendApiUrl } from "@/lib/backend-api";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactDiffViewer from "react-diff-viewer-continued";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { NewReferenceForm, type NewReferenceFormController } from "./detail/new-reference-form";
 import { SkillDetailHeader } from "./detail/skill-detail-header";
 import { buildDirTree } from "./detail/skill-detail-tree";
 import { SkillFileHeader } from "./detail/skill-file-header";
 import { SkillFileTreePanel } from "./detail/skill-file-tree-panel";
 import { SkillMarkdownRenderer } from "./detail/skill-markdown-renderer";
-import { SkillReviewPanel } from "./detail/skill-review-panel";
 
 interface SkillsDetailViewProps {
   skillId: string;
@@ -39,44 +29,11 @@ function buildSkillResourceUrl(skillId: string, resourcePath: string): string {
   return backendApiUrl(`/api/ai/skills/${encodeURIComponent(skillId)}/resource?${searchParams}`);
 }
 
-function normalizeReferencePath(folderPath: string, input: string): string {
-  const trimmed = input.trim().replaceAll("\\", "/").replace(/^\/+/, "");
-  const normalizedFolder = folderPath.replaceAll("\\", "/").replace(/\/+$/, "");
-  if (!trimmed || !normalizedFolder) {
-    return "";
-  }
-  return `${normalizedFolder}/${trimmed}`;
-}
-
-function isSafeReferencePath(input: string): boolean {
-  if (!input || input === "SKILL.md") {
-    return false;
-  }
-  if (!input.startsWith("references/")) {
-    return false;
-  }
-  if (input.includes("../") || input.includes("/../") || input.endsWith("/..")) {
-    return false;
-  }
-  return !input.endsWith("/");
-}
-
-async function readJsonError(response: Response, fallback: string): Promise<string> {
-  try {
-    const data = (await response.json()) as { error?: string };
-    return data.error ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Main detail view
-// ---------------------------------------------------------------------------
-
+/**
+ * Read-only skill viewer. Skills ship inside the server jar, so this page only browses the
+ * SKILL.md and its bundle resources — there is no draft, publish, review or delete flow.
+ */
 export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
-  const { theme } = useTheme();
-  const { availableModels, selectedModel } = useModelConfig();
   const [detail, setDetail] = useState<SkillDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,60 +41,12 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
   // Left panel: null = SKILL.md, string = resource path
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [resourceDetail, setResourceDetail] = useState<SkillResourceResponse | null>(null);
-  const [resourceDrafts, setResourceDrafts] = useState<Record<string, string>>({});
-  const [deletedResourcePaths, setDeletedResourcePaths] = useState<string[]>([]);
   const [resourceLoadingPath, setResourceLoadingPath] = useState<string | null>(null);
   const [resourceError, setResourceError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [isReverting, setIsReverting] = useState(false);
-  const [isReviewing, setIsReviewing] = useState(false);
-  const [isDeleteReferenceConfirmOpen, setIsDeleteReferenceConfirmOpen] = useState(false);
-  const [reviewModel, setReviewModel] = useState<ModelSelection | null>(null);
-  const [reviewResult, setReviewResult] = useState<SkillReviewResponse | null>(null);
-  const allowEditSkill = detail?.canEdit ?? false;
-
   const [renderMode, setRenderMode] = useState<"rendered" | "raw">("rendered");
   const detailRequestIdRef = useRef(0);
   const resourceRequestIdRef = useRef(0);
   const resourceAbortControllerRef = useRef<AbortController | null>(null);
-  const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const newReferenceFormRef = useRef<NewReferenceFormController | null>(null);
-  const isDarkTheme =
-    theme === "dark" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.document.documentElement.classList.contains("dark"));
-
-  useEffect(() => {
-    const isCurrentReviewModelAvailable =
-      reviewModel &&
-      availableModels.some(
-        (model) => model.provider === reviewModel.provider && model.modelId === reviewModel.modelId
-      );
-    if (isCurrentReviewModelAvailable) {
-      return;
-    }
-
-    const preferredModel =
-      selectedModel &&
-      availableModels.find(
-        (model) =>
-          model.provider === selectedModel.provider &&
-          model.modelId === selectedModel.modelId &&
-          !(model.provider === "System" && model.modelId === "Auto")
-      );
-    const fallbackModel =
-      preferredModel ??
-      availableModels.find((model) => !(model.provider === "System" && model.modelId === "Auto"));
-    if (!fallbackModel) {
-      setReviewModel(null);
-      return;
-    }
-
-    setReviewModel({ provider: fallbackModel.provider, modelId: fallbackModel.modelId });
-  }, [availableModels, reviewModel, selectedModel]);
 
   // Load skill detail
   useEffect(() => {
@@ -149,13 +58,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     setDetail(null);
     setSelectedFile(null);
     setResourceDetail(null);
-    setResourceDrafts({});
-    setDeletedResourcePaths([]);
     setResourceError(null);
-    setSaveError(null);
-    setReviewError(null);
-    setReviewResult(null);
     setResourceLoadingPath(null);
+    setRenderMode("rendered");
     resourceAbortControllerRef.current?.abort();
     resourceAbortControllerRef.current = null;
 
@@ -183,36 +88,9 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     };
   }, [skillId]);
 
-  const fetchResource = useCallback(
-    async (resourcePath: string): Promise<SkillResourceResponse> => {
-      const response = await backendApiFetch(buildSkillResourceUrl(skillId, resourcePath), {
-        headers: backendApiHeaders(),
-      });
-      if (!response.ok) {
-        throw new Error(await readJsonError(response, `HTTP ${response.status}`));
-      }
-      return (await response.json()) as SkillResourceResponse;
-    },
-    [skillId]
-  );
-
   // Load a resource file when a tree node is clicked
   const handleFileClick = useCallback(
     (resourcePath: string) => {
-      if (resourceDrafts[resourcePath] !== undefined) {
-        resourceRequestIdRef.current += 1;
-        resourceAbortControllerRef.current?.abort();
-        resourceAbortControllerRef.current = null;
-        setSelectedFile(resourcePath);
-        setResourceDetail(null);
-        setResourceError(null);
-        setReviewError(null);
-        setReviewResult(null);
-        setResourceLoadingPath(null);
-        setRenderMode("raw");
-        return;
-      }
-
       const requestId = ++resourceRequestIdRef.current;
       resourceAbortControllerRef.current?.abort();
       const controller = new AbortController();
@@ -221,8 +99,6 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
       setSelectedFile(resourcePath);
       setResourceDetail(null);
       setResourceError(null);
-      setReviewError(null);
-      setReviewResult(null);
       setResourceLoadingPath(resourcePath);
       setRenderMode("raw");
 
@@ -245,7 +121,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
           setResourceLoadingPath(null);
         });
     },
-    [resourceDrafts, skillId]
+    [skillId]
   );
 
   // Click SKILL.md → go back to main content
@@ -256,343 +132,28 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
     setSelectedFile(null);
     setResourceDetail(null);
     setResourceError(null);
-    setReviewError(null);
-    setReviewResult(null);
     setResourceLoadingPath(null);
     setRenderMode("rendered");
   }, []);
 
-  const reloadDetail = useCallback(async () => {
-    const response = await backendApiFetch(buildSkillDetailUrl(skillId), {
-      headers: backendApiHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await readJsonError(response, `HTTP ${response.status}`));
-    }
-    const data = (await response.json()) as SkillDetailResponse;
-    setDetail(data);
-    return data;
-  }, [skillId]);
-
-  const publishSkill = useCallback(async () => {
-    if (!detail) {
-      return;
-    }
-
-    setIsPublishing(true);
-    setSaveError(null);
-
-    try {
-      const resources = Object.entries(resourceDrafts).map(([path, content]) => ({
-        path,
-        content,
-      }));
-
-      const response = await backendApiFetch(buildSkillDetailUrl(skillId), {
-        method: "PATCH",
-        headers: backendApiHeaders({
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({
-          action: "publish",
-          resources,
-          deletedResourcePaths,
-          ...(detail.source === "database" && detail.scope ? { scope: detail.scope } : {}),
-          ...(detail.version ? { version: detail.version } : {}),
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await readJsonError(response, "Failed to publish skill"));
-      }
-
-      setResourceDrafts({});
-      setDeletedResourcePaths([]);
-      await reloadDetail();
-      if (selectedFile) {
-        const refreshed = await fetchResource(selectedFile);
-        setResourceDetail(refreshed);
-      }
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to publish skill");
-    } finally {
-      setIsPublishing(false);
-    }
-  }, [
-    deletedResourcePaths,
-    detail,
-    fetchResource,
-    reloadDetail,
-    resourceDrafts,
-    selectedFile,
-    skillId,
-  ]);
-
-  const revertDraft = useCallback(async () => {
-    setIsReverting(true);
-    setSaveError(null);
-
-    try {
-      setResourceDrafts({});
-      setDeletedResourcePaths([]);
-      if (!selectedFile) {
-        return;
-      }
-
-      if (!detail?.resourcePaths.includes(selectedFile)) {
-        setSelectedFile(null);
-        setResourceDetail(null);
-        setRenderMode("rendered");
-        return;
-      }
-
-      const nextDetail = await fetchResource(selectedFile);
-      setResourceDetail(nextDetail);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to revert local changes");
-    } finally {
-      setIsReverting(false);
-    }
-  }, [detail, fetchResource, selectedFile]);
-
-  const createReference = useCallback(
-    (folderPath: string, rawReferenceName: string) => {
-      const normalizedPath = normalizeReferencePath(folderPath, rawReferenceName);
-      const existingPaths = new Set(detail ? detail.resourcePaths : []);
-      Object.keys(resourceDrafts).forEach((path) => existingPaths.add(path));
-      deletedResourcePaths.forEach((path) => existingPaths.delete(path));
-
-      if (!isSafeReferencePath(normalizedPath)) {
-        return { ok: false as const, error: "Reference name must stay within references/." };
-      }
-      if (existingPaths.has(normalizedPath)) {
-        return { ok: false as const, error: "A reference with this path already exists." };
-      }
-
-      setResourceDrafts((prev) => ({
-        ...prev,
-        [normalizedPath]: prev[normalizedPath] ?? `# ${normalizedPath.split("/").pop()}\n`,
-      }));
-      setDeletedResourcePaths((prev) => prev.filter((path) => path !== normalizedPath));
-      setSelectedFile(normalizedPath);
-      setResourceError(null);
-      setResourceLoadingPath(null);
-      setSaveError(null);
-      setReviewError(null);
-      setReviewResult(null);
-      setRenderMode("raw");
-      return { ok: true as const };
-    },
-    [deletedResourcePaths, detail, resourceDrafts]
-  );
-
-  const openNewReferenceDialog = useCallback(
-    (folderPath: string) => {
-      SharedDialog.showDialog({
-        title: "New File",
-        description: `Add a new file under ${folderPath}/.`,
-        className: "w-full max-w-[560px] sm:max-w-[560px]",
-        mainContent: <NewReferenceForm controllerRef={newReferenceFormRef} />,
-        dialogButtons: [
-          {
-            text: "Cancel",
-            default: false,
-            variant: "outline",
-            onClick: async () => true,
-          },
-          {
-            text: "Create File",
-            default: true,
-            onClick: async () => {
-              const result = createReference(
-                folderPath,
-                newReferenceFormRef.current?.getFileName() ?? ""
-              );
-              if (!result.ok) {
-                newReferenceFormRef.current?.setError(result.error);
-                return false;
-              }
-              return true;
-            },
-          },
-        ],
-      });
-    },
-    [createReference]
-  );
-
-  const deleteSelectedReference = useCallback(() => {
-    if (!selectedFile || !selectedFile.startsWith("references/")) {
-      return;
-    }
-
-    const isUnsavedNewReference =
-      resourceDrafts[selectedFile] !== undefined && !detail?.resourcePaths.includes(selectedFile);
-
-    setResourceDrafts((prev) => {
-      if (prev[selectedFile] === undefined) {
-        return prev;
-      }
-      const next = { ...prev };
-      delete next[selectedFile];
-      return next;
-    });
-
-    if (!isUnsavedNewReference) {
-      setDeletedResourcePaths((prev) =>
-        prev.includes(selectedFile) ? prev : [...prev, selectedFile]
-      );
-    }
-
-    setSelectedFile(null);
-    setResourceDetail(null);
-    setResourceError(null);
-    setResourceLoadingPath(null);
-    setSaveError(null);
-    setReviewError(null);
-    setReviewResult(null);
-    setRenderMode("rendered");
-  }, [detail?.resourcePaths, resourceDrafts, selectedFile]);
-
   // Derived display state
-  const hasUnsavedReferenceChanges = Object.keys(resourceDrafts).length > 0;
-  const hasDeletedReferenceChanges = deletedResourcePaths.length > 0;
   const displayedResourcePaths = useMemo(
-    () =>
-      detail
-        ? Array.from(new Set([...detail.resourcePaths, ...Object.keys(resourceDrafts)])).sort()
-        : [],
-    [detail, resourceDrafts]
+    () => (detail ? [...detail.resourcePaths].sort() : []),
+    [detail]
   );
-  const draftPaths = useMemo(() => new Set(Object.keys(resourceDrafts)), [resourceDrafts]);
-  const deletedPaths = useMemo(() => new Set(deletedResourcePaths), [deletedResourcePaths]);
-  const selectedDraftResource = selectedFile ? resourceDrafts[selectedFile] : undefined;
   const isMarkdownFile =
     selectedFile === null || selectedFile.endsWith(".md") || selectedFile.endsWith(".MD");
   const isJsonFile = selectedFile?.endsWith(".json") || selectedFile?.endsWith(".JSON");
-  const isReferenceFile = selectedFile?.startsWith("references/") ?? false;
-  const canEditSelectedReference = allowEditSkill && isReferenceFile;
-  const canReviewSelectedReference = canEditSelectedReference && isMarkdownFile;
   const displayedFilename = selectedFile === null ? "SKILL.md" : selectedFile.split("/").pop()!;
   const currentContent =
-    selectedFile === null
-      ? (detail?.content ?? "")
-      : (selectedDraftResource ?? resourceDetail?.content ?? "");
-  const currentSource =
-    selectedFile === null
-      ? (detail?.source ?? null)
-      : selectedDraftResource !== undefined
-        ? "database"
-        : (resourceDetail?.source ?? null);
+    selectedFile === null ? (detail?.content ?? "") : (resourceDetail?.content ?? "");
+  const currentSource = selectedFile === null ? (detail?.source ?? null) : (resourceDetail?.source ?? null);
   const dirTree = useMemo(() => buildDirTree(displayedResourcePaths), [displayedResourcePaths]);
-  const canPublish =
-    !isPublishing &&
-    !isReverting &&
-    !!detail &&
-    (hasUnsavedReferenceChanges || hasDeletedReferenceChanges);
-  const canRevert =
-    !isPublishing && !isReverting && (hasUnsavedReferenceChanges || hasDeletedReferenceChanges);
   const resourceLoading = selectedFile !== null && resourceLoadingPath === selectedFile;
   const showRenderToggle = isMarkdownFile;
-  const showDeleteSelectedReference = allowEditSkill && isReferenceFile;
-  const isUnsavedNewSelectedReference =
-    selectedFile !== null &&
-    selectedDraftResource !== undefined &&
-    !(detail?.resourcePaths.includes(selectedFile) ?? false);
-  const canDeleteSelectedReference =
-    showDeleteSelectedReference &&
-    (isUnsavedNewSelectedReference || resourceDetail?.source === "database");
-  const reviewProposal = reviewResult?.proposals.find((item) => item.path === selectedFile) ?? null;
-  const dismissReview = useCallback(() => {
-    setReviewResult(null);
-    setReviewError(null);
-  }, []);
-
-  const reviewSelectedFile = useCallback(async () => {
-    if (!selectedFile || !reviewModel) {
-      return;
-    }
-
-    setIsReviewing(true);
-    setReviewError(null);
-    setReviewResult(null);
-
-    try {
-      const response = await backendApiFetch(backendApiUrl("/api/ai/skills/actions/review"), {
-        method: "POST",
-        headers: backendApiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          scope: "file",
-          skillId,
-          target: {
-            primaryPath: selectedFile,
-            files: [
-              {
-                path: selectedFile,
-                content: currentContent,
-              },
-            ],
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await readJsonError(response, "Failed to review file"));
-      }
-
-      setReviewResult((await response.json()) as SkillReviewResponse);
-    } catch (err) {
-      setReviewError(err instanceof Error ? err.message : "Failed to review file");
-    } finally {
-      setIsReviewing(false);
-    }
-  }, [currentContent, reviewModel, selectedFile, skillId]);
-
-  const applyReviewProposal = useCallback(() => {
-    if (!selectedFile || !reviewResult) {
-      return;
-    }
-
-    const proposal = reviewResult.proposals.find((item) => item.path === selectedFile);
-    if (!proposal) {
-      return;
-    }
-
-    setResourceDrafts((prev) => ({ ...prev, [selectedFile]: proposal.updatedContent }));
-    setReviewError(null);
-    setReviewResult(null);
-    setRenderMode("raw");
-  }, [reviewResult, selectedFile]);
-
-  useEffect(() => {
-    if (!canEditSelectedReference || renderMode !== "raw" || resourceLoading || resourceError) {
-      return;
-    }
-
-    const textarea = editorTextareaRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      textarea.focus();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, [
-    canEditSelectedReference,
-    currentContent,
-    renderMode,
-    resourceError,
-    resourceLoading,
-    selectedFile,
-  ]);
 
   return (
     <div className="h-full flex flex-col relative">
-      <FloatingProgressBar show={loading || resourceLoading || isPublishing || isReverting} />
-
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-2 border-b flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={onBack} className="h-7 w-7">
@@ -601,16 +162,7 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
         {loading ? (
           <Skeleton className="h-4 w-32" />
         ) : detail ? (
-          <SkillDetailHeader
-            detail={detail}
-            allowEditSkill={allowEditSkill}
-            canPublish={canPublish}
-            canRevert={canRevert}
-            isPublishing={isPublishing}
-            isReverting={isReverting}
-            onRevert={revertDraft}
-            onPublish={publishSkill}
-          />
+          <SkillDetailHeader detail={detail} />
         ) : null}
       </div>
 
@@ -633,27 +185,12 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
               displayedFilename={displayedFilename}
               currentSource={currentSource}
               renderMode={renderMode}
-              canEditSelectedReference={canEditSelectedReference}
-              showDeleteSelectedReference={showDeleteSelectedReference}
-              canDeleteSelectedReference={canDeleteSelectedReference}
-              showReviewAction={canReviewSelectedReference}
-              reviewModel={reviewModel}
-              isReviewing={isReviewing}
               showRenderToggle={showRenderToggle}
-              isDeleteReferenceConfirmOpen={isDeleteReferenceConfirmOpen}
               onRenderModeChange={setRenderMode}
-              onReviewModelChange={setReviewModel}
-              onReview={reviewSelectedFile}
-              onDeleteReference={deleteSelectedReference}
-              onDeleteReferenceConfirmOpenChange={setIsDeleteReferenceConfirmOpen}
             />
 
-            {canEditSelectedReference ? (
-              <div className="flex flex-1 min-h-0 flex-col">
-                {saveError ? <p className="mb-3 text-sm text-destructive">{saveError}</p> : null}
-                {reviewError ? (
-                  <p className="mb-3 text-sm text-destructive">{reviewError}</p>
-                ) : null}
+            <ScrollArea className="flex-1">
+              <div className="px-4 py-3">
                 {resourceLoading ? (
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-full" />
@@ -662,179 +199,40 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
                   </div>
                 ) : resourceError ? (
                   <p className="text-sm text-destructive">{resourceError}</p>
-                ) : reviewProposal ? (
-                  <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="flex h-10 flex-shrink-0 items-center justify-between border-b px-4">
-                      <p className="text-xs font-medium text-muted-foreground">Review Diff</p>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={dismissReview}
-                        >
-                          Reject
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={applyReviewProposal}
-                        >
-                          Accept
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="min-h-0 flex-1 overflow-auto">
-                      <ReactDiffViewer
-                        oldValue={currentContent}
-                        newValue={reviewProposal.updatedContent}
-                        splitView={true}
-                        useDarkTheme={isDarkTheme}
-                        hideLineNumbers={false}
-                        disableWordDiff={false}
-                        leftTitle={"Current"}
-                        rightTitle={"Review Proposal"}
-                        hideSummary={true}
-                        styles={{
-                          variables: {
-                            dark: {
-                              diffViewerBackground: "var(--background)",
-                              diffViewerTitleBackground: "var(--background)",
-                              diffViewerTitleColor: "var(--foreground)",
-                              diffViewerColor: "var(--foreground)",
-                              diffViewerTitleBorderColor: "var(--border)",
-                              addedBackground: "rgba(34, 197, 94, 0.16)",
-                              removedBackground: "rgba(248, 113, 113, 0.16)",
-                              wordAddedBackground: "rgba(34, 197, 94, 0.28)",
-                              wordRemovedBackground: "rgba(248, 113, 113, 0.28)",
-                              addedColor: "var(--foreground)",
-                              removedColor: "var(--foreground)",
-                            },
-                            light: {
-                              diffViewerBackground: "var(--background)",
-                              diffViewerTitleBackground: "var(--background)",
-                              diffViewerTitleColor: "var(--foreground)",
-                              diffViewerColor: "var(--foreground)",
-                              diffViewerTitleBorderColor: "var(--border)",
-                              addedBackground: "rgba(34, 197, 94, 0.08)",
-                              removedBackground: "rgba(248, 113, 113, 0.08)",
-                              wordAddedBackground: "rgba(34, 197, 94, 0.16)",
-                              wordRemovedBackground: "rgba(248, 113, 113, 0.16)",
-                              addedColor: "var(--foreground)",
-                              removedColor: "var(--foreground)",
-                            },
-                          },
-                          diffContainer: {
-                            overflowX: "auto",
-                            border: "0",
-                          },
-                          marker: {
-                            minWidth: "2.5rem",
-                            color: "var(--muted-foreground)",
-                          },
-                          lineNumber: {
-                            color: "var(--muted-foreground)",
-                          },
-                          gutter: {
-                            background: "var(--muted)",
-                            borderColor: "var(--border)",
-                          },
-                          highlightedGutter: {
-                            background: "var(--muted)",
-                          },
-                          codeFoldGutter: {
-                            background: "var(--muted)",
-                          },
-                          content: {
-                            width: "50%",
-                          },
-                          contentText: {
-                            fontSize: "12px",
-                            lineHeight: 1.5,
-                            color: "var(--foreground)",
-                            fontFamily:
-                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-                ) : renderMode === "raw" ? (
-                  <Textarea
-                    ref={editorTextareaRef}
-                    value={currentContent}
-                    onChange={(event) => {
-                      const nextValue = event.target.value;
-                      setResourceDrafts((prev) => ({ ...prev, [selectedFile!]: nextValue }));
-                      setSaveError(null);
-                      setReviewError(null);
-                      setReviewResult(null);
+                ) : isJsonFile ? (
+                  <ThemedSyntaxHighlighter
+                    language="json"
+                    customStyle={{
+                      margin: 0,
+                      padding: 0,
+                      fontSize: "0.75rem",
+                      background: "transparent",
                     }}
-                    className="h-full min-h-0 flex-1 border-0 resize-none font-mono text-xs leading-relaxed focus-visible:border-input focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
+                    showLineNumbers={false}
+                  >
+                    {currentContent}
+                  </ThemedSyntaxHighlighter>
+                ) : isMarkdownFile && renderMode === "rendered" ? (
+                  <SkillMarkdownRenderer raw={currentContent} />
                 ) : (
-                  <ScrollArea className="flex-1">
-                    <div className="px-4 py-3">
-                      <SkillMarkdownRenderer raw={currentContent} />
-                    </div>
-                  </ScrollArea>
+                  <pre className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed">
+                    {currentContent}
+                  </pre>
                 )}
               </div>
-            ) : (
-              <ScrollArea className="flex-1">
-                <div className="px-4 py-3">
-                  {saveError ? <p className="mb-3 text-sm text-destructive">{saveError}</p> : null}
-                  {resourceLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-3 w-full" />
-                      <Skeleton className="h-3 w-5/6" />
-                      <Skeleton className="h-3 w-4/6" />
-                    </div>
-                  ) : resourceError ? (
-                    <p className="text-sm text-destructive">{resourceError}</p>
-                  ) : isJsonFile ? (
-                    <ThemedSyntaxHighlighter
-                      language="json"
-                      customStyle={{
-                        margin: 0,
-                        padding: 0,
-                        fontSize: "0.75rem",
-                        background: "transparent",
-                      }}
-                      showLineNumbers={false}
-                    >
-                      {currentContent}
-                    </ThemedSyntaxHighlighter>
-                  ) : isMarkdownFile && renderMode === "rendered" ? (
-                    <SkillMarkdownRenderer raw={currentContent} />
-                  ) : (
-                    <pre className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed">
-                      {currentContent}
-                    </pre>
-                  )}
-                </div>
-              </ScrollArea>
-            )}
+            </ScrollArea>
           </Panel>
 
           <PanelResizeHandle className="w-0.5 bg-border hover:bg-primary/40 active:bg-primary/60 cursor-col-resize transition-colors" />
 
           {/* ── Right panel — directory tree ── */}
           <Panel defaultSize={25} minSize={20} className="flex flex-col overflow-hidden">
-            {reviewResult ? (
-              <SkillReviewPanel review={reviewResult} onDismiss={dismissReview} />
-            ) : (
-              <SkillFileTreePanel
-                allowEditSkill={allowEditSkill}
-                selectedFile={selectedFile}
-                dirTree={dirTree}
-                draftPaths={draftPaths}
-                deletedPaths={deletedPaths}
-                onNewFile={openNewReferenceDialog}
-                onSkillMdClick={handleSkillMdClick}
-                onFileClick={handleFileClick}
-              />
-            )}
+            <SkillFileTreePanel
+              selectedFile={selectedFile}
+              dirTree={dirTree}
+              onSkillMdClick={handleSkillMdClick}
+              onFileClick={handleFileClick}
+            />
           </Panel>
         </PanelGroup>
       ) : null}

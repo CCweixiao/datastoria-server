@@ -19,13 +19,9 @@ operations:
   - { method: DELETE, path: "/api/ai/chat/sessions/{}", callSite: components/chat/session/remote-session-repository.ts }
   - { method: GET, path: "/api/ai/chat/sessions/{}/messages", callSite: components/chat/session/remote-session-repository.ts }
   - { method: POST, path: "/api/ai/sessions/{}/share", callSite: components/chat/view/chat-panel.tsx }
-  - { method: GET, path: /api/ai/skills, callSite: components/settings/skills/skills-edit.tsx }
-  - { method: POST, path: /api/ai/skills, callSite: components/settings/skills/skills-edit.tsx }
+  - { method: GET, path: /api/ai/skills, callSite: components/settings/skills/skills-browse.tsx }
   - { method: GET, path: "/api/ai/skills/{}", callSite: components/settings/skills/skills-detail-view.tsx }
-  - { method: PATCH, path: "/api/ai/skills/{}", callSite: components/settings/skills/skills-detail-view.tsx }
-  - { method: DELETE, path: "/api/ai/skills/{}", callSite: components/settings/skills/skills-detail-view.tsx }
   - { method: GET, path: "/api/ai/skills/{}/resource", callSite: components/settings/skills/skills-detail-view.tsx }
-  - { method: POST, path: /api/ai/skills/actions/review, callSite: components/settings/skills/skills-detail-view.tsx }
   - { method: POST, path: /api/ai/models/available, callSite: lib/ai/configuration/configuration-gateway.ts }
   - { method: GET, path: /api/admin/ai/providers, callSite: lib/ai/configuration/configuration-gateway.ts }
   - { method: POST, path: /api/admin/ai/providers, callSite: lib/ai/configuration/configuration-gateway.ts }
