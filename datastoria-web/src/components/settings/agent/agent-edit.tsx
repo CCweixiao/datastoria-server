@@ -1,3 +1,4 @@
+import { PermissionGuard } from "@/components/auth-session-provider";
 import {
   AgentConfigurationManager,
   AI_RESPONSE_LANGUAGE_OPTIONS,
@@ -7,7 +8,6 @@ import {
   type AIResponseLanguage,
 } from "@/components/settings/agent/agent-manager";
 import { AgentRuntimeSettings } from "@/components/settings/agent/agent-runtime-settings";
-import { PermissionGuard } from "@/components/auth-session-provider";
 import { useUiPreferences } from "@/components/shared/ui-preferences-provider";
 import { Button } from "@/components/ui/button";
 import {

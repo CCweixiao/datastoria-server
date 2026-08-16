@@ -174,7 +174,8 @@ export const zhCN: Record<MessageKey, string> = {
   "agent.runtimeSaved": "智能体运行参数已保存。",
   "agent.runtimeSaveFailed": "保存智能体运行参数失败。",
   "agent.runtimeLoadFailed": "加载智能体运行参数失败。",
-  "agent.runtimeUnavailable": "当前后端服务暂不支持智能体运行参数配置（可能为旧版本），请升级后端后重试。",
+  "agent.runtimeUnavailable":
+    "当前后端服务暂不支持智能体运行参数配置（可能为旧版本），请升级后端后重试。",
   "agent.runtimeInvalidNumber": "请输入有效数字，或留空跟随默认值。",
   "agent.outputReasoning": "输出推理摘要",
   "agent.outputReasoningHelp": "所选模型支持时，请求输出推理摘要。",

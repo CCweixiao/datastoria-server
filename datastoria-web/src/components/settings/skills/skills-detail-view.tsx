@@ -147,7 +147,8 @@ export function SkillsDetailView({ skillId, onBack }: SkillsDetailViewProps) {
   const displayedFilename = selectedFile === null ? "SKILL.md" : selectedFile.split("/").pop()!;
   const currentContent =
     selectedFile === null ? (detail?.content ?? "") : (resourceDetail?.content ?? "");
-  const currentSource = selectedFile === null ? (detail?.source ?? null) : (resourceDetail?.source ?? null);
+  const currentSource =
+    selectedFile === null ? (detail?.source ?? null) : (resourceDetail?.source ?? null);
   const dirTree = useMemo(() => buildDirTree(displayedResourcePaths), [displayedResourcePaths]);
   const resourceLoading = selectedFile !== null && resourceLoadingPath === selectedFile;
   const showRenderToggle = isMarkdownFile;

@@ -14,8 +14,16 @@ import { useEffect, useState } from "react";
 
 interface KnobDescriptor {
   key: keyof HarnessSettingsKnobs;
-  labelKey: "agent.runtimeMaxIters" | "agent.runtimeEvictionChars" | "agent.runtimeTriggerRatio" | "agent.runtimeFallbackTokens";
-  helpKey: "agent.runtimeMaxItersHelp" | "agent.runtimeEvictionCharsHelp" | "agent.runtimeTriggerRatioHelp" | "agent.runtimeFallbackTokensHelp";
+  labelKey:
+    | "agent.runtimeMaxIters"
+    | "agent.runtimeEvictionChars"
+    | "agent.runtimeTriggerRatio"
+    | "agent.runtimeFallbackTokens";
+  helpKey:
+    | "agent.runtimeMaxItersHelp"
+    | "agent.runtimeEvictionCharsHelp"
+    | "agent.runtimeTriggerRatioHelp"
+    | "agent.runtimeFallbackTokensHelp";
   step: string;
 }
 
@@ -72,7 +80,8 @@ export function AgentRuntimeSettings() {
         const initial: Record<string, string> = {};
         for (const knob of KNOBS) {
           const overridden = settings.overrides[knob.key];
-          initial[knob.key] = overridden === null || overridden === undefined ? "" : String(overridden);
+          initial[knob.key] =
+            overridden === null || overridden === undefined ? "" : String(overridden);
         }
         setValues(initial);
       })
@@ -115,7 +124,8 @@ export function AgentRuntimeSettings() {
         const next: Record<string, string> = {};
         for (const knob of KNOBS) {
           const overridden = settings.overrides[knob.key];
-          next[knob.key] = overridden === null || overridden === undefined ? "" : String(overridden);
+          next[knob.key] =
+            overridden === null || overridden === undefined ? "" : String(overridden);
         }
         setValues(next);
         toastManager.show(t("agent.runtimeSaved"), "success");
